@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { TableColumn } from '@nuxt/ui'
 import type {
   Category,
   DashStat,
@@ -119,7 +120,6 @@ const search = ref('')
 const filtersOpen = ref(false)
 const page = ref(1)
 const moreHoverKey = ref<string | null>(null)
-const expandedKeys = reactive<Record<string, boolean>>({})
 const toast = ref<string | null>(null)
 
 const catFilter = ref('')
@@ -338,21 +338,34 @@ function goPage(p: number) {
   page.value = Math.min(Math.max(1, p), totalPages.value)
 }
 
-const pageNumbers = computed(() => Array.from({ length: totalPages.value }, (_, i) => i + 1))
 const rangeFrom = computed(() => filteredRows.value.length === 0 ? 0 : startIdx.value + 1)
 const rangeTo = computed(() => startIdx.value + pagedRows.value.length)
 const rangeLabel = computed(() => `${rangeFrom.value}–${rangeTo.value} of ${filteredRows.value.length} row(s)`)
 
-function toggleExpand(key: string) {
-  expandedKeys[key] = !expandedKeys[key]
+// Variant sub-rows render as real, column-aligned <tr>s via TanStack sub-rows;
+// the greyed tint is applied per row depth through the table `meta`.
+// Parent rows and variant sub-rows share one TanStack row type; the variant-only
+// fields are optional on it and guarded by `row.depth` in the cell slots.
+type DashRow = EnrichedRow & Partial<VariantRow>
+
+const tableMeta = {
+  class: {
+    tr: (row: { depth: number }) => row.depth > 0 ? 'bg-neutral-50' : ''
+  }
 }
 
+const columns: TableColumn<DashRow>[] = [
+  { accessorKey: 'name', header: 'Product Name', meta: { class: { th: 'px-5', td: TABLE_EDGE.td } } },
+  { id: 'variants', header: 'Variants' },
+  { accessorKey: 'sku', header: 'SKU' },
+  { accessorKey: 'categoryLabel', header: 'Category' },
+  { accessorKey: 'typeLabel', header: 'Type' },
+  { id: 'platforms', header: 'Platforms' },
+  { accessorKey: 'status', header: 'Status' },
+  { id: 'action', header: 'Action', meta: { class: { th: 'px-5 w-[150px]', td: TABLE_EDGE.td } } }
+]
+
 // ── derived UI helpers ──
-function statusBadgeClass(status: string) {
-  return status === 'Active'
-    ? 'bg-emerald-50 text-green-600 border-emerald-200'
-    : 'bg-slate-100 text-slate-500 border-slate-200'
-}
 
 function onNewProduct() {
   router.push('/products/new')
@@ -362,13 +375,7 @@ function onNewProduct() {
 <template>
   <div class="px-8 pt-7 pb-20">
     <!-- TOAST -->
-    <div
-      v-if="toast"
-      class="fixed bottom-6 right-6 z-[300] bg-white border border-slate-200 border-l-4 border-l-green-500 rounded-[10px] shadow-[0_10px_30px_rgba(0,0,0,0.14)] px-[18px] py-3.5 flex items-center gap-3"
-    >
-      <UIcon name="i-lucide-circle-check" class="w-5 h-5 text-green-600" />
-      <span class="text-[15px] font-semibold text-slate-900">{{ toast }}</span>
-    </div>
+    <VertexToast :message="toast" />
 
     <!-- HEADER -->
     <div class="flex items-start justify-between gap-4 mb-6 flex-wrap">
@@ -380,21 +387,23 @@ function onNewProduct() {
           Overview of your product catalog and inventory.
         </p>
       </div>
-      <button
-        class="border-none bg-green-500 text-white text-[15px] font-bold px-[18px] py-[9px] rounded-lg cursor-pointer inline-flex items-center gap-1.5 shadow-sm hover:bg-green-600 transition-colors"
+      <UButton
+        variant="ghost"
+
+        :ui="{ base: 'border-none bg-green-500 text-white text-[15px] font-bold px-[18px] py-[9px] rounded-lg cursor-pointer inline-flex items-center gap-1.5 shadow-sm hover:bg-green-600 transition-colors' }"
         @click="onNewProduct"
       >
         <UIcon name="i-lucide-plus" class="w-3.5 h-3.5" />
         Create New Product
-      </button>
+      </UButton>
     </div>
 
     <!-- SUMMARY STATS -->
     <div class="grid grid-cols-4 gap-4 mb-6 max-[900px]:grid-cols-2 max-[560px]:grid-cols-1">
-      <div
+      <UCard
         v-for="stat in stats"
         :key="stat.label"
-        class="bg-white border border-slate-200 rounded-xl shadow-sm px-5 py-[18px]"
+        class="px-5 py-[18px]"
       >
         <div class="flex items-center justify-between mb-3">
           <span class="text-[15px] font-semibold text-slate-500">{{ stat.label }}</span>
@@ -411,11 +420,11 @@ function onNewProduct() {
         <div class="text-[15px] mt-2 font-semibold" :style="{ color: stat.deltaColor }">
           {{ stat.delta }}
         </div>
-      </div>
+      </UCard>
     </div>
 
     <!-- RECENT PRODUCTS -->
-    <div class="bg-white border border-slate-200 rounded-xl shadow-sm">
+    <UCard>
       <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200">
         <div>
           <h2 class="text-base font-bold text-slate-900 m-0">
@@ -440,12 +449,13 @@ function onNewProduct() {
             >
           </div>
           <div class="relative flex-shrink-0">
-            <button
-              class="relative inline-flex items-center gap-2 bg-white text-slate-700 text-[15px] font-semibold px-4 py-[9px] rounded-lg cursor-pointer border flex-shrink-0 transition-colors"
-              :class="[
+            <UButton
+              variant="ghost"
+
+              :ui="{ base: ['relative inline-flex items-center gap-2 bg-white text-slate-700 text-[15px] font-semibold px-4 py-[9px] rounded-lg cursor-pointer border flex-shrink-0 transition-colors', [
                 (filtersOpen || hasActiveFilters) ? 'border-green-500' : 'border-slate-200',
                 filtersOpen ? 'ring-[3px] ring-green-500/15' : ''
-              ]"
+              ]] }"
               @click="filtersOpen = !filtersOpen"
             >
               <UIcon name="i-lucide-sliders-horizontal" class="w-4 h-4" />
@@ -458,12 +468,12 @@ function onNewProduct() {
                 :name="filtersOpen ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
                 class="w-[15px] h-[15px] text-slate-400"
               />
-            </button>
+            </UButton>
 
             <!-- popover -->
             <template v-if="filtersOpen">
               <div class="fixed inset-0 z-40" @click="filtersOpen = false" />
-              <div class="absolute top-[calc(100%+8px)] right-0 z-50 bg-white border border-slate-200 rounded-xl shadow-[0_12px_34px_rgba(0,0,0,0.16)] w-[300px] p-4">
+              <UCard class="absolute top-[calc(100%+8px)] right-0 z-50 shadow-[0_12px_34px_rgba(0,0,0,0.16)] w-[300px] p-4">
                 <div class="flex flex-col gap-3.5">
                   <div>
                     <label class="text-[13px] font-semibold text-slate-700 mb-1.5 block">Category</label>
@@ -534,15 +544,18 @@ function onNewProduct() {
                       </option>
                     </select>
                   </div>
-                  <button
+                  <UButton
                     v-if="hasActiveFilters"
-                    class="border border-slate-200 bg-white text-slate-500 text-sm font-semibold cursor-pointer p-2 rounded-lg inline-flex items-center justify-center gap-1.5 hover:bg-slate-50 transition-colors"
+
+                    variant="ghost"
+
+                    :ui="{ base: 'border border-slate-200 bg-white text-slate-500 text-sm font-semibold cursor-pointer p-2 rounded-lg inline-flex items-center justify-center gap-1.5 hover:bg-slate-50 transition-colors' }"
                     @click="clearFilters"
                   >
                     <UIcon name="i-lucide-x" class="w-3.5 h-3.5" /> Clear all
-                  </button>
+                  </UButton>
                 </div>
-              </div>
+              </UCard>
             </template>
           </div>
         </div>
@@ -550,220 +563,160 @@ function onNewProduct() {
 
       <!-- table -->
       <div class="overflow-x-auto">
-        <table class="w-full border-collapse min-w-[1020px]">
-          <thead>
-            <tr class="bg-slate-50 border-b border-slate-200">
-              <th class="text-left text-sm font-bold text-slate-500 uppercase tracking-[0.03em] px-5 py-3">
-                Product Name
-              </th>
-              <th class="text-left text-sm font-bold text-slate-500 uppercase tracking-[0.03em] px-3 py-3">
-                Variants
-              </th>
-              <th class="text-left text-sm font-bold text-slate-500 uppercase tracking-[0.03em] px-3 py-3">
-                SKU
-              </th>
-              <th class="text-left text-sm font-bold text-slate-500 uppercase tracking-[0.03em] px-3 py-3">
-                Category
-              </th>
-              <th class="text-left text-sm font-bold text-slate-500 uppercase tracking-[0.03em] px-3 py-3">
-                Type
-              </th>
-              <th class="text-left text-sm font-bold text-slate-500 uppercase tracking-[0.03em] px-3 py-3">
-                Platforms
-              </th>
-              <th class="text-left text-sm font-bold text-slate-500 uppercase tracking-[0.03em] px-3 py-3">
-                Status
-              </th>
-              <th class="text-left text-sm font-bold text-slate-500 uppercase tracking-[0.03em] px-5 py-3 w-[150px]">
-                Action
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-for="prod in pagedRows" :key="prod.key">
-              <tr class="border-b border-slate-100 hover:bg-slate-50">
-                <td class="px-5 py-3 whitespace-nowrap">
-                  <div class="flex items-center gap-2">
-                    <button
-                      v-if="prod.variantRows.length"
-                      class="border-none bg-transparent cursor-pointer text-slate-500 w-[22px] h-[22px] inline-flex items-center justify-center rounded-md flex-shrink-0 hover:bg-slate-100"
-                      title="Toggle variants"
-                      @click="toggleExpand(prod.key)"
-                    >
-                      <UIcon
-                        :name="expandedKeys[prod.key] ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
-                        class="w-4 h-4"
-                      />
-                    </button>
-                    <span v-else class="w-[22px] flex-shrink-0 inline-block" />
-                    <img
-                      v-if="prod.image"
-                      :src="prod.image"
-                      class="w-7 h-7 rounded-md object-cover flex-shrink-0"
-                    >
-                    <span class="text-base font-semibold text-slate-900">{{ prod.name }}</span>
-                    <span
-                      v-if="prod.isNew"
-                      class="inline-flex items-center text-[10px] font-bold tracking-[0.04em] uppercase px-[7px] py-0.5 rounded-full bg-green-500 text-white flex-shrink-0"
-                    >New</span>
-                  </div>
-                </td>
-                <td class="px-3 py-3 whitespace-nowrap">
-                  <span
-                    v-if="prod.hasVariants"
-                    class="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-green-600 border border-emerald-200"
-                  >
-                    <UIcon name="i-lucide-layers" class="w-[11px] h-[11px]" />{{ prod.variantCount }} variants
-                  </span>
-                  <span v-else class="text-[15px] text-slate-300">—</span>
-                </td>
-                <td class="px-3 py-3 text-[15px] text-slate-500 whitespace-nowrap">
-                  {{ prod.sku }}
-                </td>
-                <td class="px-3 py-3 text-[15px] text-slate-700 whitespace-nowrap">
-                  {{ prod.categoryLabel }}
-                </td>
-                <td class="px-3 py-3 whitespace-nowrap">
-                  <span class="text-sm font-semibold text-slate-700">{{ prod.typeLabel }}</span>
-                </td>
-                <td class="px-3 py-3">
-                  <div v-if="prod.hasPlatforms" class="flex flex-wrap gap-1 max-w-[190px]">
-                    <span
-                      v-for="pl in prod.platformChips"
-                      :key="pl"
-                      class="text-xs font-semibold text-slate-600 bg-slate-100 border border-slate-200 rounded-full px-[9px] py-0.5 whitespace-nowrap"
-                    >{{ pl }}</span>
-                    <span
-                      v-if="prod.platformMore"
-                      class="relative inline-flex"
-                      @mouseover="moreHoverKey = prod.sku"
-                      @mouseout="moreHoverKey = null"
-                    >
-                      <span
-                        class="text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap cursor-default transition-colors"
-                        :class="moreHoverKey === prod.sku ? 'bg-slate-200 text-slate-700' : 'text-slate-400'"
-                      >{{ prod.platformMoreLabel }}</span>
-                      <span
-                        v-if="moreHoverKey === prod.sku"
-                        class="absolute bottom-[calc(100%+6px)] left-1/2 -translate-x-1/2 z-[60] bg-slate-900 text-white text-xs font-medium px-2.5 py-[5px] rounded-md whitespace-nowrap shadow-lg"
-                      >{{ prod.platformMoreTitle }}</span>
-                    </span>
-                  </div>
-                  <span v-else class="text-[15px] text-slate-300">—</span>
-                </td>
-                <td class="px-3 py-3 whitespace-nowrap">
-                  <span
-                    class="inline-block text-sm font-bold px-3 py-[3px] rounded-full border"
-                    :class="statusBadgeClass(prod.status)"
-                  >{{ prod.status }}</span>
-                </td>
-                <td class="px-5 py-3 whitespace-nowrap">
-                  <button
-                    class="border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-3 py-1.5 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors"
-                    @click="prod.onViewDetail()"
-                  >
-                    View Detail
-                  </button>
-                </td>
-              </tr>
+        <UTable
+          :data="(pagedRows as DashRow[])"
+          :columns="columns"
+          :get-row-id="(row: DashRow) => row.key"
+          :get-sub-rows="(row: DashRow) => (row.variantRows as unknown as DashRow[])"
+          :meta="tableMeta"
+          :ui="{ ...tableUi('min-w-[1020px]'), th: 'th text-left text-sm px-3 py-3', td: 'px-3 py-3' }"
+        >
+          <template #name-cell="{ row }">
+            <div v-if="row.depth === 0" class="flex items-center gap-2">
+              <UButton
+                v-if="row.getCanExpand()"
 
-              <!-- expanded variant sub-rows -->
-              <tr
-                v-for="v in (expandedKeys[prod.key] ? prod.variantRows : [])"
-                :key="prod.key + '|' + v.name"
-                class="border-b border-slate-100 bg-neutral-50"
+                variant="ghost"
+
+                title="Toggle variants"
+                :ui="{ base: 'border-none bg-transparent cursor-pointer text-slate-500 w-[22px] h-[22px] inline-flex items-center justify-center rounded-md flex-shrink-0 hover:bg-slate-100' }"
+                @click="row.toggleExpanded()"
               >
-                <td class="px-5 py-[9px] whitespace-nowrap">
-                  <div class="flex items-center gap-2 pl-[38px]">
-                    <UIcon name="i-lucide-corner-down-right" class="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
-                    <div>
-                      <div class="text-sm font-medium text-slate-700">
-                        {{ v.name }}
-                      </div>
-                      <div class="text-xs text-slate-400">
-                        {{ v.subLabel }}
-                      </div>
-                    </div>
-                  </div>
-                </td>
-                <td class="px-3 py-[9px]" />
-                <td class="px-3 py-[9px] text-sm text-slate-500 whitespace-nowrap">
-                  {{ v.sku }}
-                </td>
-                <td class="px-3 py-[9px] text-sm text-slate-300 whitespace-nowrap">
-                  —
-                </td>
-                <td class="px-3 py-[9px] whitespace-nowrap">
-                  <span class="text-[13px] font-semibold text-slate-400">Variant</span>
-                </td>
-                <td class="px-3 py-[9px] text-sm text-slate-300 whitespace-nowrap">
-                  —
-                </td>
-                <td class="px-3 py-[9px] whitespace-nowrap">
-                  <span
-                    class="inline-block text-sm font-bold px-3 py-[3px] rounded-full border"
-                    :class="statusBadgeClass(v.statusLabel)"
-                  >{{ v.statusLabel }}</span>
-                </td>
-                <td class="px-5 py-[9px] whitespace-nowrap">
-                  <button
-                    class="border border-slate-200 bg-white text-slate-700 text-[13px] font-semibold px-2.5 py-[5px] rounded-lg cursor-pointer hover:bg-slate-50 transition-colors"
-                    @click="v.onView()"
-                  >
-                    View
-                  </button>
-                </td>
-              </tr>
-            </template>
-
-            <tr v-if="filteredRows.length === 0">
-              <td colspan="8" class="px-5 py-12 text-center">
-                <div class="flex flex-col items-center gap-2 text-slate-400">
-                  <UIcon name="i-lucide-search-x" class="w-7 h-7" />
-                  <span class="text-base font-semibold text-slate-700">No products found</span>
-                  <span class="text-[15px]">Try adjusting your search or filters.</span>
+                <UIcon
+                  :name="row.getIsExpanded() ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+                  class="w-4 h-4"
+                />
+              </UButton>
+              <span v-else class="w-[22px] flex-shrink-0 inline-block" />
+              <img
+                v-if="row.original.image"
+                :src="row.original.image"
+                class="w-7 h-7 rounded-md object-cover flex-shrink-0"
+              >
+              <span class="text-base font-semibold text-slate-900">{{ row.original.name }}</span>
+              <span
+                v-if="row.original.isNew"
+                class="inline-flex items-center text-[10px] font-bold tracking-[0.04em] uppercase px-[7px] py-0.5 rounded-full bg-green-500 text-white flex-shrink-0"
+              >New</span>
+            </div>
+            <div v-else class="flex items-center gap-2 pl-[38px]">
+              <UIcon name="i-lucide-corner-down-right" class="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
+              <div>
+                <div class="text-sm font-medium text-slate-700">
+                  {{ row.original.name }}
                 </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                <div class="text-xs text-slate-400">
+                  {{ row.original.subLabel }}
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <template #variants-cell="{ row }">
+            <template v-if="row.depth === 0">
+              <span
+                v-if="row.original.hasVariants"
+                class="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-green-600 border border-emerald-200"
+              >
+                <UIcon name="i-lucide-layers" class="w-[11px] h-[11px]" />{{ row.original.variantCount }} variants
+              </span>
+              <span v-else class="text-[15px] text-slate-300">—</span>
+            </template>
+          </template>
+
+          <template #sku-cell="{ row }">
+            <span :class="row.depth === 0 ? 'text-[15px] text-slate-500' : 'text-sm text-slate-500'">{{ row.original.sku }}</span>
+          </template>
+
+          <template #categoryLabel-cell="{ row }">
+            <span v-if="row.depth === 0" class="text-[15px] text-slate-700">{{ row.original.categoryLabel }}</span>
+            <span v-else class="text-sm text-slate-300">—</span>
+          </template>
+
+          <template #typeLabel-cell="{ row }">
+            <span v-if="row.depth === 0" class="text-sm font-semibold text-slate-700">{{ row.original.typeLabel }}</span>
+            <span v-else class="text-[13px] font-semibold text-slate-400">Variant</span>
+          </template>
+
+          <template #platforms-cell="{ row }">
+            <template v-if="row.depth === 0">
+              <div v-if="row.original.hasPlatforms" class="flex flex-wrap gap-1 max-w-[190px]">
+                <span
+                  v-for="pl in row.original.platformChips"
+                  :key="pl"
+                  class="text-xs font-semibold text-slate-600 bg-slate-100 border border-slate-200 rounded-full px-[9px] py-0.5 whitespace-nowrap"
+                >{{ pl }}</span>
+                <span
+                  v-if="row.original.platformMore"
+                  class="relative inline-flex"
+                  @mouseover="moreHoverKey = row.original.sku"
+                  @mouseout="moreHoverKey = null"
+                >
+                  <span
+                    class="text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap cursor-default transition-colors"
+                    :class="moreHoverKey === row.original.sku ? 'bg-slate-200 text-slate-700' : 'text-slate-400'"
+                  >{{ row.original.platformMoreLabel }}</span>
+                  <span
+                    v-if="moreHoverKey === row.original.sku"
+                    class="absolute bottom-[calc(100%+6px)] left-1/2 -translate-x-1/2 z-[60] bg-slate-900 text-white text-xs font-medium px-2.5 py-[5px] rounded-md whitespace-nowrap shadow-lg"
+                  >{{ row.original.platformMoreTitle }}</span>
+                </span>
+              </div>
+              <span v-else class="text-[15px] text-slate-300">—</span>
+            </template>
+            <span v-else class="text-sm text-slate-300">—</span>
+          </template>
+
+          <template #status-cell="{ row }">
+            <VertexStatusBadge
+              v-if="row.depth === 0"
+              :active="row.original.status === 'Active'"
+              :label="row.original.status"
+              size="md"
+            />
+            <VertexStatusBadge
+              v-else
+              :active="row.original.active"
+              :label="row.original.statusLabel"
+              size="md"
+            />
+          </template>
+
+          <template #action-cell="{ row }">
+            <UButton
+              v-if="row.depth === 0"
+
+              variant="ghost"
+
+              :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-3 py-1.5 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors' }"
+              @click="row.original.onViewDetail()"
+            >
+              View Detail
+            </UButton>
+            <UButton
+              v-else
+
+              variant="ghost"
+
+              :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-[13px] font-semibold px-2.5 py-[5px] rounded-lg cursor-pointer hover:bg-slate-50 transition-colors' }"
+              @click="row.original.onView?.()"
+            >
+              View
+            </UButton>
+          </template>
+        </UTable>
       </div>
 
       <!-- pagination -->
-      <div
+      <VertexPagination
         v-if="filteredRows.length > 0"
-        class="flex items-center justify-between gap-3 px-5 py-3.5 border-t border-slate-200 flex-wrap"
-      >
-        <span class="text-[15px] text-slate-500">{{ rangeLabel }}</span>
-        <div class="flex items-center gap-1.5">
-          <button
-            class="w-8 h-8 rounded-lg inline-flex items-center justify-center border border-slate-200 bg-white"
-            :class="clampedPage <= 1 ? 'text-slate-300 cursor-not-allowed' : 'text-slate-700 cursor-pointer hover:bg-slate-50'"
-            title="Previous"
-            @click="goPage(clampedPage - 1)"
-          >
-            <UIcon name="i-lucide-chevron-left" class="w-4 h-4" />
-          </button>
-          <button
-            v-for="p in pageNumbers"
-            :key="p"
-            class="min-w-8 h-8 px-2 rounded-lg text-[15px] font-semibold inline-flex items-center justify-center border cursor-pointer"
-            :class="p === clampedPage ? 'bg-green-500 text-white border-green-500' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'"
-            @click="goPage(p)"
-          >
-            {{ p }}
-          </button>
-          <button
-            class="w-8 h-8 rounded-lg inline-flex items-center justify-center border border-slate-200 bg-white"
-            :class="clampedPage >= totalPages ? 'text-slate-300 cursor-not-allowed' : 'text-slate-700 cursor-pointer hover:bg-slate-50'"
-            title="Next"
-            @click="goPage(clampedPage + 1)"
-          >
-            <UIcon name="i-lucide-chevron-right" class="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-    </div>
+        :page="clampedPage"
+        :total-pages="totalPages"
+        :label="rangeLabel"
+        class="px-5 py-3.5 border-t border-slate-200"
+        @update:page="goPage"
+      />
+    </UCard>
   </div>
 </template>
 

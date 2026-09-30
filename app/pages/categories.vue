@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { TableColumn } from '@nuxt/ui'
 import type { Category, CatEntry, CatScopeEntry, Platform } from '~/types'
 
 useHead({ title: 'Categories — Vertex' })
@@ -11,6 +12,9 @@ interface CatalogProduct {
   status: string
   price: number
 }
+// A catalog product as rendered in the membership table.
+type CatalogRow = CatalogProduct & { included: boolean, pos?: number }
+
 interface AddModalState {
   parentId: string | null
   name: string
@@ -380,14 +384,27 @@ const countLabel = computed(() => members.value.length + ' of ' + filteredList.v
 const rangeLabel = computed(() =>
   (filteredList.value.length === 0 ? 0 : startIdx.value + 1) + '–' + (startIdx.value + paged.value.length) + ' of ' + filteredList.value.length
 )
-const pageNumbers = computed(() => Array.from({ length: totalPages.value }, (_, i) => i + 1))
 
 function statusChipStyle(status: string) {
   return 'display:inline-block;font-size:11.5px;font-weight:700;padding:2px 10px;border-radius:999px;' + (status === 'Active' ? 'background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;' : 'background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;')
 }
-function rowStyleOf(included: boolean) {
-  return 'border-bottom:1px solid #f1f5f9;' + (included ? 'background:#fbfefc;' : '')
+// Included rows get a faint green wash; UTable applies it per row via table meta.
+const productTableMeta = {
+  class: {
+    tr: (row: { original: CatalogRow }) => row.original.included ? 'bg-[#fbfefc]' : ''
+  }
 }
+
+const productColumns: TableColumn<CatalogRow>[] = [
+  { id: 'select', header: '', meta: { class: { th: 'w-[46px] px-3.5 py-[11px]', td: 'px-3.5' } } },
+  { accessorKey: 'displayId', header: 'ID', meta: { class: { th: 'w-[70px]' } } },
+  { accessorKey: 'name', header: 'Name' },
+  { accessorKey: 'sku', header: 'SKU' },
+  { accessorKey: 'status', header: 'Status', meta: { class: { th: 'w-24' } } },
+  { accessorKey: 'price', header: 'Price', meta: { class: { th: 'w-24' } } },
+  { id: 'pos', header: 'Position', meta: { class: { th: 'px-3.5 w-[104px]', td: 'px-3.5' } } }
+]
+
 function checkboxStyleOf() {
   return 'width:16px;height:16px;accent-color:#2b7fff;cursor:' + (isPlatformScope.value ? 'not-allowed' : 'pointer') + ';' + (isPlatformScope.value ? 'opacity:0.5;' : '')
 }
@@ -431,13 +448,13 @@ function onReset() {
 
 <template>
   <div class="flex-1 min-w-0 px-8 pt-7 pb-20">
-    <div class="text-[13px] text-slate-500 mb-3.5">
-      <NuxtLink to="/dashboard" class="text-green-600 no-underline hover:text-green-700">
-        Inventory
-      </NuxtLink> <span class="text-slate-300">/</span>
-      <span class="text-green-600">Configuration</span> <span class="text-slate-300">/</span>
-      <span class="text-slate-900 font-semibold">Categories</span>
-    </div>
+    <VertexBreadcrumb
+      :items="[
+        { label: 'Inventory', to: '/dashboard' },
+        { label: 'Configuration' },
+        { label: 'Categories' }
+      ]"
+    />
 
     <div class="flex items-start justify-between gap-4 mb-6 flex-wrap">
       <div>
@@ -459,20 +476,20 @@ function onReset() {
       <div class="flex-1 min-w-0 text-[13px] text-amber-800 leading-[1.5]">
         You're editing <strong>Default</strong>. Changes to structure, names, and membership apply to all platforms. To set position per platform, switch "Select platform" first.
       </div>
-      <button
+      <UButton
+        variant="ghost"
+
         title="Dismiss"
-        class="border-none bg-transparent text-amber-600 cursor-pointer p-0.5 inline-flex items-center flex-shrink-0"
+
+        :ui="{ base: 'border-none bg-transparent text-amber-600 cursor-pointer p-0.5 inline-flex items-center flex-shrink-0' }"
         @click="scopeInfoDismissed = true"
       >
         <UIcon name="i-lucide-x" class="w-4 h-4" />
-      </button>
+      </UButton>
     </div>
 
     <!-- scope card -->
-    <div
-      v-if="selCat"
-      class="bg-white border border-slate-200 rounded-xl shadow-sm px-[22px] py-5 mb-5"
-    >
+    <UCard v-if="selCat" class="mb-5 px-[22px] py-5">
       <div class="flex items-center gap-2 mb-3.5">
         <UIcon name="i-lucide-layers" class="w-4 h-4 text-green-600" />
         <span class="text-[15px] font-bold text-slate-900">Select platform</span>
@@ -511,22 +528,22 @@ function onReset() {
         </label>
       </div>
       <span v-else class="text-[13px] text-slate-500 leading-normal">Base order and membership for all platforms.</span>
-    </div>
+    </UCard>
 
     <div class="flex flex-wrap gap-6 items-start">
       <!-- LEFT: collapsed rail -->
-      <div
-        v-if="treeCollapsed"
-        class="basis-[60px] grow-0 shrink-0 w-[60px] bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden"
-      >
+      <UCard v-if="treeCollapsed" class="basis-[60px] grow-0 shrink-0 w-[60px] overflow-hidden">
         <div class="py-3 flex justify-center border-b border-slate-100">
-          <button
+          <UButton
+            variant="ghost"
+
             title="Show categories"
-            class="btn-icon-hover border border-slate-200 bg-white text-green-600 w-[34px] h-[34px] rounded-lg cursor-pointer inline-flex items-center justify-center"
+
+            :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-green-600 w-[34px] h-[34px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
             @click="treeCollapsed = false"
           >
             <UIcon name="i-lucide-panel-left-open" class="w-[17px] h-[17px]" />
-          </button>
+          </UButton>
         </div>
         <div class="px-1.5 py-2 max-h-[560px] overflow-y-auto flex flex-col gap-[3px]">
           <button
@@ -539,48 +556,59 @@ function onReset() {
             <UIcon :name="'i-lucide-' + treeIcon(n.childCount, n.id)" class="w-4 h-4 flex-shrink-0" />
           </button>
         </div>
-      </div>
+      </UCard>
 
       <!-- LEFT: expanded tree -->
-      <div
-        v-else
-        class="basis-[300px] grow-0 shrink-0 max-w-[300px] min-w-[260px] bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden"
-      >
+      <UCard v-else class="basis-[300px] grow-0 shrink-0 max-w-[300px] min-w-[260px] overflow-hidden">
         <div class="px-[18px] py-4 border-b border-slate-100">
           <div class="flex items-center justify-between gap-2 mb-3">
             <span class="text-xs font-bold text-slate-400 uppercase tracking-[0.04em]">Category tree</span>
-            <button
+            <UButton
+              variant="ghost"
+
               title="Hide categories"
-              class="btn-icon-hover border border-slate-200 bg-white text-slate-500 w-[30px] h-[30px] rounded-lg cursor-pointer inline-flex items-center justify-center flex-shrink-0"
+
+              :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-slate-500 w-[30px] h-[30px] rounded-lg cursor-pointer inline-flex items-center justify-center flex-shrink-0' }"
               @click="treeCollapsed = true"
             >
               <UIcon name="i-lucide-panel-left-close" class="w-4 h-4" />
-            </button>
+            </UButton>
           </div>
           <!-- structural edits only apply to the Default scope -->
           <div v-if="!isPlatformScope" class="flex flex-col gap-2 mb-3">
-            <button
-              class="w-full border-none bg-green-500 text-white text-sm font-bold px-3.5 py-2.5 rounded-lg cursor-pointer inline-flex items-center justify-center gap-[7px] hover:bg-green-600 transition-colors"
+            <UButton
+              variant="ghost"
+
+              :ui="{ base: 'w-full border-none bg-green-500 text-white text-sm font-bold px-3.5 py-2.5 rounded-lg cursor-pointer inline-flex items-center justify-center gap-[7px] hover:bg-green-600 transition-colors' }"
               @click="onAddRoot"
             >
               <UIcon name="i-lucide-plus" class="w-[15px] h-[15px]" /> Add Category
-            </button>
-            <button
-              class="w-full border border-slate-200 bg-white text-sm font-semibold px-3.5 py-2.5 rounded-lg inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
-              :class="selectedId ? 'text-slate-700 cursor-pointer hover:bg-slate-50' : 'text-slate-300 cursor-not-allowed'"
+            </UButton>
+            <UButton
+              variant="ghost"
+
               :disabled="addSubDisabled"
+              :ui="{ base: ['w-full border border-slate-200 bg-white text-sm font-semibold px-3.5 py-2.5 rounded-lg inline-flex items-center justify-center gap-1.5 whitespace-nowrap', selectedId ? 'text-slate-700 cursor-pointer hover:bg-slate-50' : 'text-slate-300 cursor-not-allowed'] }"
               @click="onAddSub"
             >
               <UIcon name="i-lucide-corner-down-right" class="w-[15px] h-[15px]" /> Add Subcategory
-            </button>
+            </UButton>
           </div>
           <div class="flex gap-3.5">
-            <button class="border-none bg-transparent text-green-600 text-[12.5px] font-semibold cursor-pointer p-0" @click="onExpandAll">
+            <UButton
+              variant="ghost"
+              :ui="{ base: 'border-none bg-transparent text-green-600 text-[12.5px] font-semibold cursor-pointer p-0' }"
+              @click="onExpandAll"
+            >
               Expand All
-            </button>
-            <button class="border-none bg-transparent text-slate-500 text-[12.5px] font-semibold cursor-pointer p-0" @click="onCollapseAll">
+            </UButton>
+            <UButton
+              variant="ghost"
+              :ui="{ base: 'border-none bg-transparent text-slate-500 text-[12.5px] font-semibold cursor-pointer p-0' }"
+              @click="onCollapseAll"
+            >
               Collapse All
-            </button>
+            </UButton>
           </div>
         </div>
         <div class="p-2 max-h-[560px] overflow-y-auto">
@@ -591,13 +619,16 @@ function onReset() {
             :style="treeRowStyle(n.id, n.depth)"
             @click="select(n.id)"
           >
-            <button
+            <UButton
               v-if="n.childCount > 0"
-              class="border-none bg-transparent cursor-pointer p-0.5 inline-flex items-center text-slate-400 flex-shrink-0"
+
+              variant="ghost"
+
+              :ui="{ base: 'border-none bg-transparent cursor-pointer p-0.5 inline-flex items-center text-slate-400 flex-shrink-0' }"
               @click.stop="toggleExpand(n.id)"
             >
               <UIcon :name="expanded[n.id] ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" class="w-3.5 h-3.5" />
-            </button>
+            </UButton>
             <span v-else class="w-[18px] flex-shrink-0" />
             <UIcon :name="'i-lucide-' + treeIcon(n.childCount, n.id)" class="w-[15px] h-[15px] flex-shrink-0 text-slate-400" />
             <span :style="treeLabelStyle(n.id)">{{ n.name }}</span>
@@ -608,13 +639,13 @@ function onReset() {
             <span :style="treeCountStyle(n.id)">{{ productCount(n.id) }}</span>
           </div>
         </div>
-      </div>
+      </UCard>
 
       <!-- RIGHT -->
       <div class="grow-[999] shrink basis-[520px] min-w-0 flex flex-col gap-5">
         <template v-if="selCat">
           <!-- category editor -->
-          <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+          <UCard class="p-6">
             <div class="flex items-start justify-between gap-3 mb-5">
               <div class="min-w-0">
                 <h2 class="text-[17px] font-bold text-slate-900 mt-0 mb-1">
@@ -624,16 +655,22 @@ function onReset() {
                   Category ID: {{ selCat.id }}
                 </p>
               </div>
-              <button
-                class="btn-icon-hover flex-shrink-0 inline-flex items-center gap-1.5 border border-slate-200 bg-white text-red-600 text-[13.5px] font-semibold px-3.5 py-2 rounded-lg cursor-pointer"
+              <UButton
+                variant="ghost"
+
+                :ui="{ base: 'btn-icon-hover flex-shrink-0 inline-flex items-center gap-1.5 border border-slate-200 bg-white text-red-600 text-[13.5px] font-semibold px-3.5 py-2 rounded-lg cursor-pointer' }"
                 @click="deleteOpen = true"
               >
                 <UIcon name="i-lucide-trash-2" class="w-3.5 h-3.5" /> Delete
-              </button>
+              </UButton>
             </div>
 
-            <div class="mb-[18px]">
-              <label class="field-label">Category Name <span class="text-red-600">*</span></label>
+            <VertexField
+              label="Category Name"
+              required
+              :error="nameError ? 'Category name is required.' : ''"
+              class="mb-[18px]"
+            >
               <input
                 class="field-input"
                 type="text"
@@ -641,10 +678,7 @@ function onReset() {
                 placeholder="e.g. Tourist SIM"
                 @input="draftName = ($event.target as HTMLInputElement).value; nameError = false"
               >
-              <div v-if="nameError" class="text-[13px] text-red-600 mt-1.5">
-                Category name is required.
-              </div>
-            </div>
+            </VertexField>
 
             <div class="flex items-center justify-between gap-3 pt-4 border-t border-slate-100">
               <div>
@@ -659,10 +693,10 @@ function onReset() {
                 <span :style="knobStyle(draftEnabled)" />
               </button>
             </div>
-          </div>
+          </UCard>
 
           <!-- products in category -->
-          <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+          <UCard class="p-6">
             <h2 class="text-[17px] font-bold text-slate-900 mt-0 mb-1">
               Products in Category
             </h2>
@@ -685,143 +719,101 @@ function onReset() {
 
             <div class="border border-slate-200 rounded-[10px] overflow-hidden">
               <div class="overflow-x-auto">
-                <table class="w-full border-collapse min-w-[700px]">
-                  <thead>
-                    <tr class="bg-slate-50 border-b border-slate-200">
-                      <th class="w-[46px] px-3.5 py-[11px]" />
-                      <th class="text-left text-xs font-bold text-slate-500 uppercase tracking-[0.03em] px-2.5 py-[11px] w-[70px]">
-                        ID
-                      </th>
-                      <th class="text-left text-xs font-bold text-slate-500 uppercase tracking-[0.03em] px-2.5 py-[11px]">
-                        Name
-                      </th>
-                      <th class="text-left text-xs font-bold text-slate-500 uppercase tracking-[0.03em] px-2.5 py-[11px]">
-                        SKU
-                      </th>
-                      <th class="text-left text-xs font-bold text-slate-500 uppercase tracking-[0.03em] px-2.5 py-[11px] w-24">
-                        Status
-                      </th>
-                      <th class="text-left text-xs font-bold text-slate-500 uppercase tracking-[0.03em] px-2.5 py-[11px] w-24">
-                        Price
-                      </th>
-                      <th class="text-left text-xs font-bold text-slate-500 uppercase tracking-[0.03em] px-3.5 py-[11px] w-[104px]">
-                        Position
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr
-                      v-for="p in paged"
-                      :key="p.id"
-                      class="row-hover"
-                      :style="rowStyleOf(p.included)"
+                <UTable
+                  :data="paged"
+                  :columns="productColumns"
+                  :meta="productTableMeta"
+                  :empty="'No products match your search.'"
+                  :ui="{
+                    ...tableUi('min-w-[700px]'),
+                    th: 'th text-left text-xs px-2.5 py-[11px]',
+                    td: 'px-2.5 py-[11px]',
+                    empty: 'px-5 py-10 text-center text-sm text-slate-400'
+                  }"
+                >
+                  <template #select-cell="{ row }">
+                    <input
+                      type="checkbox"
+                      :checked="row.original.included"
+                      :disabled="isPlatformScope"
+                      :style="checkboxStyleOf()"
+                      @change="toggleMember(row.original.id)"
                     >
-                      <td class="px-3.5 py-[11px]">
-                        <input
-                          type="checkbox"
-                          :checked="p.included"
-                          :disabled="isPlatformScope"
-                          :style="checkboxStyleOf()"
-                          @change="toggleMember(p.id)"
-                        >
-                      </td>
-                      <td class="px-2.5 py-[11px] text-[13px] text-slate-500 whitespace-nowrap">
-                        {{ p.displayId }}
-                      </td>
-                      <td class="px-2.5 py-[11px] text-sm font-semibold text-slate-900">
-                        {{ p.name }}
-                      </td>
-                      <td class="px-2.5 py-[11px] text-[13px] text-slate-500 whitespace-nowrap">
-                        {{ p.sku }}
-                      </td>
-                      <td class="px-2.5 py-[11px] whitespace-nowrap">
-                        <span :style="statusChipStyle(p.status)">{{ p.status }}</span>
-                      </td>
-                      <td class="px-2.5 py-[11px] text-sm text-slate-700 whitespace-nowrap">
-                        {{ priceLabelOf(p.price) }}
-                      </td>
-                      <td class="px-3.5 py-[11px]">
-                        <input
-                          type="number"
-                          min="1"
-                          :value="p.pos == null ? '' : p.pos"
-                          :disabled="posLocked"
-                          placeholder="—"
-                          :style="positionStyleOf()"
-                          @change="setPosition(p.id, ($event.target as HTMLInputElement).value)"
-                        >
-                      </td>
-                    </tr>
-                    <tr v-if="paged.length === 0">
-                      <td colspan="7" class="px-5 py-10 text-center text-sm text-slate-400">
-                        No products match your search.
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                  </template>
+
+                  <template #displayId-cell="{ row }">
+                    <span class="text-[13px] text-slate-500">{{ row.original.displayId }}</span>
+                  </template>
+
+                  <template #name-cell="{ row }">
+                    <span class="text-sm font-semibold text-slate-900">{{ row.original.name }}</span>
+                  </template>
+
+                  <template #sku-cell="{ row }">
+                    <span class="text-[13px] text-slate-500">{{ row.original.sku }}</span>
+                  </template>
+
+                  <template #status-cell="{ row }">
+                    <span :style="statusChipStyle(row.original.status)">{{ row.original.status }}</span>
+                  </template>
+
+                  <template #price-cell="{ row }">
+                    <span class="text-sm text-slate-700">{{ priceLabelOf(row.original.price) }}</span>
+                  </template>
+
+                  <template #pos-cell="{ row }">
+                    <input
+                      type="number"
+                      min="1"
+                      :value="row.original.pos == null ? '' : row.original.pos"
+                      :disabled="posLocked"
+                      placeholder="—"
+                      :style="positionStyleOf()"
+                      @change="setPosition(row.original.id, ($event.target as HTMLInputElement).value)"
+                    >
+                  </template>
+                </UTable>
               </div>
             </div>
 
-            <div v-if="totalPages > 1" class="flex items-center justify-between gap-3 mt-3.5 flex-wrap">
-              <span class="text-[13px] text-slate-500">{{ rangeLabel }}</span>
-              <div class="flex items-center gap-1.5">
-                <button
-                  class="w-8 h-8 rounded-lg inline-flex items-center justify-center border border-slate-200 bg-white"
-                  :class="clampedPage <= 1 ? 'text-slate-300 cursor-not-allowed' : 'text-slate-700 cursor-pointer hover:bg-slate-50'"
-                  @click="goPage(clampedPage - 1)"
-                >
-                  <UIcon name="i-lucide-chevron-left" class="w-[15px] h-[15px]" />
-                </button>
-                <button
-                  v-for="pg in pageNumbers"
-                  :key="pg"
-                  class="min-w-8 h-8 px-2 rounded-lg text-[13px] font-semibold inline-flex items-center justify-center border cursor-pointer"
-                  :class="pg === clampedPage ? 'bg-green-500 text-white border-green-500' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'"
-                  @click="goPage(pg)"
-                >
-                  {{ pg }}
-                </button>
-                <button
-                  class="w-8 h-8 rounded-lg inline-flex items-center justify-center border border-slate-200 bg-white"
-                  :class="clampedPage >= totalPages ? 'text-slate-300 cursor-not-allowed' : 'text-slate-700 cursor-pointer hover:bg-slate-50'"
-                  @click="goPage(clampedPage + 1)"
-                >
-                  <UIcon name="i-lucide-chevron-right" class="w-[15px] h-[15px]" />
-                </button>
-              </div>
-            </div>
+            <VertexPagination
+              v-if="totalPages > 1"
+              :page="clampedPage"
+              :total-pages="totalPages"
+              :label="rangeLabel"
+              size="sm"
+              class="mt-3.5"
+              @update:page="goPage"
+            />
 
             <div class="flex justify-end gap-2.5 mt-5 pt-[18px] border-t border-slate-100">
-              <button
-                class="border border-slate-200 bg-white text-slate-700 text-[15px] font-semibold px-5 py-2.5 rounded-lg cursor-pointer inline-flex items-center gap-1.5 hover:bg-slate-50 transition-colors"
+              <UButton
+                variant="ghost"
+
+                :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-[15px] font-semibold px-5 py-2.5 rounded-lg cursor-pointer inline-flex items-center gap-1.5 hover:bg-slate-50 transition-colors' }"
                 @click="onReset"
               >
                 <UIcon name="i-lucide-rotate-ccw" class="w-[15px] h-[15px]" /> Reset
-              </button>
-              <button
-                class="border-none bg-green-500 text-white text-[15px] font-bold px-[22px] py-2.5 rounded-lg cursor-pointer shadow-sm hover:bg-green-600 transition-colors"
+              </UButton>
+              <UButton
+                variant="ghost"
+
+                :ui="{ base: 'border-none bg-green-500 text-white text-[15px] font-bold px-[22px] py-2.5 rounded-lg cursor-pointer shadow-sm hover:bg-green-600 transition-colors' }"
                 @click="save"
               >
                 Save Category
-              </button>
+              </UButton>
             </div>
-          </div>
+          </UCard>
         </template>
 
-        <div
+        <VertexEmptyState
           v-else
-          class="bg-white border border-slate-200 rounded-xl shadow-sm px-6 py-14 flex flex-col items-center gap-2.5 text-center"
-        >
-          <div class="w-[52px] h-[52px] rounded-xl bg-slate-100 flex items-center justify-center text-slate-400">
-            <UIcon name="i-lucide-folder-tree" class="w-6 h-6" />
-          </div>
-          <div class="text-base font-bold text-slate-900">
-            Select a category
-          </div>
-          <div class="text-[15px] text-slate-400 max-w-[340px]">
-            Pick a category from the tree to edit its details and product order.
-          </div>
-        </div>
+          icon="folder-tree"
+          title="Select a category"
+          hint="Pick a category from the tree to edit its details and product order."
+          class="bg-white border border-slate-200 rounded-xl shadow-sm"
+        />
       </div>
     </div>
 
@@ -843,19 +835,24 @@ function onReset() {
           {{ deleteMessage }}
         </p>
         <div class="flex justify-end gap-2.5">
-          <button
-            class="border border-slate-200 bg-white text-slate-700 text-[15px] font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer"
+          <UButton
+            variant="ghost"
+
+            :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-[15px] font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer' }"
             @click="deleteOpen = false"
           >
             {{ deleteCancelLabel }}
-          </button>
-          <button
+          </UButton>
+          <UButton
             v-if="!blockedDelete"
-            class="border-none bg-red-600 text-white text-[15px] font-bold px-[18px] py-[9px] rounded-lg cursor-pointer"
+
+            variant="ghost"
+
+            :ui="{ base: 'border-none bg-red-600 text-white text-[15px] font-bold px-[18px] py-[9px] rounded-lg cursor-pointer' }"
             @click="confirmDelete"
           >
             Delete
-          </button>
+          </UButton>
         </div>
       </div>
     </div>
@@ -870,12 +867,14 @@ function onReset() {
           <h3 class="text-[17px] font-bold text-slate-900 m-0">
             {{ addTitle }}
           </h3>
-          <button
-            class="btn-icon-hover border-none bg-transparent text-slate-500 w-8 h-8 rounded-lg cursor-pointer flex items-center justify-center"
+          <UButton
+            variant="ghost"
+
+            :ui="{ base: 'btn-icon-hover border-none bg-transparent text-slate-500 w-8 h-8 rounded-lg cursor-pointer flex items-center justify-center' }"
             @click="addModal = null"
           >
             <UIcon name="i-lucide-x" class="w-[18px] h-[18px]" />
-          </button>
+          </UButton>
         </div>
         <div class="p-6">
           <div v-if="addModal.forceSub" class="mb-[18px]">
@@ -892,8 +891,12 @@ function onReset() {
               </select>
             </div>
           </div>
-          <div class="mb-[18px] pb-[18px] border-b border-slate-100">
-            <label class="field-label">Category Name <span class="text-red-600">*</span></label>
+          <VertexField
+            label="Category Name"
+            required
+            :error="addModal.error ? 'Enter a unique category name.' : ''"
+            class="mb-[18px] pb-[18px] border-b border-slate-100"
+          >
             <input
               class="field-input"
               type="text"
@@ -902,10 +905,7 @@ function onReset() {
               @input="addModal.name = ($event.target as HTMLInputElement).value; addModal.error = false"
               @keydown.enter.prevent="confirmAdd"
             >
-            <div v-if="addModal.error" class="text-[13px] text-red-600 mt-1.5">
-              Enter a unique category name.
-            </div>
-          </div>
+          </VertexField>
 
           <div class="flex items-center justify-between gap-3 mb-4">
             <div>
@@ -942,59 +942,32 @@ function onReset() {
           </div>
         </div>
         <div class="flex justify-end gap-2.5 px-6 py-4 border-t border-slate-100">
-          <button
-            class="border border-slate-200 bg-white text-slate-700 text-[15px] font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer"
+          <UButton
+            variant="ghost"
+
+            :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-[15px] font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer' }"
             @click="addModal = null"
           >
             Cancel
-          </button>
-          <button
-            class="border-none bg-green-500 text-white text-[15px] font-bold px-5 py-[9px] rounded-lg cursor-pointer"
+          </UButton>
+          <UButton
+            variant="ghost"
+
+            :ui="{ base: 'border-none bg-green-500 text-white text-[15px] font-bold px-5 py-[9px] rounded-lg cursor-pointer' }"
             @click="confirmAdd"
           >
             Create
-          </button>
+          </UButton>
         </div>
       </div>
     </div>
 
     <!-- toast -->
-    <div
-      v-if="toast"
-      class="toast-in fixed bottom-6 right-6 z-[300] bg-white border border-slate-200 border-l-4 border-l-green-500 rounded-[10px] shadow-[0_10px_30px_rgba(0,0,0,0.14)] px-[18px] py-3.5 flex items-center gap-3"
-    >
-      <UIcon name="i-lucide-circle-check" class="w-5 h-5 text-green-600" />
-      <span class="text-[15px] font-semibold text-slate-900">{{ toast }}</span>
-    </div>
+    <VertexToast :message="toast" />
   </div>
 </template>
 
 <style scoped>
-.field-input {
-  width: 100%;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 10px 12px;
-  font-size: 15px;
-  color: #0f172a;
-  background: #fff;
-  outline: none;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
-}
-.field-input:focus {
-  border-color: #00c16a;
-  box-shadow: 0 0 0 3px rgba(0, 193, 106, 0.15);
-}
-.field-input::placeholder {
-  color: #94a3b8;
-}
-.field-label {
-  font-size: 14px;
-  font-weight: 600;
-  color: #334155;
-  margin-bottom: 6px;
-  display: block;
-}
 select.field-input {
   appearance: none;
   -webkit-appearance: none;
@@ -1006,16 +979,6 @@ select.field-input {
   background-size: 16px 16px;
   cursor: pointer;
 }
-.select-wrap {
-  position: relative;
-  min-width: 0;
-}
-.row-hover:hover {
-  background: #f8fafc;
-}
-.btn-icon-hover:hover {
-  background: #f1f5f9;
-}
 .tree-row:hover {
   background: #f1f5f9;
 }
@@ -1024,13 +987,6 @@ select.field-input {
 }
 @keyframes treeRowIn {
   from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.toast-in {
-  animation: toastIn 200ms ease;
-}
-@keyframes toastIn {
-  from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
 </style>

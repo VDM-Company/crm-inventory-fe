@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { TableColumn } from '@nuxt/ui'
 import type { Fee } from '~/types'
 
 useHead({ title: 'Pricing Setting — Vertex' })
@@ -49,6 +50,11 @@ function showToast(msg: string) {
     toast.value = null
   }, 2800)
 }
+
+const columns: TableColumn<Fee>[] = [
+  { accessorKey: 'name', header: 'Component Name', meta: { class: { th: 'px-5', td: TABLE_EDGE.td } } },
+  { id: 'action', header: 'Action', meta: { class: { th: 'px-5 text-right w-[130px]', td: TABLE_EDGE.td } } }
+]
 
 function iconOf(f: Fee) {
   return f.icon || ICONS[f.id] || DEFAULT_ICON
@@ -107,9 +113,6 @@ function confirmDelete() {
   showToast('Component deleted')
 }
 const deleteIcon = computed(() => deleteBlocked.value ? 'shield-alert' : 'trash-2')
-const deleteIconWrapStyle = computed(() =>
-  'width:44px;height:44px;border-radius:999px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:' + (deleteBlocked.value ? '#fffbeb' : '#fef2f2') + ';color:' + (deleteBlocked.value ? '#d97706' : '#dc2626') + ';'
-)
 const deleteTitle = computed(() => {
   const t = deleteTarget.value
   if (!t) return ''
@@ -126,16 +129,14 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
 
 <template>
   <div class="flex-1 min-w-0 px-8 pt-7 pb-20">
-    <div class="text-[13px] text-slate-500 mb-3.5">
-      <NuxtLink to="/dashboard" class="text-green-600 no-underline hover:text-green-700">
-        Inventory
-      </NuxtLink> <span class="text-slate-300">/</span>
-      <NuxtLink to="/dashboard" class="text-green-600 no-underline hover:text-green-700">
-        Product
-      </NuxtLink> <span class="text-slate-300">/</span>
-      <span class="text-green-600">Configuration</span> <span class="text-slate-300">/</span>
-      <span class="text-slate-900 font-semibold">Pricing Setting</span>
-    </div>
+    <VertexBreadcrumb
+      :items="[
+        { label: 'Inventory', to: '/dashboard' },
+        { label: 'Product', to: '/dashboard' },
+        { label: 'Configuration' },
+        { label: 'Pricing Setting' }
+      ]"
+    />
 
     <div class="flex items-start justify-between gap-4 mb-6 flex-wrap">
       <div>
@@ -146,80 +147,76 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
           Reusable Initial Fee line-items used across product pricing.
         </p>
       </div>
-      <button
-        class="border-none bg-green-500 text-white text-[15px] font-bold px-[18px] py-2.5 rounded-lg cursor-pointer inline-flex items-center gap-1.5 shadow-sm hover:bg-green-600 transition-colors"
+      <UButton
+        variant="ghost"
+
+        :ui="{ base: 'border-none bg-green-500 text-white text-[15px] font-bold px-[18px] py-2.5 rounded-lg cursor-pointer inline-flex items-center gap-1.5 shadow-sm hover:bg-green-600 transition-colors' }"
         @click="onCreate"
       >
         <UIcon name="i-lucide-plus" class="w-[15px] h-[15px]" /> Create Component
-      </button>
+      </UButton>
     </div>
 
-    <div class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+    <UCard class="overflow-hidden">
       <div class="overflow-x-auto">
-        <table class="w-full border-collapse min-w-[560px]">
-          <thead>
-            <tr class="bg-slate-50 border-b border-slate-200">
-              <th class="text-left text-sm font-bold text-slate-500 uppercase tracking-[0.03em] px-5 py-[13px]">
-                Component Name
-              </th>
-              <th class="text-right text-sm font-bold text-slate-500 uppercase tracking-[0.03em] px-5 py-[13px] w-[130px]">
-                Action
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="f in fees" :key="f.id" class="row-hover border-b border-slate-100">
-              <td class="px-5 py-3.5">
-                <div class="flex items-center gap-2.5">
-                  <div class="w-[34px] h-[34px] rounded-lg bg-emerald-50 text-green-600 flex items-center justify-center flex-shrink-0">
-                    <UIcon :name="'i-lucide-' + iconOf(f)" class="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div class="flex items-center gap-2">
-                      <span class="text-base font-semibold text-slate-900">{{ f.name }}</span>
-                      <span
-                        v-if="f.system"
-                        class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200"
-                      >Default</span>
-                    </div>
-                    <div v-if="f.description" class="text-[13px] text-slate-400 mt-0.5">
-                      {{ f.description }}
-                    </div>
-                  </div>
-                </div>
-              </td>
-              <td class="px-5 py-3.5">
-                <div class="flex items-center justify-end gap-2">
-                  <button
-                    :disabled="f.system"
-                    class="btn-icon-hover"
-                    :style="editStyleOf(f.system)"
-                    @click="onEdit(f)"
-                  >
-                    <UIcon name="i-lucide-pencil" class="w-3.5 h-3.5" /> Edit
-                  </button>
-                  <button
-                    v-if="!f.system"
-                    title="Delete component"
-                    class="btn-icon-hover border border-slate-200 bg-white text-red-600 w-[34px] h-[34px] rounded-lg cursor-pointer inline-flex items-center justify-center"
-                    @click="deleteTarget = f"
-                  >
-                    <UIcon name="i-lucide-trash-2" class="w-[15px] h-[15px]" />
-                  </button>
+        <UTable
+          :data="fees"
+          :columns="columns"
+          :ui="tableUi('min-w-[560px]')"
+        >
+          <template #name-cell="{ row }">
+            <div class="flex items-center gap-2.5">
+              <div class="w-[34px] h-[34px] rounded-lg bg-emerald-50 text-green-600 flex items-center justify-center flex-shrink-0">
+                <UIcon :name="'i-lucide-' + iconOf(row.original)" class="w-4 h-4" />
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="text-base font-semibold text-slate-900">{{ row.original.name }}</span>
                   <span
-                    v-else
-                    title="System component — locked"
-                    class="w-[34px] h-[34px] rounded-lg inline-flex items-center justify-center text-slate-300"
-                  >
-                    <UIcon name="i-lucide-lock" class="w-[15px] h-[15px]" />
-                  </span>
+                    v-if="row.original.system"
+                    class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200"
+                  >Default</span>
                 </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                <div v-if="row.original.description" class="text-[13px] text-slate-400 mt-0.5">
+                  {{ row.original.description }}
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <template #action-cell="{ row }">
+            <div class="flex items-center justify-end gap-2">
+              <button
+                :disabled="row.original.system"
+                class="btn-icon-hover"
+                :style="editStyleOf(row.original.system)"
+                @click="onEdit(row.original)"
+              >
+                <UIcon name="i-lucide-pencil" class="w-3.5 h-3.5" /> Edit
+              </button>
+              <UButton
+                v-if="!row.original.system"
+
+                variant="ghost"
+                title="Delete component"
+
+                :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-600 w-[34px] h-[34px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
+                @click="deleteTarget = row.original"
+              >
+                <UIcon name="i-lucide-trash-2" class="w-[15px] h-[15px]" />
+              </UButton>
+              <span
+                v-else
+                title="System component — locked"
+                class="w-[34px] h-[34px] rounded-lg inline-flex items-center justify-center text-slate-300"
+              >
+                <UIcon name="i-lucide-lock" class="w-[15px] h-[15px]" />
+              </span>
+            </div>
+          </template>
+        </UTable>
       </div>
-    </div>
+    </UCard>
 
     <!-- create / edit modal -->
     <div
@@ -231,16 +228,22 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
           <h3 class="text-[17px] font-bold text-slate-900 m-0">
             {{ modal.id ? 'Edit Component' : 'Create Component' }}
           </h3>
-          <button
-            class="btn-icon-hover border-none bg-transparent text-slate-500 w-8 h-8 rounded-lg cursor-pointer flex items-center justify-center"
+          <UButton
+            variant="ghost"
+
+            :ui="{ base: 'btn-icon-hover border-none bg-transparent text-slate-500 w-8 h-8 rounded-lg cursor-pointer flex items-center justify-center' }"
             @click="modal = null"
           >
             <UIcon name="i-lucide-x" class="w-[18px] h-[18px]" />
-          </button>
+          </UButton>
         </div>
         <div class="p-6">
-          <div class="mb-[18px]">
-            <label class="field-label">Component Name <span class="text-red-600">*</span></label>
+          <VertexField
+            label="Component Name"
+            required
+            :error="modal.error"
+            class="mb-[18px]"
+          >
             <input
               class="field-input"
               type="text"
@@ -248,10 +251,7 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
               placeholder="e.g. Handling"
               @input="modal.name = ($event.target as HTMLInputElement).value; modal.error = ''"
             >
-            <div v-if="modal.error" class="text-[13px] text-red-600 mt-1.5">
-              {{ modal.error }}
-            </div>
-          </div>
+          </VertexField>
           <div class="mb-[18px]">
             <label class="field-label">Icon</label>
             <div class="flex flex-wrap gap-2">
@@ -279,107 +279,42 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
           </div>
         </div>
         <div class="flex justify-end gap-2.5 px-6 py-4 border-t border-slate-100">
-          <button
-            class="border border-slate-200 bg-white text-slate-700 text-[15px] font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer"
+          <UButton
+            variant="ghost"
+
+            :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-[15px] font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer' }"
             @click="modal = null"
           >
             Cancel
-          </button>
-          <button
+          </UButton>
+          <UButton
+            variant="ghost"
+
             :disabled="saveDisabled"
-            class="border-none text-[15px] font-bold px-5 py-[9px] rounded-lg transition-colors"
-            :class="saveDisabled ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-green-500 text-white cursor-pointer hover:bg-green-600'"
+
+            :ui="{ base: ['border-none text-[15px] font-bold px-5 py-[9px] rounded-lg transition-colors', saveDisabled ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-green-500 text-white cursor-pointer hover:bg-green-600'] }"
             @click="saveModal"
           >
             Save
-          </button>
+          </UButton>
         </div>
       </div>
     </div>
 
     <!-- delete modal -->
-    <div
-      v-if="deleteTarget"
-      class="fixed inset-0 bg-slate-900/45 backdrop-blur-[2px] flex items-center justify-center z-[210] p-5"
-    >
-      <div class="bg-white rounded-[14px] w-[440px] max-w-[92vw] shadow-[0_20px_60px_rgba(0,0,0,0.25)] p-6">
-        <div class="flex items-center gap-3 mb-2">
-          <div :style="deleteIconWrapStyle">
-            <UIcon :name="'i-lucide-' + deleteIcon" class="w-[22px] h-[22px]" />
-          </div>
-          <h3 class="text-[17px] font-bold text-slate-900 m-0">
-            {{ deleteTitle }}
-          </h3>
-        </div>
-        <p class="text-[15px] text-slate-500 mt-0 mb-5 leading-normal">
-          {{ deleteMessage }}
-        </p>
-        <div class="flex justify-end gap-2.5">
-          <button
-            class="border border-slate-200 bg-white text-slate-700 text-[15px] font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer"
-            @click="deleteTarget = null"
-          >
-            {{ deleteCancelLabel }}
-          </button>
-          <button
-            v-if="!deleteBlocked"
-            class="border-none bg-red-600 text-white text-[15px] font-bold px-[18px] py-[9px] rounded-lg cursor-pointer"
-            @click="confirmDelete"
-          >
-            Delete
-          </button>
-        </div>
-      </div>
-    </div>
+    <VertexConfirmModal
+      :open="!!deleteTarget"
+      :title="deleteTitle"
+      :message="deleteMessage"
+      :icon="deleteIcon"
+      :tone="deleteBlocked ? 'warning' : 'danger'"
+      :cancel-label="deleteCancelLabel"
+      :show-confirm="!deleteBlocked"
+      @cancel="deleteTarget = null"
+      @confirm="confirmDelete"
+    />
 
     <!-- toast -->
-    <div
-      v-if="toast"
-      class="toast-in fixed bottom-6 right-6 z-[300] bg-white border border-slate-200 border-l-4 border-l-green-500 rounded-[10px] shadow-[0_10px_30px_rgba(0,0,0,0.14)] px-[18px] py-3.5 flex items-center gap-3"
-    >
-      <UIcon name="i-lucide-circle-check" class="w-5 h-5 text-green-600" />
-      <span class="text-[15px] font-semibold text-slate-900">{{ toast }}</span>
-    </div>
+    <VertexToast :message="toast" />
   </div>
 </template>
-
-<style scoped>
-.field-input {
-  width: 100%;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 10px 12px;
-  font-size: 15px;
-  color: #0f172a;
-  background: #fff;
-  outline: none;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
-}
-.field-input:focus {
-  border-color: #00c16a;
-  box-shadow: 0 0 0 3px rgba(0, 193, 106, 0.15);
-}
-.field-input::placeholder {
-  color: #94a3b8;
-}
-.field-label {
-  font-size: 14px;
-  font-weight: 600;
-  color: #334155;
-  margin-bottom: 6px;
-  display: block;
-}
-.row-hover:hover {
-  background: #f8fafc;
-}
-.btn-icon-hover:hover {
-  background: #f1f5f9;
-}
-.toast-in {
-  animation: toastIn 200ms ease;
-}
-@keyframes toastIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-</style>

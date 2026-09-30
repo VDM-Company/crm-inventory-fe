@@ -627,47 +627,46 @@ function onConfirmDiscard() {
 </script>
 
 <template>
-  <div class="max-w-[1400px] px-10 pt-8 pb-20">
-    <!-- toast -->
-    <div
-      v-if="savedToast"
-      class="fixed top-6 right-6 bg-slate-900 text-white px-[18px] py-[13px] rounded-[10px] flex items-center gap-2.5 text-[13px] font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.25)] z-[200]"
-    >
-      <UIcon name="i-lucide-circle-check-big" class="w-4 h-4 text-green-500" />
-      Product created successfully
-    </div>
+  <div class="form-compact max-w-[1400px] px-10 pt-8 pb-20">
+    <VertexToast
+      :message="savedToast ? 'Product created successfully' : null"
+      variant="dark"
+    />
 
     <!-- header -->
     <div class="flex items-center justify-between mb-6">
       <div>
-        <div class="text-[13px] text-slate-500 mb-1">
-          <NuxtLink to="/dashboard" class="text-green-600 no-underline hover:underline">
-            Inventory
-          </NuxtLink>
-          / <NuxtLink to="/dashboard" class="text-green-600 no-underline hover:underline">
-            Product
-          </NuxtLink>
-          / <span class="text-slate-900 font-semibold">Create New Product</span>
-        </div>
+        <VertexBreadcrumb
+          dense
+          :items="[
+            { label: 'Inventory', to: '/dashboard' },
+            { label: 'Product', to: '/dashboard' },
+            { label: 'Create New Product' }
+          ]"
+        />
         <h1 class="text-2xl font-bold text-slate-900 m-0">
           Create New Product
         </h1>
       </div>
       <div class="flex gap-2.5">
-        <button
-          class="border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer inline-flex items-center hover:bg-slate-50 transition-colors"
+        <UButton
+          variant="ghost"
+
+          :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer inline-flex items-center hover:bg-slate-50 transition-colors' }"
           @click="onCancelClick"
         >
           Cancel
-        </button>
-        <button
+        </UButton>
+        <UButton
+          variant="ghost"
+
           :disabled="saveDisabled"
-          class="border-none text-sm font-semibold px-5 py-[9px] rounded-lg transition-colors"
-          :class="saveDisabled ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-green-500 text-white cursor-pointer shadow-sm hover:bg-green-600'"
+
+          :ui="{ base: ['border-none text-sm font-semibold px-5 py-[9px] rounded-lg transition-colors', saveDisabled ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-green-500 text-white cursor-pointer shadow-sm hover:bg-green-600'] }"
           @click="onSaveProduct"
         >
           Save Product
-        </button>
+        </UButton>
       </div>
     </div>
 
@@ -691,7 +690,7 @@ function onConfirmDiscard() {
       <!-- ROW 1: Core identification + Settings -->
       <div class="flex flex-wrap gap-6 items-stretch">
         <!-- Core identification -->
-        <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 h-full min-w-0 grow-[999] shrink basis-[420px]">
+        <UCard class="h-full min-w-0 grow-[999] shrink basis-[420px] p-6">
           <h2 class="text-base font-bold text-slate-900 mt-0 mb-1">
             Core Identification
           </h2>
@@ -780,13 +779,16 @@ function onConfirmDiscard() {
                   Image attached
                 </div>
               </div>
-              <button
+              <UButton
+                variant="ghost"
+
                 title="Remove image"
-                class="border border-slate-200 bg-white text-slate-500 w-7 h-7 rounded-full cursor-pointer flex items-center justify-center flex-shrink-0"
+
+                :ui="{ base: 'border border-slate-200 bg-white text-slate-500 w-7 h-7 rounded-full cursor-pointer flex items-center justify-center flex-shrink-0' }"
                 @click="onRemoveImage"
               >
                 <UIcon name="i-lucide-x" class="w-[13px] h-[13px]" />
-              </button>
+              </UButton>
             </div>
             <div
               v-else
@@ -806,10 +808,10 @@ function onConfirmDiscard() {
               @change="onImageChange"
             >
           </div>
-        </div>
+        </UCard>
 
         <!-- Settings -->
-        <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 h-full min-w-0 grow shrink basis-[320px]">
+        <UCard class="h-full min-w-0 grow shrink basis-[320px] p-6">
           <h2 class="text-base font-bold text-slate-900 mt-0 mb-5">
             Settings
           </h2>
@@ -853,13 +855,16 @@ function onConfirmDiscard() {
                 class="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full py-1 pr-2 pl-3 text-[13px] font-semibold"
               >
                 {{ chip.name }}
-                <button
+                <UButton
+                  variant="ghost"
+
                   title="Remove"
-                  class="border-none bg-transparent cursor-pointer text-emerald-700 flex items-center p-0.5 rounded-full"
+
+                  :ui="{ base: 'border-none bg-transparent cursor-pointer text-emerald-700 flex items-center p-0.5 rounded-full' }"
                   @click="removePlatform(chip.id)"
                 >
                   <UIcon name="i-lucide-x" class="w-3 h-3" />
-                </button>
+                </UButton>
               </span>
             </div>
             <div class="relative">
@@ -944,14 +949,14 @@ function onConfirmDiscard() {
               <span :style="knobStyle(notForSale)" />
             </button>
           </div>
-        </div>
+        </UCard>
       </div>
 
       <!-- ROW 2: Variant / Bundle + Pricing -->
       <div class="flex flex-wrap gap-6">
         <div class="grow shrink basis-full min-w-0 flex flex-col gap-6">
           <!-- Product Variant -->
-          <div v-if="hasVariants" class="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+          <UCard v-if="hasVariants" class="p-6">
             <h2 class="text-base font-bold text-slate-900 mt-0 mb-1">
               Product Variant
             </h2>
@@ -1046,12 +1051,14 @@ function onConfirmDiscard() {
                         class="inline-flex basis-auto grow-0 shrink-0 items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full py-[3px] pr-1.5 pl-2.5 text-[13px] font-medium"
                       >
                         {{ chip }}
-                        <button
-                          class="border-none bg-transparent cursor-pointer text-emerald-700 flex items-center p-0.5 rounded-full"
+                        <UButton
+                          variant="ghost"
+
+                          :ui="{ base: 'border-none bg-transparent cursor-pointer text-emerald-700 flex items-center p-0.5 rounded-full' }"
                           @click="removeAttributeValue(attr.id, chip)"
                         >
                           <UIcon name="i-lucide-x" class="w-3 h-3" />
-                        </button>
+                        </UButton>
                       </span>
                       <div v-if="attr.canAddValue" class="select-wrap basis-[130px] grow shrink min-w-[120px]">
                         <select
@@ -1071,34 +1078,41 @@ function onConfirmDiscard() {
                       <span v-else-if="attr.allSelected" class="text-xs text-slate-400 p-1">All values added</span>
                     </div>
                   </div>
-                  <button
+                  <UButton
+                    variant="ghost"
+
                     title="Remove attribute"
-                    class="btn-icon-hover border border-slate-200 bg-white text-red-500 w-9 h-9 rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0 mt-5"
+
+                    :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-500 w-9 h-9 rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0 mt-5' }"
                     @click="removeAttribute(attr.id)"
                   >
                     <UIcon name="i-lucide-trash-2" class="w-4 h-4" />
-                  </button>
+                  </UButton>
                 </div>
               </div>
             </div>
 
             <div class="flex items-center gap-2.5 flex-wrap">
-              <button
-                class="inline-flex items-center gap-1.5 border border-dashed border-green-500 bg-emerald-50 text-green-600 text-[13px] font-semibold px-4 py-[9px] rounded-lg cursor-pointer"
+              <UButton
+                variant="ghost"
+
+                :ui="{ base: 'inline-flex items-center gap-1.5 border border-dashed border-green-500 bg-emerald-50 text-green-600 text-[13px] font-semibold px-4 py-[9px] rounded-lg cursor-pointer' }"
                 @click="addAttribute"
               >
                 <UIcon name="i-lucide-plus" class="w-3.5 h-3.5" />
                 Add Attribute
-              </button>
-              <button
+              </UButton>
+              <UButton
+                variant="ghost"
+
                 :disabled="applyDisabled"
-                class="inline-flex items-center gap-1.5 border-none text-[13px] font-bold px-[18px] py-[9px] rounded-lg transition-colors"
-                :class="applyDisabled ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-green-500 text-white cursor-pointer shadow-sm hover:bg-green-600'"
+
+                :ui="{ base: ['inline-flex items-center gap-1.5 border-none text-[13px] font-bold px-[18px] py-[9px] rounded-lg transition-colors', applyDisabled ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-green-500 text-white cursor-pointer shadow-sm hover:bg-green-600'] }"
                 @click="applyVariants"
               >
                 <UIcon name="i-lucide-check" class="w-3.5 h-3.5" />
                 Apply
-              </button>
+              </UButton>
             </div>
 
             <!-- step 2: combinations -->
@@ -1114,9 +1128,9 @@ function onConfirmDiscard() {
               <div class="overflow-x-auto">
                 <div class="min-w-[420px]">
                   <div class="grid grid-cols-[minmax(160px,1.6fr)_150px_90px_40px] gap-2 items-center px-4 py-2.5 bg-slate-50 border-b border-slate-200">
-                    <span class="text-xs font-bold text-slate-500 uppercase tracking-[0.03em]">Variant</span>
-                    <span class="text-xs font-bold text-slate-500 uppercase tracking-[0.03em]">SKU</span>
-                    <span class="text-xs font-bold text-slate-500 uppercase tracking-[0.03em] text-center">Status</span>
+                    <span class="th text-xs">Variant</span>
+                    <span class="th text-xs">SKU</span>
+                    <span class="th text-xs text-center">Status</span>
                     <span />
                   </div>
                   <div
@@ -1137,13 +1151,16 @@ function onConfirmDiscard() {
                         <span :style="knobStyle(v.active)" />
                       </button>
                     </div>
-                    <button
+                    <UButton
+                      variant="ghost"
+
                       title="Delete variant"
-                      class="btn-icon-hover border-none bg-transparent text-slate-400 w-8 h-8 rounded-lg cursor-pointer inline-flex items-center justify-center"
+
+                      :ui="{ base: 'btn-icon-hover border-none bg-transparent text-slate-400 w-8 h-8 rounded-lg cursor-pointer inline-flex items-center justify-center' }"
                       @click="removeVariant(v.key)"
                     >
                       <UIcon name="i-lucide-trash-2" class="w-[15px] h-[15px]" />
-                    </button>
+                    </UButton>
                   </div>
                 </div>
               </div>
@@ -1159,10 +1176,10 @@ function onConfirmDiscard() {
                 Click Apply to generate variant combinations.
               </div>
             </div>
-          </div>
+          </UCard>
 
           <!-- Bundle -->
-          <div v-if="isBundle" class="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+          <UCard v-if="isBundle" class="p-6">
             <div class="flex items-center justify-between mb-4">
               <div>
                 <h2 class="text-base font-bold text-slate-900 mt-0 mb-1">
@@ -1172,13 +1189,15 @@ function onConfirmDiscard() {
                   Group existing products into components.
                 </p>
               </div>
-              <button
-                class="inline-flex items-center gap-1.5 border border-green-500 bg-emerald-50 text-green-600 text-[13px] font-semibold px-4 py-[9px] rounded-lg cursor-pointer"
+              <UButton
+                variant="ghost"
+
+                :ui="{ base: 'inline-flex items-center gap-1.5 border border-green-500 bg-emerald-50 text-green-600 text-[13px] font-semibold px-4 py-[9px] rounded-lg cursor-pointer' }"
                 @click="openComponentModal"
               >
                 <UIcon name="i-lucide-plus" class="w-3.5 h-3.5" />
                 Create Component
-              </button>
+              </UButton>
             </div>
 
             <div v-if="bundleComponentRows.length" class="flex flex-col gap-4">
@@ -1190,20 +1209,26 @@ function onConfirmDiscard() {
                 <div class="flex items-center justify-between mb-3">
                   <span class="text-sm font-bold text-slate-900">{{ comp.title }}</span>
                   <div class="flex gap-1.5">
-                    <button
+                    <UButton
+                      variant="ghost"
+
                       title="Edit component"
-                      class="btn-icon-hover border border-slate-200 bg-white text-slate-500 w-8 h-8 rounded-lg cursor-pointer inline-flex items-center justify-center"
+
+                      :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-slate-500 w-8 h-8 rounded-lg cursor-pointer inline-flex items-center justify-center' }"
                       @click="openEditComponent(comp.id)"
                     >
                       <UIcon name="i-lucide-pencil" class="w-3.5 h-3.5" />
-                    </button>
-                    <button
+                    </UButton>
+                    <UButton
+                      variant="ghost"
+
                       title="Delete component"
-                      class="btn-icon-hover border border-slate-200 bg-white text-red-500 w-8 h-8 rounded-lg cursor-pointer inline-flex items-center justify-center"
+
+                      :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-500 w-8 h-8 rounded-lg cursor-pointer inline-flex items-center justify-center' }"
                       @click="removeComponent(comp.id)"
                     >
                       <UIcon name="i-lucide-trash-2" class="w-3.5 h-3.5" />
-                    </button>
+                    </UButton>
                   </div>
                 </div>
                 <div class="grid gap-2.5 grid-cols-[repeat(auto-fill,minmax(220px,1fr))]">
@@ -1235,10 +1260,10 @@ function onConfirmDiscard() {
                 No data to show. Add new for see the data.
               </div>
             </div>
-          </div>
+          </UCard>
 
           <!-- Pricing -->
-          <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+          <UCard class="p-6">
             <div>
               <div class="flex items-start justify-between gap-3 mb-4">
                 <div>
@@ -1282,20 +1307,26 @@ function onConfirmDiscard() {
                       </div>
                     </div>
                     <div v-if="pricingEditing" class="flex gap-1.5 flex-shrink-0">
-                      <button
+                      <UButton
+                        variant="ghost"
+
                         title="Save"
-                        class="border-none bg-green-500 text-white w-[38px] h-[38px] rounded-lg cursor-pointer inline-flex items-center justify-center"
+
+                        :ui="{ base: 'border-none bg-green-500 text-white w-[38px] h-[38px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
                         @click="onPricingSave"
                       >
                         <UIcon name="i-lucide-check" class="w-[17px] h-[17px]" />
-                      </button>
-                      <button
+                      </UButton>
+                      <UButton
+                        variant="ghost"
+
                         title="Cancel"
-                        class="btn-icon-hover border border-slate-200 bg-white text-slate-500 w-[38px] h-[38px] rounded-lg cursor-pointer inline-flex items-center justify-center"
+
+                        :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-slate-500 w-[38px] h-[38px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
                         @click="onPricingCancel"
                       >
                         <UIcon name="i-lucide-x" class="w-[17px] h-[17px]" />
-                      </button>
+                      </UButton>
                     </div>
                   </div>
                 </div>
@@ -1307,19 +1338,21 @@ function onConfirmDiscard() {
                   </div>
                   <div class="border border-slate-200 rounded-[10px] overflow-hidden">
                     <div class="flex items-center gap-2.5 px-3 py-2.5 bg-slate-50 border-b border-slate-200">
-                      <span class="flex-1 min-w-0 text-xs font-bold text-slate-500 uppercase tracking-[0.03em]">Component</span>
-                      <span class="w-[150px] flex-shrink-0 text-xs font-bold text-slate-500 uppercase tracking-[0.03em]">Amount</span>
-                      <span class="w-24 flex-shrink-0 text-center text-xs font-bold text-slate-500 uppercase tracking-[0.03em]">Published</span>
+                      <span class="th flex-1 min-w-0 text-xs">Component</span>
+                      <span class="th w-[150px] flex-shrink-0 text-xs">Amount</span>
+                      <span class="th w-24 flex-shrink-0 text-center text-xs">Published</span>
                       <span class="w-[38px] flex-shrink-0" />
                     </div>
                     <template v-for="c in initialComponentRows" :key="c.index">
                       <div v-if="c.showAddBefore" class="px-3 py-2.5 border-b border-slate-100">
-                        <button
-                          class="inline-flex items-center gap-1.5 border border-dashed border-green-500 bg-emerald-50 text-green-600 text-[13px] font-semibold px-3.5 py-2 rounded-lg cursor-pointer"
+                        <UButton
+                          variant="ghost"
+
+                          :ui="{ base: 'inline-flex items-center gap-1.5 border border-dashed border-green-500 bg-emerald-50 text-green-600 text-[13px] font-semibold px-3.5 py-2 rounded-lg cursor-pointer' }"
                           @click="addInitialComponent"
                         >
                           <UIcon name="i-lucide-plus" class="w-3.5 h-3.5" /> Add component
-                        </button>
+                        </UButton>
                       </div>
                       <div :style="c.rowStyle">
                         <div class="flex-1 min-w-0">
@@ -1366,14 +1399,17 @@ function onConfirmDiscard() {
                           </button>
                         </div>
                         <div class="w-[38px] flex-shrink-0">
-                          <button
+                          <UButton
                             v-if="c.canRemove"
+
+                            variant="ghost"
                             title="Remove component"
-                            class="btn-icon-hover border border-slate-200 bg-white text-red-500 w-[38px] h-[38px] rounded-lg cursor-pointer flex items-center justify-center"
+
+                            :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-500 w-[38px] h-[38px] rounded-lg cursor-pointer flex items-center justify-center' }"
                             @click="removeInitialComponent(c.index)"
                           >
                             <UIcon name="i-lucide-trash-2" class="w-4 h-4" />
-                          </button>
+                          </UButton>
                           <span
                             v-else
                             class="w-[38px] h-[38px] inline-flex items-center justify-center text-slate-300"
@@ -1398,39 +1434,24 @@ function onConfirmDiscard() {
                 <span>Each variant has its own price — set it per row in the Variant Combinations table above.</span>
               </div>
             </div>
-          </div>
+          </UCard>
         </div>
       </div>
     </div>
 
     <!-- cancel confirm -->
-    <div
-      v-if="cancelConfirmOpen"
-      class="fixed inset-0 bg-slate-900/45 backdrop-blur-[2px] flex items-center justify-center z-[300]"
-    >
-      <div class="bg-white rounded-[14px] w-[420px] max-w-[92vw] shadow-[0_20px_60px_rgba(0,0,0,0.25)] p-6">
-        <h3 class="text-base font-bold text-slate-900 mt-0 mb-2">
-          Discard changes?
-        </h3>
-        <p class="text-sm text-slate-500 mt-0 mb-5">
-          Any information you entered will be lost.
-        </p>
-        <div class="flex justify-end gap-2.5">
-          <button
-            class="border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-4 py-[9px] rounded-lg cursor-pointer"
-            @click="cancelConfirmOpen = false"
-          >
-            Keep editing
-          </button>
-          <button
-            class="border-none bg-red-600 text-white text-sm font-bold px-[18px] py-[9px] rounded-lg cursor-pointer"
-            @click="onConfirmDiscard"
-          >
-            Discard
-          </button>
-        </div>
-      </div>
-    </div>
+    <VertexConfirmModal
+      :open="cancelConfirmOpen"
+      compact
+      icon=""
+      title="Discard changes?"
+      message="Any information you entered will be lost."
+      cancel-label="Keep editing"
+      confirm-label="Discard"
+      width-class="w-[420px]"
+      @cancel="cancelConfirmOpen = false"
+      @confirm="onConfirmDiscard"
+    />
 
     <!-- bundle component modal -->
     <div
@@ -1442,12 +1463,14 @@ function onConfirmDiscard() {
           <h3 class="text-base font-bold text-slate-900 m-0">
             Create Component
           </h3>
-          <button
-            class="btn-icon-hover border-none bg-transparent text-slate-500 w-8 h-8 rounded-lg cursor-pointer flex items-center justify-center"
+          <UButton
+            variant="ghost"
+
+            :ui="{ base: 'btn-icon-hover border-none bg-transparent text-slate-500 w-8 h-8 rounded-lg cursor-pointer flex items-center justify-center' }"
             @click="closeComponentModal"
           >
             <UIcon name="i-lucide-x" class="w-[18px] h-[18px]" />
-          </button>
+          </UButton>
         </div>
         <div class="p-6">
           <div class="mb-5">
@@ -1478,110 +1501,70 @@ function onConfirmDiscard() {
                   </option>
                 </select>
               </div>
-              <button
+              <UButton
                 v-if="componentModal.rows.length > 1"
+
+                variant="ghost"
                 title="Remove product"
-                class="btn-icon-hover border border-slate-200 bg-white text-red-500 w-[38px] h-[38px] rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0"
+
+                :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-500 w-[38px] h-[38px] rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0' }"
                 @click="removeModalRow(row.id)"
               >
                 <UIcon name="i-lucide-trash-2" class="w-4 h-4" />
-              </button>
+              </UButton>
             </div>
           </div>
-          <button
-            class="w-full inline-flex items-center justify-center gap-1.5 border border-dashed border-green-500 bg-emerald-50 text-green-600 text-[13px] font-semibold px-4 py-2.5 rounded-lg cursor-pointer"
+          <UButton
+            variant="ghost"
+
+            :ui="{ base: 'w-full inline-flex items-center justify-center gap-1.5 border border-dashed border-green-500 bg-emerald-50 text-green-600 text-[13px] font-semibold px-4 py-2.5 rounded-lg cursor-pointer' }"
             @click="addModalRow"
           >
             <UIcon name="i-lucide-plus" class="w-3.5 h-3.5" />
             Add Product
-          </button>
+          </UButton>
         </div>
         <div class="flex justify-end gap-2.5 px-6 py-4 border-t border-slate-100">
-          <button
-            class="border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer"
+          <UButton
+            variant="ghost"
+
+            :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer' }"
             @click="closeComponentModal"
           >
             Cancel
-          </button>
-          <button
+          </UButton>
+          <UButton
+            variant="ghost"
+
             :disabled="componentSaveDisabled"
-            class="border-none text-white text-sm font-semibold px-5 py-[9px] rounded-lg"
-            :class="componentSaveDisabled ? 'bg-emerald-200 cursor-not-allowed' : 'bg-green-500 cursor-pointer'"
+
+            :ui="{ base: ['border-none text-white text-sm font-semibold px-5 py-[9px] rounded-lg', componentSaveDisabled ? 'bg-emerald-200 cursor-not-allowed' : 'bg-green-500 cursor-pointer'] }"
             @click="saveComponent"
           >
             Save Component
-          </button>
+          </UButton>
         </div>
       </div>
     </div>
 
     <!-- save confirm -->
-    <div
-      v-if="saveConfirmOpen"
-      class="fixed inset-0 bg-slate-900/45 backdrop-blur-[2px] flex items-center justify-center z-[360] p-5"
-    >
-      <div class="bg-white rounded-[14px] w-[420px] max-w-[92vw] shadow-[0_20px_60px_rgba(0,0,0,0.25)] p-6">
-        <div class="flex items-center gap-3 mb-2">
-          <div class="w-11 h-11 flex-shrink-0 rounded-full bg-emerald-50 flex items-center justify-center">
-            <UIcon name="i-lucide-circle-check" class="w-[22px] h-[22px] text-green-600" />
-          </div>
-          <h3 class="text-base font-bold text-slate-900 m-0">
-            Save product?
-          </h3>
-        </div>
-        <p class="text-sm text-slate-500 mt-0 mb-5">
-          You're about to save {{ saveConfirmName }}. You can edit its details later from the product page.
-        </p>
-        <div class="flex justify-end gap-2.5">
-          <button
-            class="border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-4 py-[9px] rounded-lg cursor-pointer"
-            @click="saveConfirmOpen = false"
-          >
-            Cancel
-          </button>
-          <button
-            class="border-none bg-green-500 text-white text-sm font-bold px-[18px] py-[9px] rounded-lg cursor-pointer"
-            @click="commitSave()"
-          >
-            Save Product
-          </button>
-        </div>
-      </div>
-    </div>
+    <VertexConfirmModal
+      :open="saveConfirmOpen"
+      compact
+      tone="success"
+      icon="circle-check"
+      title="Save product?"
+      :message="`You're about to save ${saveConfirmName}. You can edit its details later from the product page.`"
+      cancel-label="Cancel"
+      confirm-label="Save Product"
+      width-class="w-[420px]"
+      @cancel="saveConfirmOpen = false"
+      @confirm="commitSave()"
+    />
   </div>
 </template>
 
 <style scoped>
-.field-input {
-  width: 100%;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 9px 12px;
-  font-size: 14px;
-  color: #0f172a;
-  background: #fff;
-  outline: none;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
-}
-.field-input:focus {
-  border-color: #00c16a;
-  box-shadow: 0 0 0 3px rgba(0, 193, 106, 0.15);
-}
-.field-input:disabled {
-  background: #f1f5f9;
-  color: #94a3b8;
-  cursor: not-allowed;
-}
-.field-input::placeholder {
-  color: #94a3b8;
-}
-.field-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: #334155;
-  margin-bottom: 6px;
-  display: block;
-}
 select.field-input {
   appearance: none;
   -webkit-appearance: none;
@@ -1592,16 +1575,5 @@ select.field-input {
   background-position: right 10px center;
   background-size: 16px 16px;
   cursor: pointer;
-}
-.select-wrap {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-}
-.select-wrap select {
-  width: 100%;
-}
-.btn-icon-hover:hover {
-  background: #f1f5f9;
 }
 </style>
