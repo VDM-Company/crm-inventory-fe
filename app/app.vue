@@ -1,13 +1,11 @@
 <script setup lang="ts">
-const colorMode = useColorMode()
-
-const color = computed(() => colorMode.value === 'dark' ? '#1b1718' : 'white')
-
+// Colour mode is disabled (`ui.colorMode: false` in nuxt.config) — the app is
+// light-only, so the theme colour is a constant.
 useHead({
   meta: [
     { charset: 'utf-8' },
     { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-    { key: 'theme-color', name: 'theme-color', content: color }
+    { key: 'theme-color', name: 'theme-color', content: 'white' }
   ],
   link: [
     { rel: 'icon', href: '/favicon.ico' }

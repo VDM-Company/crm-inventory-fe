@@ -166,25 +166,28 @@ function childClass(k: string) {
           <span class="font-medium text-slate-500 text-[11px]">Marketing</span>
         </span>
       </NuxtLink>
-      <button
-        class="border border-slate-200 bg-white text-slate-500 w-[26px] h-[26px] rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0 p-0 hover:bg-slate-100 transition-colors"
+      <UButton
+        variant="ghost"
+
         :title="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+        :ui="{ base: 'border border-slate-200 bg-white text-slate-500 w-[26px] h-[26px] rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0 p-0 hover:bg-slate-100 transition-colors' }"
         @click="toggleCollapse"
       >
         <UIcon :name="collapsed ? 'i-lucide-chevrons-right' : 'i-lucide-chevrons-left'" class="w-3.5 h-3.5" />
-      </button>
+      </UButton>
     </div>
 
     <!-- NAV GROUPS -->
     <div class="flex flex-col gap-0.5 flex-1 px-2.5 overflow-visible">
       <div v-for="g in groupDefs" :key="g.key" class="relative">
-        <button
-          class="flex items-center gap-2.5 w-full border-none bg-transparent rounded-lg cursor-pointer text-sm font-semibold hover:bg-slate-100 transition-colors"
-          :class="[
+        <UButton
+          variant="ghost"
+
+          :title="g.label"
+          :ui="{ base: ['flex items-center gap-2.5 w-full border-none bg-transparent rounded-lg cursor-pointer text-sm font-semibold hover:bg-slate-100 transition-colors', [
             collapsed ? 'justify-center py-2.5' : 'px-2.5 py-[9px]',
             groupContainsActive(g) ? (collapsed ? 'text-green-600 bg-emerald-50' : 'text-slate-900') : 'text-slate-500'
-          ]"
-          :title="g.label"
+          ]] }"
           @click="onGroupHeaderClick(g, $event)"
         >
           <UIcon :name="g.icon" class="w-4 h-4 flex-shrink-0" />
@@ -195,16 +198,17 @@ function childClass(k: string) {
               class="w-3.5 h-3.5 text-slate-400 flex-shrink-0"
             />
           </template>
-        </button>
+        </UButton>
 
         <!-- inline sub-items (expanded, group open) -->
         <div v-if="!collapsed && groupsOpen[g.key]" class="flex flex-col gap-0.5 pt-0.5 pb-1.5 pl-[26px]">
           <template v-for="sub in g.subs" :key="sub.key">
             <!-- parent sub with children -->
             <template v-if="sub.children">
-              <button
-                class="flex items-center gap-[9px] px-2.5 py-2 rounded-lg text-[13.5px] w-full border-none bg-transparent cursor-pointer hover:bg-slate-100 transition-colors"
-                :class="sub.children.some(c => c.key === activeKey) ? 'text-slate-900 font-bold' : 'text-slate-500 font-semibold'"
+              <UButton
+                variant="ghost"
+
+                :ui="{ base: ['flex items-center gap-[9px] px-2.5 py-2 rounded-lg text-[13.5px] w-full border-none bg-transparent cursor-pointer hover:bg-slate-100 transition-colors', sub.children.some(c => c.key === activeKey) ? 'text-slate-900 font-bold' : 'text-slate-500 font-semibold'] }"
                 @click="toggleSub(sub, $event)"
               >
                 <UIcon :name="sub.icon" class="w-[15px] h-[15px] flex-shrink-0" />
@@ -213,7 +217,7 @@ function childClass(k: string) {
                   :name="subsOpen[sub.key] ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
                   class="w-[13px] h-[13px] text-slate-400 flex-shrink-0"
                 />
-              </button>
+              </UButton>
               <div v-if="subsOpen[sub.key]" class="flex flex-col gap-0.5">
                 <template v-for="child in sub.children" :key="child.key">
                   <NuxtLink v-if="child.enabled" :to="child.to || '#'" :class="childClass(child.key)">
@@ -301,12 +305,14 @@ function childClass(k: string) {
             olivia@vertexdigital.com
           </div>
         </div>
-        <button
-          class="border-none bg-transparent text-slate-400 w-7 h-7 rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0 p-0 hover:bg-slate-100 transition-colors"
+        <UButton
+          variant="ghost"
+
           title="Log out"
+          :ui="{ base: 'border-none bg-transparent text-slate-400 w-7 h-7 rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0 p-0 hover:bg-slate-100 transition-colors' }"
         >
           <UIcon name="i-lucide-log-out" class="w-[15px] h-[15px]" />
-        </button>
+        </UButton>
       </template>
     </div>
   </div>

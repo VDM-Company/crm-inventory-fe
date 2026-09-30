@@ -133,19 +133,15 @@ function onSave() {
 
 <template>
   <div class="flex-1 min-w-0 p-5">
-    <div class="text-[13px] text-slate-500 mb-3.5">
-      <NuxtLink to="/dashboard" class="text-green-600 no-underline hover:text-green-700">
-        Inventory
-      </NuxtLink> <span class="text-slate-300">/</span>
-      <NuxtLink to="/dashboard" class="text-green-600 no-underline hover:text-green-700">
-        Product
-      </NuxtLink> <span class="text-slate-300">/</span>
-      <span class="text-green-600">Configuration</span> <span class="text-slate-300">/</span>
-      <NuxtLink to="/attributes" class="text-green-600 no-underline hover:text-green-700">
-        Attributes
-      </NuxtLink> <span class="text-slate-300">/</span>
-      <span class="text-slate-900 font-semibold">{{ pageTitle }}</span>
-    </div>
+    <VertexBreadcrumb
+      :items="[
+        { label: 'Inventory', to: '/dashboard' },
+        { label: 'Product', to: '/dashboard' },
+        { label: 'Configuration' },
+        { label: 'Attributes', to: '/attributes' },
+        { label: pageTitle }
+      ]"
+    />
 
     <div class="flex items-center gap-3 mb-6">
       <NuxtLink
@@ -162,13 +158,17 @@ function onSave() {
     <div class="flex gap-6 items-start flex-wrap">
       <!-- config -->
       <div class="grow shrink basis-[420px] min-w-0 flex flex-col gap-6">
-        <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+        <UCard class="p-6">
           <h2 class="text-base font-bold text-slate-900 mt-0 mb-5">
             Attribute Details
           </h2>
 
-          <div class="mb-[18px]">
-            <label class="field-label">Attribute Name <span class="text-red-600">*</span></label>
+          <VertexField
+            label="Attribute Name"
+            required
+            :error="nameError"
+            class="mb-[18px]"
+          >
             <input
               class="field-input"
               type="text"
@@ -176,19 +176,15 @@ function onSave() {
               placeholder="e.g. Duration"
               @input="onNameChange"
             >
-            <div v-if="nameError" class="text-[13px] text-red-600 mt-1.5">
-              {{ nameError }}
-            </div>
-          </div>
+          </VertexField>
 
-          <div class="mb-[18px]">
-            <label class="field-label">Input Type <span class="text-red-600">*</span></label>
+          <VertexField label="Input Type" required class="mb-[18px]">
             <select class="field-input" :value="type" @change="onTypeChange">
               <option v-for="t in INPUT_TYPES" :key="t" :value="t">
                 {{ t }}
               </option>
             </select>
-          </div>
+          </VertexField>
 
           <template v-if="isOptionType">
             <div class="flex items-center justify-between gap-3 py-3 border-t border-slate-100">
@@ -236,21 +232,26 @@ function onSave() {
                     placeholder="Option value"
                     @input="setOption(o.index, ($event.target as HTMLInputElement).value)"
                   >
-                  <button
+                  <UButton
+                    variant="ghost"
+
                     title="Delete option"
-                    class="btn-icon-hover border border-slate-200 bg-white text-red-600 w-10 h-10 rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0"
+
+                    :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-600 w-10 h-10 rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0' }"
                     @click="removeOption(o.index)"
                   >
                     <UIcon name="i-lucide-trash-2" class="w-[15px] h-[15px]" />
-                  </button>
+                  </UButton>
                 </div>
               </div>
-              <button
-                class="mt-2.5 inline-flex items-center gap-1.5 border border-dashed border-green-500 bg-emerald-50 text-green-600 text-[13px] font-semibold px-4 py-[9px] rounded-lg cursor-pointer"
+              <UButton
+                variant="ghost"
+
+                :ui="{ base: 'mt-2.5 inline-flex items-center gap-1.5 border border-dashed border-green-500 bg-emerald-50 text-green-600 text-[13px] font-semibold px-4 py-[9px] rounded-lg cursor-pointer' }"
                 @click="addOption"
               >
                 <UIcon name="i-lucide-plus" class="w-3.5 h-3.5" /> Add Option
-              </button>
+              </UButton>
               <div v-if="optionsError" class="text-[13px] text-red-600 mt-2">
                 {{ optionsError }}
               </div>
@@ -264,7 +265,7 @@ function onSave() {
             <UIcon name="i-lucide-info" class="w-3.5 h-3.5" />
             {{ freeTypeHint }}
           </div>
-        </div>
+        </UCard>
 
         <div class="flex justify-end gap-2.5">
           <NuxtLink
@@ -273,18 +274,20 @@ function onSave() {
           >
             Cancel
           </NuxtLink>
-          <button
-            class="border-none bg-green-500 text-white text-[15px] font-bold px-[22px] py-2.5 rounded-lg cursor-pointer shadow-sm hover:bg-green-600 transition-colors"
+          <UButton
+            variant="ghost"
+
+            :ui="{ base: 'border-none bg-green-500 text-white text-[15px] font-bold px-[22px] py-2.5 rounded-lg cursor-pointer shadow-sm hover:bg-green-600 transition-colors' }"
             @click="onSave"
           >
             Save
-          </button>
+          </UButton>
         </div>
       </div>
 
       <!-- preview -->
       <div class="grow shrink basis-[300px] min-w-0">
-        <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 sticky top-5">
+        <UCard class="sticky top-5 p-6">
           <div class="flex items-center gap-2 mb-4">
             <UIcon name="i-lucide-eye" class="w-4 h-4 text-green-600" />
             <h2 class="text-base font-bold text-slate-900 m-0">
@@ -331,31 +334,13 @@ function onSave() {
           <div class="text-[12.5px] text-slate-400 mt-3.5">
             Illustrative only — shows how this attribute's input will appear.
           </div>
-        </div>
+        </UCard>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.field-input {
-  width: 100%;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 10px 12px;
-  font-size: 15px;
-  color: #0f172a;
-  background: #fff;
-  outline: none;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
-}
-.field-input:focus {
-  border-color: #00c16a;
-  box-shadow: 0 0 0 3px rgba(0, 193, 106, 0.15);
-}
-.field-input::placeholder {
-  color: #94a3b8;
-}
 select.field-input {
   appearance: none;
   -webkit-appearance: none;
@@ -366,15 +351,5 @@ select.field-input {
   background-position: right 14px center;
   background-size: 16px 16px;
   cursor: pointer;
-}
-.field-label {
-  font-size: 14px;
-  font-weight: 600;
-  color: #334155;
-  margin-bottom: 6px;
-  display: block;
-}
-.btn-icon-hover:hover {
-  background: #f1f5f9;
 }
 </style>

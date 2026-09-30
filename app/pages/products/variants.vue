@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { TableColumn } from '@nuxt/ui'
+
 useHead({ title: 'Variants — Vertex' })
 
 const route = useRoute()
@@ -76,16 +78,20 @@ const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / 
 const clampedPage = computed(() => Math.min(page.value, totalPages.value))
 const startIdx = computed(() => (clampedPage.value - 1) * pageSize)
 
-function badgeStyle(status: string) {
-  const active = status === 'Active'
-  return `display:inline-block;font-size:12px;font-weight:700;padding:3px 12px;border-radius:999px;background:${active ? '#ecfdf5' : '#f1f5f9'};color:${active ? '#00a155' : '#64748b'};border:1px solid ${active ? '#a7f3d0' : '#e2e8f0'};`
-}
+const columns: TableColumn<VariantRow & { priceLabel: string }>[] = [
+  { accessorKey: 'name', header: 'Variant', meta: { class: { th: 'px-4', td: 'px-4' } } },
+  { accessorKey: 'sku', header: 'Variant SKU' },
+  { accessorKey: 'attrChips', header: 'Attributes' },
+  { accessorKey: 'priceLabel', header: 'Price', meta: { class: { th: 'w-[100px]' } } },
+  { accessorKey: 'stock', header: 'Stock', meta: { class: { th: 'w-[90px]' } } },
+  { accessorKey: 'status', header: 'Status', meta: { class: { th: 'w-[100px]' } } },
+  { id: 'action', header: 'Action', meta: { class: { th: 'px-4 w-[150px]', td: 'px-4' } } }
+]
 
 const pageRows = computed(() =>
   filtered.value.slice(startIdx.value, startIdx.value + pageSize).map(v => ({
     ...v,
-    priceLabel: '$' + v.price.toFixed(2),
-    statusBadgeStyle: badgeStyle(v.status)
+    priceLabel: '$' + v.price.toFixed(2)
   }))
 )
 
@@ -163,7 +169,7 @@ function onSearchChange(e: Event) {
       </NuxtLink>
 
       <!-- parent product context header -->
-      <div class="bg-white border border-slate-200 rounded-xl shadow-sm px-6 py-5 mb-5 flex items-center justify-between gap-4 flex-wrap">
+      <UCard class="mb-5 flex items-center justify-between gap-4 flex-wrap px-6 py-5">
         <div class="flex items-center gap-4">
           <div class="w-16 h-16 rounded-xl bg-slate-100 flex items-center justify-center text-slate-300 flex-shrink-0">
             <UIcon name="i-lucide-image" class="w-[26px] h-[26px]" />
@@ -184,13 +190,15 @@ function onSearchChange(e: Event) {
             </div>
           </div>
         </div>
-        <button
-          class="border-none bg-green-500 text-white text-[13px] font-bold px-[18px] py-[9px] rounded-lg cursor-pointer inline-flex items-center gap-1.5 shadow-sm hover:bg-green-600 transition-colors"
+        <UButton
+          variant="ghost"
+
+          :ui="{ base: 'border-none bg-green-500 text-white text-[13px] font-bold px-[18px] py-[9px] rounded-lg cursor-pointer inline-flex items-center gap-1.5 shadow-sm hover:bg-green-600 transition-colors' }"
           @click="onAddVariant"
         >
           <UIcon name="i-lucide-plus" class="w-3.5 h-3.5" /> Add Variant
-        </button>
-      </div>
+        </UButton>
+      </UCard>
 
       <!-- search + filters -->
       <div class="flex gap-2.5 mb-4">
@@ -204,13 +212,16 @@ function onSearchChange(e: Event) {
             @change="onSearchChange"
           >
         </div>
-        <button class="border border-slate-200 bg-white text-slate-700 text-[13px] font-semibold px-4 py-[9px] rounded-lg cursor-pointer inline-flex items-center gap-1.5">
+        <UButton
+          variant="ghost"
+          :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-[13px] font-semibold px-4 py-[9px] rounded-lg cursor-pointer inline-flex items-center gap-1.5' }"
+        >
           <UIcon name="i-lucide-sliders-horizontal" class="w-3.5 h-3.5" /> Filters
-        </button>
+        </UButton>
       </div>
 
       <!-- table card -->
-      <div class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+      <UCard class="overflow-hidden">
         <div
           v-if="showEmptyState"
           class="px-6 py-14 flex flex-col items-center gap-2.5 text-center"
@@ -222,12 +233,14 @@ function onSearchChange(e: Event) {
           <div class="text-[13px] text-slate-500 max-w-[340px]">
             This product is set up for variants, but none have been created. Add the first variant to get started.
           </div>
-          <button
-            class="mt-1.5 border-none bg-green-500 text-white text-[13px] font-bold px-[18px] py-[9px] rounded-lg cursor-pointer inline-flex items-center gap-1.5"
+          <UButton
+            variant="ghost"
+
+            :ui="{ base: 'mt-1.5 border-none bg-green-500 text-white text-[13px] font-bold px-[18px] py-[9px] rounded-lg cursor-pointer inline-flex items-center gap-1.5' }"
             @click="onAddVariant"
           >
             <UIcon name="i-lucide-plus" class="w-3.5 h-3.5" /> Add Variant
-          </button>
+          </UButton>
         </div>
 
         <div
@@ -245,83 +258,73 @@ function onSearchChange(e: Event) {
 
         <template v-else-if="showTable">
           <div class="overflow-x-auto">
-            <table class="w-full border-collapse min-w-[860px]">
-              <thead>
-                <tr class="bg-slate-50 border-b border-slate-200">
-                  <th class="text-left text-xs font-bold text-slate-500 uppercase tracking-[0.03em] px-4 py-3">
-                    Variant
-                  </th>
-                  <th class="text-left text-xs font-bold text-slate-500 uppercase tracking-[0.03em] px-3 py-3">
-                    Variant SKU
-                  </th>
-                  <th class="text-left text-xs font-bold text-slate-500 uppercase tracking-[0.03em] px-3 py-3">
-                    Attributes
-                  </th>
-                  <th class="text-left text-xs font-bold text-slate-500 uppercase tracking-[0.03em] px-3 py-3 w-[100px]">
-                    Price
-                  </th>
-                  <th class="text-left text-xs font-bold text-slate-500 uppercase tracking-[0.03em] px-3 py-3 w-[90px]">
-                    Stock
-                  </th>
-                  <th class="text-left text-xs font-bold text-slate-500 uppercase tracking-[0.03em] px-3 py-3 w-[100px]">
-                    Status
-                  </th>
-                  <th class="text-left text-xs font-bold text-slate-500 uppercase tracking-[0.03em] px-4 py-3 w-[150px]">
-                    Action
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="v in pageRows" :key="v.id" class="row-hover border-b border-slate-100">
-                  <td class="px-4 py-3 whitespace-nowrap">
-                    <div class="flex items-center gap-2.5">
-                      <div class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-300 flex-shrink-0">
-                        <UIcon name="i-lucide-image" class="w-[15px] h-[15px]" />
-                      </div>
-                      <span class="text-sm font-semibold text-slate-900">{{ v.name }}</span>
-                    </div>
-                  </td>
-                  <td class="px-3 py-3 text-[13px] text-slate-500 whitespace-nowrap">
-                    {{ v.sku }}
-                  </td>
-                  <td class="px-3 py-3">
-                    <div class="flex flex-wrap gap-[5px]">
-                      <span
-                        v-for="chip in v.attrChips"
-                        :key="chip"
-                        class="text-[11px] font-medium px-[9px] py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200"
-                      >{{ chip }}</span>
-                    </div>
-                  </td>
-                  <td class="px-3 py-3 text-sm text-slate-700 whitespace-nowrap">
-                    {{ v.priceLabel }}
-                  </td>
-                  <td class="px-3 py-3 text-sm text-slate-700 whitespace-nowrap">
-                    {{ v.stock }}
-                  </td>
-                  <td class="px-3 py-3 whitespace-nowrap">
-                    <span :style="v.statusBadgeStyle">{{ v.status }}</span>
-                  </td>
-                  <td class="px-4 py-3 whitespace-nowrap">
-                    <div class="flex gap-2">
-                      <button
-                        class="border border-slate-200 bg-white text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-lg cursor-pointer"
-                        @click="onViewDetail"
-                      >
-                        View Detail
-                      </button>
-                      <button
-                        title="Edit variant"
-                        class="border border-slate-200 bg-white text-slate-500 w-[30px] h-[30px] rounded-lg cursor-pointer inline-flex items-center justify-center"
-                        @click="onViewDetail"
-                      >
-                        <UIcon name="i-lucide-pencil" class="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+            <UTable
+              :data="pageRows"
+              :columns="columns"
+              :ui="{
+                ...tableUi('min-w-[860px]'),
+                th: 'th text-left text-xs px-3 py-3',
+                td: 'px-3 py-3'
+              }"
+            >
+              <template #name-cell="{ row }">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-300 flex-shrink-0">
+                    <UIcon name="i-lucide-image" class="w-[15px] h-[15px]" />
+                  </div>
+                  <span class="text-sm font-semibold text-slate-900">{{ row.original.name }}</span>
+                </div>
+              </template>
+
+              <template #sku-cell="{ row }">
+                <span class="text-[13px] text-slate-500">{{ row.original.sku }}</span>
+              </template>
+
+              <template #attrChips-cell="{ row }">
+                <div class="flex flex-wrap gap-[5px]">
+                  <span
+                    v-for="chip in row.original.attrChips"
+                    :key="chip"
+                    class="text-[11px] font-medium px-[9px] py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200"
+                  >{{ chip }}</span>
+                </div>
+              </template>
+
+              <template #priceLabel-cell="{ row }">
+                <span class="text-sm text-slate-700">{{ row.original.priceLabel }}</span>
+              </template>
+
+              <template #stock-cell="{ row }">
+                <span class="text-sm text-slate-700">{{ row.original.stock }}</span>
+              </template>
+
+              <template #status-cell="{ row }">
+                <VertexStatusBadge :active="row.original.status === 'Active'" :label="row.original.status" />
+              </template>
+
+              <template #action-cell>
+                <div class="flex gap-2">
+                  <UButton
+                    variant="ghost"
+
+                    :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-lg cursor-pointer' }"
+                    @click="onViewDetail"
+                  >
+                    View Detail
+                  </UButton>
+                  <UButton
+                    variant="ghost"
+
+                    title="Edit variant"
+
+                    :ui="{ base: 'border border-slate-200 bg-white text-slate-500 w-[30px] h-[30px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
+                    @click="onViewDetail"
+                  >
+                    <UIcon name="i-lucide-pencil" class="w-3.5 h-3.5" />
+                  </UButton>
+                </div>
+              </template>
+            </UTable>
           </div>
 
           <!-- pagination -->
@@ -351,13 +354,7 @@ function onSearchChange(e: Event) {
             </div>
           </div>
         </template>
-      </div>
+      </UCard>
     </div>
   </div>
 </template>
-
-<style scoped>
-.row-hover:hover {
-  background: #f8fafc;
-}
-</style>

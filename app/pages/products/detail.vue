@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { TableColumn } from '@nuxt/ui'
 import type {
   AttributeDef,
   Category,
@@ -400,6 +401,27 @@ const bundleComponentRows = computed(() =>
   }))
 )
 const variantParentKey = computed(() => (isStored.value && product.value.id) ? product.value.id : 'demo')
+// Shape produced by `viewVariantRows` below.
+interface ViewVariantRow {
+  name: string
+  skuLabel: string
+  attrChips: string[]
+  priceLabel: string
+  stockLabel: string
+  statusLabel: string
+  detailTo: { path: string, query: Record<string, string> }
+}
+
+const viewVariantColumns: TableColumn<ViewVariantRow>[] = [
+  { accessorKey: 'name', header: 'Variant', meta: { class: { th: 'px-4', td: 'px-4' } } },
+  { accessorKey: 'skuLabel', header: 'Variant SKU' },
+  { accessorKey: 'attrChips', header: 'Attributes' },
+  { accessorKey: 'priceLabel', header: 'Price', meta: { class: { th: 'w-[100px]' } } },
+  { accessorKey: 'stockLabel', header: 'Stock', meta: { class: { th: 'w-[90px]' } } },
+  { accessorKey: 'statusLabel', header: 'Status', meta: { class: { th: 'px-4 w-[100px]', td: 'px-4' } } },
+  { id: 'action', header: 'Action', meta: { class: { th: 'px-4 text-right w-[120px]', td: 'px-4' } } }
+]
+
 const viewVariantRows = computed(() =>
   (product.value.variants || []).map(v => ({
     name: v.name,
@@ -408,7 +430,6 @@ const viewVariantRows = computed(() =>
     priceLabel: (v.price !== '' && v.price != null) ? '¥' + Number(v.price).toFixed(2) : '—',
     stockLabel: (v.stock !== '' && v.stock != null) ? String(v.stock) : '—',
     statusLabel: v.active ? 'Active' : 'Inactive',
-    statusBadgeStyle: badgeStyle(v.active ? 'Active' : 'Inactive'),
     detailTo: { path: '/products/variant-detail', query: { product: variantParentKey.value, variant: v.name } }
   }))
 )
@@ -473,7 +494,6 @@ function removeEditVariant(name: string) {
   editVariants.value = editVariants.value.filter(v => v.name !== name)
 }
 
-const statusBadgeStyleProduct = computed(() => badgeStyle(product.value.status))
 const notesDisplay = computed(() => product.value.notes && product.value.notes.trim() ? product.value.notes : '—')
 const productTypeLabel = computed(() => product.value.productType ? product.value.productType.charAt(0).toUpperCase() + product.value.productType.slice(1) : '')
 // v3 removed the lower spacer entirely
@@ -810,68 +830,78 @@ function onConfirmDelete() {
 </script>
 
 <template>
-  <div class="mx-auto max-w-[1280px] px-8 pt-8 pb-20">
+  <div class="form-compact mx-auto max-w-[1280px] px-8 pt-8 pb-20">
     <!-- header -->
     <div class="flex items-start justify-between mb-6 gap-4 flex-wrap">
       <div>
-        <div class="text-[13px] text-slate-500 mb-1">
-          <NuxtLink to="/dashboard" class="text-green-600 no-underline hover:underline">
-            Inventory
-          </NuxtLink>
-          / <NuxtLink to="/dashboard" class="text-green-600 no-underline hover:underline">
-            Product
-          </NuxtLink>
-          / <span class="text-slate-900 font-semibold">{{ product.name }}</span>
-        </div>
+        <VertexBreadcrumb
+          dense
+          :items="[
+            { label: 'Inventory', to: '/dashboard' },
+            { label: 'Product', to: '/dashboard' },
+            { label: product.name }
+          ]"
+        />
         <div class="flex items-center gap-2.5">
           <h1 class="text-2xl font-bold text-slate-900 m-0">
             {{ product.name }}
           </h1>
-          <span :style="statusBadgeStyleProduct">{{ product.status }}</span>
+          <VertexStatusBadge :active="product.status === 'Active'" :label="product.status" />
         </div>
       </div>
 
       <div v-if="isViewMode" class="flex gap-2.5">
-        <button
+        <UButton
+          variant="ghost"
+
           title="Version History"
-          class="border border-slate-200 bg-white text-slate-700 w-10 h-10 rounded-lg cursor-pointer inline-flex items-center justify-center hover:bg-slate-50 transition-colors"
+
+          :ui="{ base: 'border border-slate-200 bg-white text-slate-700 w-10 h-10 rounded-lg cursor-pointer inline-flex items-center justify-center hover:bg-slate-50 transition-colors' }"
           @click="historyOpen = true"
         >
           <UIcon name="i-lucide-history" class="w-[17px] h-[17px]" />
-        </button>
-        <button
-          class="border border-red-200 bg-white text-red-600 text-sm font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer inline-flex items-center gap-1.5 hover:bg-red-50 transition-colors"
+        </UButton>
+        <UButton
+          variant="ghost"
+
+          :ui="{ base: 'border border-red-200 bg-white text-red-600 text-sm font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer inline-flex items-center gap-1.5 hover:bg-red-50 transition-colors' }"
           @click="onDeleteClick"
         >
           <UIcon name="i-lucide-trash-2" class="w-3.5 h-3.5" /> Delete
-        </button>
-        <button
-          class="border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer inline-flex items-center gap-1.5 hover:bg-slate-50 transition-colors"
+        </UButton>
+        <UButton
+          variant="ghost"
+
+          :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer inline-flex items-center gap-1.5 hover:bg-slate-50 transition-colors' }"
           @click="onEditClick"
         >
           <UIcon name="i-lucide-pencil" class="w-3.5 h-3.5" /> Edit
-        </button>
+        </UButton>
       </div>
 
       <div v-if="isEditMode" class="flex gap-2.5">
-        <button
-          class="border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer hover:bg-slate-50 transition-colors"
+        <UButton
+          variant="ghost"
+
+          :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer hover:bg-slate-50 transition-colors' }"
           @click="onCancelClick"
         >
           Cancel
-        </button>
-        <button
-          class="border-none bg-green-500 text-white text-sm font-bold px-5 py-[9px] rounded-lg cursor-pointer shadow-sm hover:bg-green-600 transition-colors"
+        </UButton>
+        <UButton
+          variant="ghost"
+
+          :ui="{ base: 'border-none bg-green-500 text-white text-sm font-bold px-5 py-[9px] rounded-lg cursor-pointer shadow-sm hover:bg-green-600 transition-colors' }"
           @click="onSaveClick"
         >
           Save Changes
-        </button>
+        </UButton>
       </div>
     </div>
 
     <div class="flex flex-col gap-6">
       <!-- scope card -->
-      <div v-if="showScopeCard" class="bg-white border border-slate-200 rounded-xl shadow-sm px-5 py-4">
+      <UCard v-if="showScopeCard" class="px-5 py-4">
         <div class="flex items-center gap-3.5 flex-wrap">
           <div class="flex items-center gap-2 flex-shrink-0">
             <UIcon name="i-lucide-layers" class="w-4 h-4 text-green-600" />
@@ -901,12 +931,12 @@ function onConfirmDelete() {
           <span v-if="isPlatformScope" class="text-[12.5px] text-slate-500">Only <strong class="text-slate-700">Name</strong> and <strong class="text-slate-700">Price</strong> can be overridden here — other fields are global.</span>
           <span v-if="isViewPlatformScope" class="text-[12.5px] text-slate-500">Showing effective values for this platform. Click <strong class="text-slate-700">Edit</strong> to override them.</span>
         </div>
-      </div>
+      </UCard>
 
       <!-- ROW 1: Core identification + Settings -->
       <div class="flex flex-wrap gap-6 items-stretch">
         <!-- Core identification -->
-        <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 h-full min-w-0 grow-[999] shrink basis-[380px]">
+        <UCard class="h-full min-w-0 grow-[999] shrink basis-[380px] p-6">
           <h2 class="text-base font-bold text-slate-900 mt-0 mb-1">
             Core Identification
           </h2>
@@ -935,13 +965,16 @@ function onConfirmDelete() {
                   placeholder="e.g. Tourist SIM 15GB"
                   @input="onNameChange"
                 >
-                <button
+                <UButton
                   v-if="nameHasOverride"
-                  class="mt-[5px] border-none bg-transparent text-green-600 text-xs font-semibold cursor-pointer p-0 inline-flex items-center gap-1"
+
+                  variant="ghost"
+
+                  :ui="{ base: 'mt-[5px] border-none bg-transparent text-green-600 text-xs font-semibold cursor-pointer p-0 inline-flex items-center gap-1' }"
                   @click="onNameReset"
                 >
                   <UIcon name="i-lucide-rotate-ccw" class="w-[11px] h-[11px]" /> Reset to default
-                </button>
+                </UButton>
                 <div v-if="errors.name" class="text-xs text-red-600 mt-[5px]">
                   {{ errors.name }}
                 </div>
@@ -1030,10 +1063,10 @@ function onConfirmDelete() {
               <UIcon name="i-lucide-image" class="w-[26px] h-[26px]" />
             </div>
           </div>
-        </div>
+        </UCard>
 
         <!-- Settings -->
-        <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 h-full min-w-0 grow shrink basis-[320px]">
+        <UCard class="h-full min-w-0 grow shrink basis-[320px] p-6">
           <h2 class="text-base font-bold text-slate-900 mt-0 mb-5">
             Settings
           </h2>
@@ -1101,13 +1134,16 @@ function onConfirmDelete() {
                   class="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full py-1 pr-2 pl-3 text-[13px] font-semibold"
                 >
                   {{ chip.name }}
-                  <button
+                  <UButton
+                    variant="ghost"
+
                     title="Remove"
-                    class="border-none bg-transparent cursor-pointer text-emerald-700 flex items-center p-0.5 rounded-full"
+
+                    :ui="{ base: 'border-none bg-transparent cursor-pointer text-emerald-700 flex items-center p-0.5 rounded-full' }"
                     @click="removeDraftPlatform(chip.id)"
                   >
                     <UIcon name="i-lucide-x" class="w-3 h-3" />
-                  </button>
+                  </UButton>
                 </span>
               </div>
               <div class="relative">
@@ -1189,7 +1225,7 @@ function onConfirmDelete() {
                 {{ statusHelper }}
               </div>
             </div>
-            <span v-if="isViewMode" :style="statusBadgeStyleProduct">{{ product.status }}</span>
+            <VertexStatusBadge v-if="isViewMode" :active="product.status === 'Active'" :label="product.status" />
             <button v-else :style="trackStyle(draftActive)" @click="toggleStatus">
               <span :style="knobStyle(draftActive)" />
             </button>
@@ -1211,14 +1247,14 @@ function onConfirmDelete() {
               <span :style="knobStyle(!!draft.notForSale)" />
             </button>
           </div>
-        </div>
+        </UCard>
       </div>
 
       <!-- ROW 2: variants / bundle -->
       <div class="flex flex-wrap gap-6">
         <div class="grow-[999] shrink basis-[420px] min-w-0 flex flex-col gap-6">
           <!-- VARIANTS -->
-          <div v-if="isVariantProduct" class="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+          <UCard v-if="isVariantProduct" class="p-6">
             <h2 class="text-base font-bold text-slate-900 mt-0 mb-1">
               Variants
             </h2>
@@ -1266,12 +1302,14 @@ function onConfirmDelete() {
                           class="inline-flex basis-auto grow-0 shrink-0 items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full py-[3px] pr-1.5 pl-2.5 text-[13px] font-medium"
                         >
                           {{ chip }}
-                          <button
-                            class="border-none bg-transparent cursor-pointer text-emerald-700 flex items-center p-0.5 rounded-full"
+                          <UButton
+                            variant="ghost"
+
+                            :ui="{ base: 'border-none bg-transparent cursor-pointer text-emerald-700 flex items-center p-0.5 rounded-full' }"
                             @click="removeAttrValue(attr.id, chip)"
                           >
                             <UIcon name="i-lucide-x" class="w-3 h-3" />
-                          </button>
+                          </UButton>
                         </span>
                         <div v-if="attr.canAddValue" class="select-wrap basis-[130px] grow shrink min-w-[120px]">
                           <select
@@ -1290,33 +1328,40 @@ function onConfirmDelete() {
                         <span v-if="attr.noValueOptions" class="text-xs text-slate-400 p-1">{{ attr.valuesEmptyHint }}</span>
                       </div>
                     </div>
-                    <button
+                    <UButton
+                      variant="ghost"
+
                       title="Remove attribute"
-                      class="btn-icon-hover border border-slate-200 bg-white text-red-500 w-9 h-9 rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0 mt-5"
+
+                      :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-500 w-9 h-9 rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0 mt-5' }"
                       @click="removeEditAttr(attr.id)"
                     >
                       <UIcon name="i-lucide-trash-2" class="w-4 h-4" />
-                    </button>
+                    </UButton>
                   </div>
                 </div>
               </div>
 
-              <button
-                class="inline-flex items-center gap-1.5 border border-dashed border-green-500 bg-emerald-50 text-green-600 text-[13px] font-semibold px-4 py-[9px] rounded-lg cursor-pointer mb-7 mr-2.5"
+              <UButton
+                variant="ghost"
+
+                :ui="{ base: 'inline-flex items-center gap-1.5 border border-dashed border-green-500 bg-emerald-50 text-green-600 text-[13px] font-semibold px-4 py-[9px] rounded-lg cursor-pointer mb-7 mr-2.5' }"
                 @click="addEditAttribute"
               >
                 <UIcon name="i-lucide-plus" class="w-3.5 h-3.5" />
                 Add Attribute
-              </button>
-              <button
+              </UButton>
+              <UButton
+                variant="ghost"
+
                 :disabled="editApplyDisabled"
-                class="inline-flex items-center gap-1.5 border-none text-[13px] font-bold px-[18px] py-[9px] rounded-lg mb-7 transition-colors"
-                :class="editApplyDisabled ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-green-500 text-white cursor-pointer shadow-sm hover:bg-green-600'"
+
+                :ui="{ base: ['inline-flex items-center gap-1.5 border-none text-[13px] font-bold px-[18px] py-[9px] rounded-lg mb-7 transition-colors', editApplyDisabled ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-green-500 text-white cursor-pointer shadow-sm hover:bg-green-600'] }"
                 @click="applyEditVariants"
               >
                 <UIcon name="i-lucide-check" class="w-3.5 h-3.5" />
                 Apply
-              </button>
+              </UButton>
 
               <div class="flex items-center justify-between mb-3.5">
                 <div class="flex items-center gap-2">
@@ -1330,9 +1375,9 @@ function onConfirmDelete() {
                 <div class="overflow-x-auto">
                   <div class="min-w-[420px]">
                     <div class="grid grid-cols-[minmax(140px,1.4fr)_130px_80px_40px] gap-2 items-center px-4 py-2.5 bg-slate-50 border-b border-slate-200">
-                      <span class="text-xs font-bold text-slate-500 uppercase tracking-[0.03em]">Variant</span>
-                      <span class="text-xs font-bold text-slate-500 uppercase tracking-[0.03em]">SKU</span>
-                      <span class="text-xs font-bold text-slate-500 uppercase tracking-[0.03em] text-center">Status</span>
+                      <span class="th text-xs">Variant</span>
+                      <span class="th text-xs">SKU</span>
+                      <span class="th text-xs text-center">Status</span>
                       <span />
                     </div>
                     <div
@@ -1353,13 +1398,16 @@ function onConfirmDelete() {
                           <span :style="knobStyle(!!ev.active)" />
                         </button>
                       </div>
-                      <button
+                      <UButton
+                        variant="ghost"
+
                         title="Delete variant"
-                        class="btn-icon-hover border-none bg-transparent text-slate-400 w-8 h-8 rounded-lg cursor-pointer inline-flex items-center justify-center"
+
+                        :ui="{ base: 'btn-icon-hover border-none bg-transparent text-slate-400 w-8 h-8 rounded-lg cursor-pointer inline-flex items-center justify-center' }"
                         @click="removeEditVariant(ev.name)"
                       >
                         <UIcon name="i-lucide-trash-2" class="w-[15px] h-[15px]" />
-                      </button>
+                      </UButton>
                     </div>
                   </div>
                 </div>
@@ -1374,76 +1422,63 @@ function onConfirmDelete() {
               </div>
               <div class="border border-slate-200 rounded-[10px] overflow-hidden">
                 <div class="overflow-x-auto">
-                  <table class="w-full border-collapse min-w-[640px]">
-                    <thead>
-                      <tr class="bg-slate-50 border-b border-slate-200">
-                        <th class="text-left text-xs font-bold text-slate-500 uppercase tracking-[0.03em] px-4 py-[11px]">
-                          Variant
-                        </th>
-                        <th class="text-left text-xs font-bold text-slate-500 uppercase tracking-[0.03em] px-3 py-[11px]">
-                          Variant SKU
-                        </th>
-                        <th class="text-left text-xs font-bold text-slate-500 uppercase tracking-[0.03em] px-3 py-[11px]">
-                          Attributes
-                        </th>
-                        <th class="text-left text-xs font-bold text-slate-500 uppercase tracking-[0.03em] px-3 py-[11px] w-[100px]">
-                          Price
-                        </th>
-                        <th class="text-left text-xs font-bold text-slate-500 uppercase tracking-[0.03em] px-3 py-[11px] w-[90px]">
-                          Stock
-                        </th>
-                        <th class="text-left text-xs font-bold text-slate-500 uppercase tracking-[0.03em] px-4 py-[11px] w-[100px]">
-                          Status
-                        </th>
-                        <th class="text-right text-xs font-bold text-slate-500 uppercase tracking-[0.03em] px-4 py-[11px] w-[120px]">
-                          Action
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="vv in viewVariantRows" :key="vv.name" class="border-b border-slate-100">
-                        <td class="px-4 py-[11px] text-sm font-semibold text-slate-900 whitespace-nowrap">
-                          {{ vv.name }}
-                        </td>
-                        <td class="px-3 py-[11px] text-[13px] text-slate-500 whitespace-nowrap">
-                          {{ vv.skuLabel }}
-                        </td>
-                        <td class="px-3 py-[11px]">
-                          <div class="flex flex-wrap gap-[5px]">
-                            <span
-                              v-for="ac in vv.attrChips"
-                              :key="ac"
-                              class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200"
-                            >{{ ac }}</span>
-                          </div>
-                        </td>
-                        <td class="px-3 py-[11px] text-sm text-slate-700 whitespace-nowrap">
-                          {{ vv.priceLabel }}
-                        </td>
-                        <td class="px-3 py-[11px] text-sm text-slate-700 whitespace-nowrap">
-                          {{ vv.stockLabel }}
-                        </td>
-                        <td class="px-4 py-[11px] whitespace-nowrap">
-                          <span :style="vv.statusBadgeStyle">{{ vv.statusLabel }}</span>
-                        </td>
-                        <td class="px-4 py-[11px] text-right whitespace-nowrap">
-                          <NuxtLink
-                            :to="vv.detailTo"
-                            class="btn-icon-hover inline-flex items-center gap-1.5 border border-slate-200 bg-white text-slate-700 text-[13px] font-semibold px-3 py-1.5 rounded-lg no-underline"
-                          >
-                            <UIcon name="i-lucide-eye" class="w-3.5 h-3.5" /> View Detail
-                          </NuxtLink>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+                  <UTable
+                    :data="viewVariantRows"
+                    :columns="viewVariantColumns"
+                    :ui="{
+                      ...tableUi('min-w-[640px]'),
+                      th: 'th text-left text-xs px-3 py-[11px]',
+                      td: 'px-3 py-[11px]'
+                    }"
+                  >
+                    <template #name-cell="{ row }">
+                      <span class="text-sm font-semibold text-slate-900">{{ row.original.name }}</span>
+                    </template>
+
+                    <template #skuLabel-cell="{ row }">
+                      <span class="text-[13px] text-slate-500">{{ row.original.skuLabel }}</span>
+                    </template>
+
+                    <template #attrChips-cell="{ row }">
+                      <div class="flex flex-wrap gap-[5px]">
+                        <span
+                          v-for="ac in row.original.attrChips"
+                          :key="ac"
+                          class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200"
+                        >{{ ac }}</span>
+                      </div>
+                    </template>
+
+                    <template #priceLabel-cell="{ row }">
+                      <span class="text-sm text-slate-700">{{ row.original.priceLabel }}</span>
+                    </template>
+
+                    <template #stockLabel-cell="{ row }">
+                      <span class="text-sm text-slate-700">{{ row.original.stockLabel }}</span>
+                    </template>
+
+                    <template #statusLabel-cell="{ row }">
+                      <VertexStatusBadge :active="row.original.statusLabel === 'Active'" :label="row.original.statusLabel" />
+                    </template>
+
+                    <template #action-cell="{ row }">
+                      <div class="text-right">
+                        <NuxtLink
+                          :to="row.original.detailTo"
+                          class="btn-icon-hover inline-flex items-center gap-1.5 border border-slate-200 bg-white text-slate-700 text-[13px] font-semibold px-3 py-1.5 rounded-lg no-underline"
+                        >
+                          <UIcon name="i-lucide-eye" class="w-3.5 h-3.5" /> View Detail
+                        </NuxtLink>
+                      </div>
+                    </template>
+                  </UTable>
                 </div>
               </div>
             </div>
-          </div>
+          </UCard>
 
           <!-- BUNDLE -->
-          <div v-if="isBundleProduct" class="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+          <UCard v-if="isBundleProduct" class="p-6">
             <h2 class="text-base font-bold text-slate-900 mt-0 mb-1">
               Bundle
             </h2>
@@ -1488,10 +1523,10 @@ function onConfirmDelete() {
                 No components in this bundle.
               </div>
             </div>
-          </div>
+          </UCard>
 
           <!-- PRICING (single / bundle) -->
-          <div v-if="isSinglePricing" class="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+          <UCard v-if="isSinglePricing" class="p-6">
             <h2 class="text-base font-bold text-slate-900 mt-0 mb-1">
               Pricing
             </h2>
@@ -1503,7 +1538,7 @@ function onConfirmDelete() {
             <template v-if="isViewMode">
               <div class="flex flex-wrap gap-3 mb-5">
                 <div class="basis-[180px] grow shrink min-w-0 border border-slate-200 rounded-[10px] px-4 py-3.5">
-                  <div class="text-xs font-bold text-slate-500 uppercase tracking-[0.03em] mb-1.5">
+                  <div class="th text-xs mb-1.5">
                     Subscription
                   </div>
                   <div class="text-sm text-slate-900">
@@ -1511,7 +1546,7 @@ function onConfirmDelete() {
                   </div>
                 </div>
                 <div v-if="viewIsSubscription" class="basis-[140px] grow shrink min-w-0 border border-slate-200 rounded-[10px] px-4 py-3.5">
-                  <div class="text-xs font-bold text-slate-500 uppercase tracking-[0.03em] mb-1.5">
+                  <div class="th text-xs mb-1.5">
                     Monthly Fee
                   </div>
                   <div class="text-sm text-slate-900">
@@ -1519,7 +1554,7 @@ function onConfirmDelete() {
                   </div>
                 </div>
                 <div class="basis-[140px] grow shrink min-w-0 border border-slate-200 rounded-[10px] px-4 py-3.5">
-                  <div class="text-xs font-bold text-slate-500 uppercase tracking-[0.03em] mb-1.5">
+                  <div class="th text-xs mb-1.5">
                     Initial Fee
                   </div>
                   <div class="text-sm text-slate-900">
@@ -1530,8 +1565,8 @@ function onConfirmDelete() {
 
               <div v-if="hasInitialBreakdown" class="border border-slate-200 rounded-[10px] overflow-hidden">
                 <div class="flex items-center gap-2.5 px-3 py-2.5 bg-slate-50 border-b border-slate-200">
-                  <span class="flex-1 text-xs font-bold text-slate-500 uppercase tracking-[0.03em]">Component</span>
-                  <span class="w-[150px] text-xs font-bold text-slate-500 uppercase tracking-[0.03em] text-right">Amount</span>
+                  <span class="th flex-1 text-xs">Component</span>
+                  <span class="th w-[150px] text-xs text-right">Amount</span>
                 </div>
                 <div
                   v-for="b in initialBreakdown"
@@ -1599,9 +1634,9 @@ function onConfirmDelete() {
 
                 <div class="border border-slate-200 rounded-[10px] overflow-hidden">
                   <div class="flex items-center gap-2.5 px-3 py-2.5 bg-slate-50 border-b border-slate-200">
-                    <span class="flex-1 min-w-0 text-xs font-bold text-slate-500 uppercase tracking-[0.03em]">Component</span>
-                    <span class="w-[150px] flex-shrink-0 text-xs font-bold text-slate-500 uppercase tracking-[0.03em]">Amount</span>
-                    <span class="w-24 flex-shrink-0 text-center text-xs font-bold text-slate-500 uppercase tracking-[0.03em]">Published</span>
+                    <span class="th flex-1 min-w-0 text-xs">Component</span>
+                    <span class="th w-[150px] flex-shrink-0 text-xs">Amount</span>
+                    <span class="th w-24 flex-shrink-0 text-center text-xs">Published</span>
                     <span class="w-[38px] flex-shrink-0" />
                   </div>
 
@@ -1657,14 +1692,17 @@ function onConfirmDelete() {
                     </div>
 
                     <div class="w-[38px] flex-shrink-0">
-                      <button
+                      <UButton
                         v-if="c.canRemove"
+
+                        variant="ghost"
                         title="Remove component"
-                        class="btn-icon-hover border border-slate-200 bg-white text-red-500 w-[38px] h-[38px] rounded-lg cursor-pointer flex items-center justify-center"
+
+                        :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-500 w-[38px] h-[38px] rounded-lg cursor-pointer flex items-center justify-center' }"
                         @click="removeComponent(c.index)"
                       >
                         <UIcon name="i-lucide-trash-2" class="w-4 h-4" />
-                      </button>
+                      </UButton>
                       <span
                         v-else-if="c.locked"
                         class="w-[38px] h-[38px] inline-flex items-center justify-center text-slate-300"
@@ -1675,12 +1713,14 @@ function onConfirmDelete() {
                   </div>
 
                   <div v-if="canAddEditComponent" class="px-3 py-2.5 border-b border-slate-100">
-                    <button
-                      class="inline-flex items-center gap-1.5 border border-dashed border-green-500 bg-emerald-50 text-green-600 text-[13px] font-semibold px-3.5 py-2 rounded-lg cursor-pointer"
+                    <UButton
+                      variant="ghost"
+
+                      :ui="{ base: 'inline-flex items-center gap-1.5 border border-dashed border-green-500 bg-emerald-50 text-green-600 text-[13px] font-semibold px-3.5 py-2 rounded-lg cursor-pointer' }"
                       @click="addEditComponent"
                     >
                       <UIcon name="i-lucide-plus" class="w-3.5 h-3.5" /> Add component
-                    </button>
+                    </UButton>
                   </div>
 
                   <div class="flex items-center justify-between px-3.5 py-3 bg-slate-50">
@@ -1690,7 +1730,7 @@ function onConfirmDelete() {
                 </div>
               </div>
             </template>
-          </div>
+          </UCard>
         </div>
         <div
           v-if="showLowerSpacer"
@@ -1701,76 +1741,34 @@ function onConfirmDelete() {
     </div>
 
     <!-- cancel confirm -->
-    <div
-      v-if="cancelConfirmOpen"
-      class="fixed inset-0 bg-slate-900/45 backdrop-blur-[2px] flex items-center justify-center z-[100]"
-    >
-      <div class="bg-white rounded-[14px] w-[420px] max-w-[92vw] shadow-[0_20px_60px_rgba(0,0,0,0.25)] p-6">
-        <h3 class="text-base font-bold text-slate-900 mt-0 mb-2">
-          Discard changes?
-        </h3>
-        <p class="text-sm text-slate-500 mt-0 mb-5">
-          Your edits will not be saved.
-        </p>
-        <div class="flex justify-end gap-2.5">
-          <button
-            class="border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-4 py-[9px] rounded-lg cursor-pointer"
-            @click="onKeepEditing"
-          >
-            Keep Editing
-          </button>
-          <button
-            class="border-none bg-red-600 text-white text-sm font-bold px-[18px] py-[9px] rounded-lg cursor-pointer"
-            @click="onConfirmDiscard"
-          >
-            Discard
-          </button>
-        </div>
-      </div>
-    </div>
+    <VertexConfirmModal
+      :open="cancelConfirmOpen"
+      compact
+      icon=""
+      title="Discard changes?"
+      message="Your edits will not be saved."
+      cancel-label="Keep Editing"
+      confirm-label="Discard"
+      width-class="w-[420px]"
+      @cancel="onKeepEditing"
+      @confirm="onConfirmDiscard"
+    />
 
     <!-- delete confirm -->
-    <div
-      v-if="deleteConfirmOpen"
-      class="fixed inset-0 bg-slate-900/45 backdrop-blur-[2px] flex items-center justify-center z-[100]"
-    >
-      <div class="bg-white rounded-[14px] w-[440px] max-w-[92vw] shadow-[0_20px_60px_rgba(0,0,0,0.25)] p-6">
-        <div class="flex items-center gap-2.5 mb-2">
-          <div class="w-9 h-9 rounded-full bg-red-50 flex items-center justify-center text-red-600 flex-shrink-0">
-            <UIcon name="i-lucide-triangle-alert" class="w-[18px] h-[18px]" />
-          </div>
-          <h3 class="text-base font-bold text-slate-900 m-0">
-            Delete {{ product.name }}?
-          </h3>
-        </div>
-        <p class="text-sm text-slate-500 mt-0 mb-5">
-          This action cannot be undone.
-        </p>
-        <div class="flex justify-end gap-2.5">
-          <button
-            class="border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-4 py-[9px] rounded-lg cursor-pointer"
-            @click="onCancelDelete"
-          >
-            Cancel
-          </button>
-          <button
-            class="border-none bg-red-600 text-white text-sm font-bold px-[18px] py-[9px] rounded-lg cursor-pointer"
-            @click="onConfirmDelete"
-          >
-            Delete
-          </button>
-        </div>
-      </div>
-    </div>
+    <VertexConfirmModal
+      :open="deleteConfirmOpen"
+      compact
+      icon="triangle-alert"
+      :title="`Delete ${product.name}?`"
+      message="This action cannot be undone."
+      cancel-label="Cancel"
+      confirm-label="Delete"
+      @cancel="onCancelDelete"
+      @confirm="onConfirmDelete"
+    />
 
     <!-- toast -->
-    <div
-      v-if="toastMessage"
-      class="fixed top-6 right-6 bg-slate-900 text-white px-[18px] py-[13px] rounded-[10px] flex items-center gap-2.5 text-[13px] font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.25)] z-[200]"
-    >
-      <UIcon name="i-lucide-circle-check-big" class="w-4 h-4 text-green-500" />
-      {{ toastMessage }}
-    </div>
+    <VertexToast :message="toastMessage" variant="dark" />
 
     <!-- version history drawer -->
     <template v-if="historyOpen">
@@ -1786,12 +1784,14 @@ function onConfirmDelete() {
               Version History
             </h2>
           </div>
-          <button
-            class="btn-icon-hover border-none bg-transparent text-slate-500 w-[30px] h-[30px] rounded-lg cursor-pointer inline-flex items-center justify-center"
+          <UButton
+            variant="ghost"
+
+            :ui="{ base: 'btn-icon-hover border-none bg-transparent text-slate-500 w-[30px] h-[30px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
             @click="historyOpen = false"
           >
             <UIcon name="i-lucide-x" class="w-[17px] h-[17px]" />
-          </button>
+          </UButton>
         </div>
         <div class="flex-1 overflow-y-auto pt-0.5 pb-4">
           <template v-for="g in historyGroups" :key="g.label">
@@ -1822,14 +1822,17 @@ function onConfirmDelete() {
                       <span class="text-slate-900 font-medium">{{ c.to }}</span>
                     </div>
                   </div>
-                  <button
+                  <UButton
                     v-if="e.hasMore"
-                    class="border-none bg-transparent text-green-600 text-xs font-semibold cursor-pointer pt-1.5 px-0 pb-0 inline-flex items-center gap-1"
+
+                    variant="ghost"
+
+                    :ui="{ base: 'border-none bg-transparent text-green-600 text-xs font-semibold cursor-pointer pt-1.5 px-0 pb-0 inline-flex items-center gap-1' }"
                     @click="toggleHistoryEntry(e.id)"
                   >
                     {{ e.toggleLabel }}
                     <UIcon :name="e.toggleIcon" class="w-3 h-3" />
-                  </button>
+                  </UButton>
                 </div>
               </div>
             </div>
@@ -1841,39 +1844,6 @@ function onConfirmDelete() {
 </template>
 
 <style scoped>
-.field-input {
-  width: 100%;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 9px 12px;
-  font-size: 14px;
-  color: #0f172a;
-  background: #fff;
-  outline: none;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
-}
-.field-input:focus {
-  border-color: #00c16a;
-  box-shadow: 0 0 0 3px rgba(0, 193, 106, 0.15);
-}
-.field-input.has-error {
-  border-color: #fb2c36;
-}
-.field-input:disabled {
-  background: #f1f5f9;
-  color: #94a3b8;
-  cursor: not-allowed;
-}
-.field-input::placeholder {
-  color: #94a3b8;
-}
-.field-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: #334155;
-  margin-bottom: 6px;
-  display: block;
-}
 select.field-input {
   appearance: none;
   -webkit-appearance: none;
@@ -1884,14 +1854,6 @@ select.field-input {
   background-position: right 10px center;
   background-size: 16px 16px;
   cursor: pointer;
-}
-.select-wrap {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-}
-.select-wrap select {
-  width: 100%;
 }
 .static-label {
   font-size: 12px;
@@ -1906,9 +1868,6 @@ select.field-input {
   font-size: 14px;
   color: #0f172a;
   font-weight: 500;
-}
-.btn-icon-hover:hover {
-  background: #f1f5f9;
 }
 .drawer {
   animation: drawerIn 240ms ease;

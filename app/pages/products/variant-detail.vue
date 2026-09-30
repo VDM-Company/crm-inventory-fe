@@ -161,11 +161,6 @@ const attrPairs = computed(() => {
 })
 
 // ── style helpers (this screen's toggles are larger than the other pages') ──
-function badgeStyle(on: boolean) {
-  return on
-    ? 'display:inline-block;font-size:12px;font-weight:700;padding:3px 12px;border-radius:999px;background:#ecfdf5;color:#00a155;border:1px solid #a7f3d0;'
-    : 'display:inline-block;font-size:12px;font-weight:700;padding:3px 12px;border-radius:999px;background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;'
-}
 function trackStyle(on: boolean, disabled: boolean) {
   return `width:44px;height:24px;border-radius:999px;border:none;background:${on ? '#00c16a' : '#e2e8f0'};position:relative;padding:2px;display:inline-flex;align-items:center;transition:background 150ms ease;cursor:${disabled ? 'not-allowed' : 'pointer'};${disabled ? 'opacity:0.6;' : ''}`
 }
@@ -442,21 +437,14 @@ function onSaveEdit() {
 <template>
   <div class="p-5 max-w-[1280px]">
     <!-- breadcrumb -->
-    <div class="text-[13px] text-slate-500 mb-3.5">
-      <NuxtLink to="/dashboard" class="text-green-600 no-underline hover:underline">
-        Inventory
-      </NuxtLink>
-      <span class="text-slate-300">/</span>
-      <NuxtLink to="/dashboard" class="text-green-600 no-underline hover:underline">
-        Product
-      </NuxtLink>
-      <span class="text-slate-300">/</span>
-      <NuxtLink :to="parentTo" class="text-green-600 no-underline hover:underline">
-        {{ parentName }}
-      </NuxtLink>
-      <span class="text-slate-300">/</span>
-      <span class="text-slate-900 font-semibold">{{ variantNameQuery }}</span>
-    </div>
+    <VertexBreadcrumb
+      :items="[
+        { label: 'Inventory', to: '/dashboard' },
+        { label: 'Product', to: '/dashboard' },
+        { label: parentName, to: parentTo },
+        { label: variantNameQuery }
+      ]"
+    />
 
     <!-- header -->
     <div class="flex items-start justify-between gap-4 mb-6 flex-wrap">
@@ -472,7 +460,7 @@ function onSaveEdit() {
             <h1 class="text-[22px] font-bold text-slate-900 m-0">
               {{ headerTitle }}
             </h1>
-            <span v-if="found" :style="badgeStyle(active)">{{ statusLabel }}</span>
+            <VertexStatusBadge v-if="found" :active="active" :label="statusLabel" />
           </div>
           <div class="text-sm text-slate-500 mt-1">
             SKU: {{ skuLabel }}
@@ -480,35 +468,39 @@ function onSaveEdit() {
         </div>
       </div>
       <div v-if="found" class="flex gap-2.5 flex-shrink-0">
-        <button
+        <UButton
           v-if="isViewMode"
-          class="border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer inline-flex items-center gap-1.5 hover:bg-slate-50 transition-colors"
+
+          variant="ghost"
+
+          :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer inline-flex items-center gap-1.5 hover:bg-slate-50 transition-colors' }"
           @click="onEditClick"
         >
           <UIcon name="i-lucide-pencil" class="w-3.5 h-3.5" /> Edit
-        </button>
+        </UButton>
         <template v-else>
-          <button
-            class="border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer hover:bg-slate-50 transition-colors"
+          <UButton
+            variant="ghost"
+
+            :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer hover:bg-slate-50 transition-colors' }"
             @click="onCancelEdit"
           >
             Cancel
-          </button>
-          <button
-            class="border-none bg-green-500 text-white text-sm font-bold px-5 py-[9px] rounded-lg cursor-pointer shadow-sm hover:bg-green-600 transition-colors"
+          </UButton>
+          <UButton
+            variant="ghost"
+
+            :ui="{ base: 'border-none bg-green-500 text-white text-sm font-bold px-5 py-[9px] rounded-lg cursor-pointer shadow-sm hover:bg-green-600 transition-colors' }"
             @click="onSaveEdit"
           >
             Save Changes
-          </button>
+          </UButton>
         </template>
       </div>
     </div>
 
     <!-- not found -->
-    <div
-      v-if="!found"
-      class="bg-white border border-slate-200 rounded-xl px-6 py-12 text-center"
-    >
+    <UCard v-if="!found" class="text-center px-6 py-12">
       <div class="text-base font-bold text-slate-900 mb-1.5">
         Variant not found
       </div>
@@ -521,11 +513,11 @@ function onSaveEdit() {
       >
         Back to product
       </NuxtLink>
-    </div>
+    </UCard>
 
     <div v-else class="flex flex-col gap-6">
       <!-- scope card -->
-      <div class="bg-white border border-slate-200 rounded-xl shadow-sm px-5 py-4">
+      <UCard class="px-5 py-4">
         <div class="flex items-center gap-3.5 flex-wrap">
           <div class="flex items-center gap-2 flex-shrink-0">
             <UIcon name="i-lucide-layers" class="w-4 h-4 text-green-600" />
@@ -559,11 +551,11 @@ function onSaveEdit() {
           </div>
           <span class="text-[12.5px] text-slate-500">{{ scopeHelper }}</span>
         </div>
-      </div>
+      </UCard>
 
       <!-- Core identification + Settings -->
       <div class="flex flex-wrap gap-6 items-stretch">
-        <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 grow-[999] shrink basis-[360px] min-w-0">
+        <UCard class="grow-[999] shrink basis-[360px] min-w-0 p-6">
           <h2 class="text-base font-bold text-slate-900 mt-0 mb-1">
             Core Identification
           </h2>
@@ -618,24 +610,30 @@ function onSaveEdit() {
               class="relative w-full max-w-[280px] border border-slate-200 rounded-[10px] overflow-hidden bg-slate-50"
             >
               <img :src="src.image" class="w-full block max-h-[200px] object-contain">
-              <button
+              <UButton
                 v-if="isEditMode"
+
+                variant="ghost"
                 title="Remove image"
-                class="absolute top-2 right-2 border-none bg-slate-900/60 text-white w-[30px] h-[30px] rounded-lg cursor-pointer inline-flex items-center justify-center"
+
+                :ui="{ base: 'absolute top-2 right-2 border-none bg-slate-900/60 text-white w-[30px] h-[30px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
                 @click="onRemoveImage"
               >
                 <UIcon name="i-lucide-x" class="w-[15px] h-[15px]" />
-              </button>
+              </UButton>
             </div>
             <template v-else>
-              <button
+              <UButton
                 v-if="isEditMode"
-                class="w-full max-w-[280px] border-[1.5px] border-dashed border-slate-300 rounded-[10px] p-7 flex flex-col items-center gap-2 text-slate-400 bg-slate-50 cursor-pointer"
+
+                variant="ghost"
+
+                :ui="{ base: 'w-full max-w-[280px] border-[1.5px] border-dashed border-slate-300 rounded-[10px] p-7 flex flex-col items-center gap-2 text-slate-400 bg-slate-50 cursor-pointer' }"
                 @click="onPickImage"
               >
                 <UIcon name="i-lucide-image-plus" class="w-[22px] h-[22px]" />
                 <span class="text-[13px]">Click to upload an image</span>
-              </button>
+              </UButton>
               <div
                 v-else
                 class="w-full max-w-[280px] border-[1.5px] border-dashed border-slate-200 rounded-[10px] p-7 flex flex-col items-center gap-2 text-slate-300"
@@ -652,9 +650,9 @@ function onSaveEdit() {
               @change="onImageChange"
             >
           </div>
-        </div>
+        </UCard>
 
-        <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 grow shrink basis-[300px] min-w-0 self-stretch">
+        <UCard class="grow shrink basis-[300px] min-w-0 self-stretch p-6">
           <h2 class="text-base font-bold text-slate-900 mt-0 mb-5">
             Settings
           </h2>
@@ -684,38 +682,47 @@ function onSaveEdit() {
                   class="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full py-1 pr-2 pl-3 text-[13px] font-semibold"
                 >
                   {{ chip.name }}
-                  <button
+                  <UButton
+                    variant="ghost"
+
                     title="Remove"
-                    class="border-none bg-transparent cursor-pointer text-emerald-700 flex items-center p-0.5 rounded-full"
+
+                    :ui="{ base: 'border-none bg-transparent cursor-pointer text-emerald-700 flex items-center p-0.5 rounded-full' }"
                     @click="removeVariantPlatform(chip.id)"
                   >
                     <UIcon name="i-lucide-x" class="w-3 h-3" />
-                  </button>
+                  </UButton>
                 </span>
               </div>
               <div class="relative">
-                <button
+                <UButton
+                  variant="ghost"
+
                   type="button"
-                  class="w-full flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-[9px] h-10 text-sm bg-white cursor-pointer"
+
+                  :ui="{ base: 'w-full flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-[9px] h-10 text-sm bg-white cursor-pointer' }"
                   @click="platformDropdownOpen = !platformDropdownOpen"
                 >
                   <span class="text-slate-500">{{ platformAddLabel }}</span>
                   <span class="inline-flex items-center text-slate-500 flex-shrink-0">
                     <UIcon name="i-lucide-chevron-down" class="w-4 h-4" />
                   </span>
-                </button>
+                </UButton>
                 <template v-if="platformDropdownOpen">
                   <div class="fixed inset-0 z-40" @click="platformDropdownOpen = false" />
                   <div class="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.14)] p-1 max-h-[220px] overflow-y-auto">
-                    <button
+                    <UButton
                       v-for="opt in platformAddItems"
+
                       :key="opt.id"
+                      variant="ghost"
                       type="button"
-                      class="w-full text-left border-none rounded-md bg-transparent px-2.5 py-2 text-sm text-slate-700 cursor-pointer hover:bg-slate-50"
+
+                      :ui="{ base: 'w-full text-left border-none rounded-md bg-transparent px-2.5 py-2 text-sm text-slate-700 cursor-pointer hover:bg-slate-50' }"
                       @click="addVariantPlatform(opt.id)"
                     >
                       <span>{{ opt.name }}</span>
-                    </button>
+                    </UButton>
                     <div v-if="platformAllAssigned" class="p-2.5 text-[13px] text-slate-400 text-center">
                       All parent platforms added
                     </div>
@@ -790,11 +797,11 @@ function onSaveEdit() {
               </NuxtLink>
             </div>
           </div>
-        </div>
+        </UCard>
       </div>
 
       <!-- attributes -->
-      <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+      <UCard class="p-6">
         <h2 class="text-base font-bold text-slate-900 mt-0 mb-1">
           Attributes
         </h2>
@@ -808,10 +815,10 @@ function onSaveEdit() {
             class="text-[13px] font-semibold px-3 py-[5px] rounded-full bg-slate-100 text-slate-700 border border-slate-200"
           >{{ a.label }}</span>
         </div>
-      </div>
+      </UCard>
 
       <!-- pricing -->
-      <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+      <UCard class="p-6">
         <h2 class="text-base font-bold text-slate-900 mt-0 mb-1">
           Pricing
         </h2>
@@ -821,7 +828,7 @@ function onSaveEdit() {
 
         <div class="flex flex-wrap gap-4 mb-5">
           <div class="grow shrink basis-[180px] min-w-0 border border-slate-200 rounded-[10px] px-4 py-3.5">
-            <div class="text-xs font-bold text-slate-500 uppercase tracking-[0.03em] mb-1.5">
+            <div class="th text-xs mb-1.5">
               Subscription
             </div>
             <div class="text-sm text-slate-900">
@@ -829,7 +836,7 @@ function onSaveEdit() {
             </div>
           </div>
           <div class="grow shrink basis-[140px] min-w-0 border border-slate-200 rounded-[10px] px-4 py-3.5">
-            <div class="text-xs font-bold text-slate-500 uppercase tracking-[0.03em] mb-1.5">
+            <div class="th text-xs mb-1.5">
               Monthly Fee
             </div>
             <div v-if="isViewMode" class="text-lg font-bold text-slate-900">
@@ -847,7 +854,7 @@ function onSaveEdit() {
             </div>
           </div>
           <div class="grow shrink basis-[140px] min-w-0 border border-slate-200 rounded-[10px] px-4 py-3.5">
-            <div class="text-xs font-bold text-slate-500 uppercase tracking-[0.03em] mb-1.5">
+            <div class="th text-xs mb-1.5">
               Initial Fee
             </div>
             <div class="text-lg font-bold text-slate-900">
@@ -858,9 +865,9 @@ function onSaveEdit() {
 
         <div class="border border-slate-200 rounded-[10px] overflow-hidden">
           <div class="grid grid-cols-[1fr_150px_130px_40px] gap-2 items-center px-4 py-[11px] bg-slate-50 border-b border-slate-200">
-            <span class="text-xs font-bold text-slate-500 uppercase tracking-[0.03em]">Component</span>
-            <span class="text-xs font-bold text-slate-500 uppercase tracking-[0.03em]">Amount</span>
-            <span class="text-xs font-bold text-slate-500 uppercase tracking-[0.03em]">Published</span>
+            <span class="th text-xs">Component</span>
+            <span class="th text-xs">Amount</span>
+            <span class="th text-xs">Published</span>
           </div>
           <div v-for="c in pricingComponents" :key="c.feeId" :style="c.rowStyle">
             <span class="text-sm font-semibold">{{ c.name }}</span>
@@ -882,70 +889,39 @@ function onSaveEdit() {
               </button>
             </span>
             <span class="text-center">
-              <button
+              <UButton
                 v-if="c.canRemove"
+
+                variant="ghost"
                 title="Remove component"
-                class="border-none bg-transparent text-slate-400 w-[30px] h-[30px] rounded-lg cursor-pointer inline-flex items-center justify-center hover:text-red-500"
+
+                :ui="{ base: 'border-none bg-transparent text-slate-400 w-[30px] h-[30px] rounded-lg cursor-pointer inline-flex items-center justify-center hover:text-red-500' }"
                 @click="removeComponent(c.feeId)"
               >
                 <UIcon name="i-lucide-trash-2" class="w-[15px] h-[15px]" />
-              </button>
+              </UButton>
             </span>
           </div>
           <div v-if="isEditMode" class="px-4 py-2.5 border-t border-slate-100">
-            <button
-              class="inline-flex items-center gap-1.5 border border-dashed border-green-500 bg-emerald-50 text-green-600 text-[13px] font-semibold px-3.5 py-2 rounded-lg cursor-pointer"
+            <UButton
+              variant="ghost"
+
+              :ui="{ base: 'inline-flex items-center gap-1.5 border border-dashed border-green-500 bg-emerald-50 text-green-600 text-[13px] font-semibold px-3.5 py-2 rounded-lg cursor-pointer' }"
               @click="addComponent"
             >
               <UIcon name="i-lucide-plus" class="w-3.5 h-3.5" /> Add component
-            </button>
+            </UButton>
           </div>
         </div>
-      </div>
+      </UCard>
     </div>
 
     <!-- toast -->
-    <div
-      v-if="toast"
-      class="toast fixed bottom-6 right-6 z-[300] bg-white border border-slate-200 border-l-4 border-l-green-500 rounded-[10px] shadow-[0_10px_30px_rgba(0,0,0,0.14)] px-[18px] py-3.5 flex items-center gap-3"
-    >
-      <UIcon name="i-lucide-circle-check" class="w-5 h-5 text-green-600" />
-      <span class="text-[15px] font-semibold text-slate-900">{{ toast }}</span>
-    </div>
+    <VertexToast :message="toast" />
   </div>
 </template>
 
 <style scoped>
-.field-input {
-  width: 100%;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 10px 12px;
-  font-size: 15px;
-  color: #0f172a;
-  background: #fff;
-  outline: none;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
-}
-.field-input:focus {
-  border-color: #00c16a;
-  box-shadow: 0 0 0 3px rgba(0, 193, 106, 0.15);
-}
-.field-input:disabled {
-  background: #f1f5f9;
-  color: #94a3b8;
-  cursor: not-allowed;
-}
-.field-input::placeholder {
-  color: #94a3b8;
-}
-.field-label {
-  font-size: 14px;
-  font-weight: 600;
-  color: #334155;
-  margin-bottom: 6px;
-  display: block;
-}
 .static-label {
   font-size: 13px;
   font-weight: 600;
@@ -955,21 +931,5 @@ function onSaveEdit() {
   font-size: 15px;
   color: #0f172a;
   margin-top: 3px;
-}
-.btn-icon-hover:hover {
-  background: #f1f5f9;
-}
-.toast {
-  animation: toastIn 200ms ease;
-}
-@keyframes toastIn {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 </style>

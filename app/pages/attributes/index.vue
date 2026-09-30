@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { TableColumn } from '@nuxt/ui'
 import type { AttributeDef } from '~/types'
 
 useHead({ title: 'Attributes — Vertex' })
@@ -9,6 +10,15 @@ const deleteTarget = ref<AttributeDef | null>(null)
 const toast = ref<string | null>(null)
 
 let toastTimer: number | null = null
+
+// UTable column defs — per-column padding/width via `meta.class`, matching the
+// design's first/last-column gutters.
+const columns: TableColumn<AttributeDef>[] = [
+  { accessorKey: 'name', header: 'Attribute Name', meta: { class: { th: 'px-5 w-[220px]', td: TABLE_EDGE.td } } },
+  { accessorKey: 'type', header: 'Type', meta: { class: { th: 'w-[130px]' } } },
+  { accessorKey: 'values', header: 'Values' },
+  { id: 'action', header: 'Action', meta: { class: { th: 'px-5 text-right w-[130px]', td: TABLE_EDGE.td } } }
+]
 
 onMounted(() => {
   attrs.value = loadAttributeDefs()
@@ -46,9 +56,6 @@ function confirmDelete() {
   showToast('Attribute deleted')
 }
 const deleteIcon = computed(() => deleteBlocked.value ? 'shield-alert' : 'trash-2')
-const deleteIconWrapStyle = computed(() =>
-  'width:44px;height:44px;border-radius:999px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:' + (deleteBlocked.value ? '#fffbeb' : '#fef2f2') + ';color:' + (deleteBlocked.value ? '#d97706' : '#dc2626') + ';'
-)
 const deleteTitle = computed(() => {
   const t = deleteTarget.value
   if (!t) return ''
@@ -65,13 +72,13 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
 
 <template>
   <div class="flex-1 min-w-0 px-8 pt-7 pb-20">
-    <div class="text-[13px] text-slate-500 mb-3.5">
-      <NuxtLink to="/dashboard" class="text-green-600 no-underline hover:text-green-700">
-        Inventory
-      </NuxtLink> <span class="text-slate-300">/</span>
-      <span class="text-green-600">Configuration</span> <span class="text-slate-300">/</span>
-      <span class="text-slate-900 font-semibold">Attributes</span>
-    </div>
+    <VertexBreadcrumb
+      :items="[
+        { label: 'Inventory', to: '/dashboard' },
+        { label: 'Configuration' },
+        { label: 'Attributes' }
+      ]"
+    />
 
     <div class="flex items-start justify-between gap-4 mb-6 flex-wrap">
       <div>
@@ -82,152 +89,94 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
           Reusable variant attributes and their values.
         </p>
       </div>
-      <button
-        class="border-none bg-green-500 text-white text-[15px] font-bold px-[18px] py-2.5 rounded-lg cursor-pointer inline-flex items-center gap-1.5 shadow-sm hover:bg-green-600 transition-colors"
+      <UButton
+        variant="ghost"
+
+        :ui="{ base: 'border-none bg-green-500 text-white text-[15px] font-bold px-[18px] py-2.5 rounded-lg cursor-pointer inline-flex items-center gap-1.5 shadow-sm hover:bg-green-600 transition-colors' }"
         @click="onCreate"
       >
         <UIcon name="i-lucide-plus" class="w-[15px] h-[15px]" /> Create Attribute
-      </button>
+      </UButton>
     </div>
 
-    <div class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+    <UCard class="overflow-hidden">
       <div v-if="attrs.length" class="overflow-x-auto">
-        <table class="w-full border-collapse min-w-[640px]">
-          <thead>
-            <tr class="bg-slate-50 border-b border-slate-200">
-              <th class="text-left text-sm font-bold text-slate-500 uppercase tracking-[0.03em] px-5 py-[13px] w-[220px]">
-                Attribute Name
-              </th>
-              <th class="text-left text-sm font-bold text-slate-500 uppercase tracking-[0.03em] px-3 py-[13px] w-[130px]">
-                Type
-              </th>
-              <th class="text-left text-sm font-bold text-slate-500 uppercase tracking-[0.03em] px-3 py-[13px]">
-                Values
-              </th>
-              <th class="text-right text-sm font-bold text-slate-500 uppercase tracking-[0.03em] px-5 py-[13px] w-[130px]">
-                Action
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="a in attrs" :key="a.id" class="row-hover border-b border-slate-100">
-              <td class="px-5 py-3.5">
-                <div class="flex items-center gap-2.5">
-                  <div class="w-[34px] h-[34px] rounded-lg bg-emerald-50 text-green-600 flex items-center justify-center flex-shrink-0">
-                    <UIcon name="i-lucide-tag" class="w-4 h-4" />
-                  </div>
-                  <span class="text-base font-semibold text-slate-900">{{ a.name }}</span>
-                </div>
-              </td>
-              <td class="px-3 py-3.5">
-                <span class="text-sm text-slate-700">{{ a.type || 'Select' }}</span>
-              </td>
-              <td class="px-3 py-3.5">
-                <div v-if="a.values.length" class="flex flex-wrap gap-[5px]">
-                  <span
-                    v-for="v in a.values"
-                    :key="v"
-                    class="text-xs font-semibold text-slate-600 bg-slate-100 border border-slate-200 rounded-full px-2.5 py-0.5 whitespace-nowrap"
-                  >{{ v }}</span>
-                </div>
-                <span v-else class="text-sm text-slate-300">No values yet</span>
-              </td>
-              <td class="px-5 py-3.5">
-                <div class="flex items-center justify-end gap-2">
-                  <button
-                    class="btn-icon-hover inline-flex items-center gap-1.5 border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-3.5 py-[7px] rounded-lg cursor-pointer"
-                    @click="onEdit(a)"
-                  >
-                    <UIcon name="i-lucide-pencil" class="w-3.5 h-3.5" /> Edit
-                  </button>
-                  <button
-                    title="Delete attribute"
-                    class="btn-icon-hover border border-slate-200 bg-white text-red-600 w-[34px] h-[34px] rounded-lg cursor-pointer inline-flex items-center justify-center"
-                    @click="deleteTarget = a"
-                  >
-                    <UIcon name="i-lucide-trash-2" class="w-[15px] h-[15px]" />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <UTable
+          :data="attrs"
+          :columns="columns"
+          :ui="tableUi('min-w-[640px]')"
+        >
+          <template #name-cell="{ row }">
+            <div class="flex items-center gap-2.5">
+              <div class="w-[34px] h-[34px] rounded-lg bg-emerald-50 text-green-600 flex items-center justify-center flex-shrink-0">
+                <UIcon name="i-lucide-tag" class="w-4 h-4" />
+              </div>
+              <span class="text-base font-semibold text-slate-900">{{ row.original.name }}</span>
+            </div>
+          </template>
+
+          <template #type-cell="{ row }">
+            <span class="text-sm text-slate-700">{{ row.original.type || 'Select' }}</span>
+          </template>
+
+          <template #values-cell="{ row }">
+            <div v-if="row.original.values.length" class="flex flex-wrap gap-[5px]">
+              <span
+                v-for="v in row.original.values"
+                :key="v"
+                class="text-xs font-semibold text-slate-600 bg-slate-100 border border-slate-200 rounded-full px-2.5 py-0.5 whitespace-nowrap"
+              >{{ v }}</span>
+            </div>
+            <span v-else class="text-sm text-slate-300">No values yet</span>
+          </template>
+
+          <template #action-cell="{ row }">
+            <div class="flex items-center justify-end gap-2">
+              <UButton
+                variant="ghost"
+
+                :ui="{ base: 'btn-icon-hover inline-flex items-center gap-1.5 border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-3.5 py-[7px] rounded-lg cursor-pointer' }"
+                @click="onEdit(row.original)"
+              >
+                <UIcon name="i-lucide-pencil" class="w-3.5 h-3.5" /> Edit
+              </UButton>
+              <UButton
+                variant="ghost"
+
+                title="Delete attribute"
+
+                :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-600 w-[34px] h-[34px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
+                @click="deleteTarget = row.original"
+              >
+                <UIcon name="i-lucide-trash-2" class="w-[15px] h-[15px]" />
+              </UButton>
+            </div>
+          </template>
+        </UTable>
       </div>
 
-      <div
+      <VertexEmptyState
         v-else
-        class="px-6 py-14 flex flex-col items-center gap-2.5 text-center"
-      >
-        <div class="w-[52px] h-[52px] rounded-xl bg-slate-100 flex items-center justify-center text-slate-400">
-          <UIcon name="i-lucide-tags" class="w-6 h-6" />
-        </div>
-        <div class="text-base font-bold text-slate-900">
-          No attributes yet
-        </div>
-        <div class="text-[15px] text-slate-400 max-w-[340px]">
-          Create an attribute to reuse it across product variants.
-        </div>
-      </div>
-    </div>
+        icon="tags"
+        title="No attributes yet"
+        hint="Create an attribute to reuse it across product variants."
+      />
+    </UCard>
 
     <!-- delete modal -->
-    <div
-      v-if="deleteTarget"
-      class="fixed inset-0 bg-slate-900/45 backdrop-blur-[2px] flex items-center justify-center z-[210] p-5"
-    >
-      <div class="bg-white rounded-[14px] w-[440px] max-w-[92vw] shadow-[0_20px_60px_rgba(0,0,0,0.25)] p-6">
-        <div class="flex items-center gap-3 mb-2">
-          <div :style="deleteIconWrapStyle">
-            <UIcon :name="'i-lucide-' + deleteIcon" class="w-[22px] h-[22px]" />
-          </div>
-          <h3 class="text-[17px] font-bold text-slate-900 m-0">
-            {{ deleteTitle }}
-          </h3>
-        </div>
-        <p class="text-[15px] text-slate-500 mt-0 mb-5 leading-normal">
-          {{ deleteMessage }}
-        </p>
-        <div class="flex justify-end gap-2.5">
-          <button
-            class="border border-slate-200 bg-white text-slate-700 text-[15px] font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer"
-            @click="deleteTarget = null"
-          >
-            {{ deleteCancelLabel }}
-          </button>
-          <button
-            v-if="!deleteBlocked"
-            class="border-none bg-red-600 text-white text-[15px] font-bold px-[18px] py-[9px] rounded-lg cursor-pointer"
-            @click="confirmDelete"
-          >
-            Delete
-          </button>
-        </div>
-      </div>
-    </div>
+    <VertexConfirmModal
+      :open="!!deleteTarget"
+      :title="deleteTitle"
+      :message="deleteMessage"
+      :icon="deleteIcon"
+      :tone="deleteBlocked ? 'warning' : 'danger'"
+      :cancel-label="deleteCancelLabel"
+      :show-confirm="!deleteBlocked"
+      @cancel="deleteTarget = null"
+      @confirm="confirmDelete"
+    />
 
     <!-- toast -->
-    <div
-      v-if="toast"
-      class="toast-in fixed bottom-6 right-6 z-[300] bg-white border border-slate-200 border-l-4 border-l-green-500 rounded-[10px] shadow-[0_10px_30px_rgba(0,0,0,0.14)] px-[18px] py-3.5 flex items-center gap-3"
-    >
-      <UIcon name="i-lucide-circle-check" class="w-5 h-5 text-green-600" />
-      <span class="text-[15px] font-semibold text-slate-900">{{ toast }}</span>
-    </div>
+    <VertexToast :message="toast" />
   </div>
 </template>
-
-<style scoped>
-.row-hover:hover {
-  background: #f8fafc;
-}
-.btn-icon-hover:hover {
-  background: #f1f5f9;
-}
-.toast-in {
-  animation: toastIn 200ms ease;
-}
-@keyframes toastIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-</style>
