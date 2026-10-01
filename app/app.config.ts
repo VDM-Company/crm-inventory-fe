@@ -98,6 +98,32 @@ export default defineAppConfig({
       defaultVariants: {
         variant: 'none'
       }
+    },
+    // The design's toggles are 40x22 / 38x22 / 44x24 with an 18-20px knob and a
+    // 2px inset, which is the track width minus USwitch's 2px transparent
+    // border. `xl` already lands on 44x24, so only `md` and `sm` are resized.
+    switch: {
+      slots: {
+        base: 'data-[state=unchecked]:bg-slate-200 duration-150',
+        thumb: 'bg-white shadow-[0_1px_2px_rgba(0,0,0,0.15)] duration-150'
+      },
+      variants: {
+        size: {
+          sm: {
+            base: 'w-[38px]',
+            container: 'h-[22px]',
+            thumb: 'size-[18px] data-[state=checked]:translate-x-4 shadow-[0_1px_2px_rgba(0,0,0,0.2)]'
+          },
+          md: {
+            base: 'w-10',
+            container: 'h-[22px]',
+            thumb: 'size-[18px] data-[state=checked]:translate-x-[18px]'
+          },
+          xl: {
+            thumb: 'shadow-[0_1px_2px_rgba(0,0,0,0.2)]'
+          }
+        }
+      }
     }
   }
 })

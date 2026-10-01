@@ -125,19 +125,12 @@ const groups = computed(() => CONFIG_GROUPS.map(def => ({
             >{{ f.badgeLabel }}</span>
           </div>
 
-          <UButton
+          <USwitch
             v-if="f.isToggle"
-
-            variant="ghost"
-
-            :ui="{ base: ['w-10 h-[22px] rounded-full border-none cursor-pointer relative p-0.5 inline-flex items-center transition-colors', f.on ? 'bg-green-500' : 'bg-slate-200'] }"
-            @click="setCfg(f.key, !f.on)"
-          >
-            <span
-              class="w-[18px] h-[18px] rounded-full bg-white block shadow-sm transition-transform duration-150"
-              :class="f.on ? 'translate-x-[18px]' : 'translate-x-0'"
-            />
-          </UButton>
+            :model-value="f.on"
+            class="inline-flex"
+            @update:model-value="setCfg(f.key, $event)"
+          />
 
           <UTextarea
             v-else-if="f.isTextarea"

@@ -66,12 +66,6 @@ onBeforeUnmount(() => {
 })
 
 // ── style helpers (ported) ──
-function trackStyle(on: boolean) {
-  return `width:40px;height:22px;border-radius:999px;border:none;cursor:pointer;background:${on ? '#00c16a' : '#e2e8f0'};position:relative;padding:2px;display:inline-flex;align-items:center;flex-shrink:0;transition:background 150ms ease;`
-}
-function knobStyle(on: boolean) {
-  return `width:18px;height:18px;border-radius:999px;background:#fff;display:block;box-shadow:0 1px 2px rgba(0,0,0,0.15);transform:translateX(${on ? '18px' : '0'});transition:transform 150ms ease;`
-}
 function ddTrigger(open: boolean) {
   return `width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;border:1px solid ${open ? '#00c16a' : '#e2e8f0'};border-radius:8px;padding:9px 12px;height:40px;font-size:14px;background:#fff;cursor:pointer;color:#0f172a;${open ? 'box-shadow:0 0 0 3px rgba(0,193,106,0.15);' : ''}`
 }
@@ -700,9 +694,7 @@ function onReset() {
                   {{ draftEnabled ? 'Visible on the storefront' : 'Hidden from the storefront' }}
                 </div>
               </div>
-              <button :style="trackStyle(draftEnabled)" @click="draftEnabled = !draftEnabled">
-                <span :style="knobStyle(draftEnabled)" />
-              </button>
+              <USwitch v-model="draftEnabled" class="shrink-0" />
             </div>
           </UCard>
 
@@ -922,9 +914,7 @@ function onReset() {
                 </div>
               </div>
               <div class="flex items-center gap-[9px] flex-shrink-0">
-                <button type="button" :style="trackStyle(addModal.enabled)" @click="addModal.enabled = !addModal.enabled">
-                  <span :style="knobStyle(addModal.enabled)" />
-                </button>
+                <USwitch v-model="addModal.enabled" class="shrink-0" />
                 <span class="text-[13.5px] font-semibold text-slate-700 w-[26px]">{{ addModal.enabled ? 'Yes' : 'No' }}</span>
               </div>
             </div>
@@ -939,9 +929,7 @@ function onReset() {
                 </div>
               </div>
               <div class="flex items-center gap-[9px] flex-shrink-0">
-                <button type="button" :style="trackStyle(addModal.inMenu)" @click="addModal.inMenu = !addModal.inMenu">
-                  <span :style="knobStyle(addModal.inMenu)" />
-                </button>
+                <USwitch v-model="addModal.inMenu" class="shrink-0" />
                 <span class="text-[13.5px] font-semibold text-slate-700 w-[26px]">{{ addModal.inMenu ? 'Yes' : 'No' }}</span>
               </div>
             </div>

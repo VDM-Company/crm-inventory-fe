@@ -120,18 +120,6 @@ function ddChevron(open: boolean) {
 function ddOption(selected: boolean) {
   return `width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;border:none;border-radius:6px;background:${selected ? '#ecfdf5' : 'transparent'};padding:8px 10px;font-size:14px;color:${selected ? '#047857' : '#334155'};font-weight:${selected ? 600 : 400};cursor:pointer;`
 }
-function trackStyle(active: boolean) {
-  return `width:40px;height:22px;border-radius:999px;border:none;cursor:pointer;background:${active ? '#00c16a' : '#e2e8f0'};position:relative;padding:2px;display:inline-flex;align-items:center;transition:background 150ms ease;flex-shrink:0;`
-}
-function knobStyle(active: boolean) {
-  return `width:18px;height:18px;border-radius:999px;background:#fff;display:block;box-shadow:0 1px 2px rgba(0,0,0,0.15);transform:translateX(${active ? '18px' : '0px'});transition:transform 150ms ease;`
-}
-function switchTrackCss(on: boolean, locked: boolean) {
-  return `width:40px;height:22px;border-radius:999px;border:none;background:${on ? '#00c16a' : '#e2e8f0'};position:relative;padding:2px;display:inline-flex;align-items:center;transition:background 150ms ease;cursor:${locked ? 'not-allowed' : 'pointer'};${locked ? 'opacity:0.65;' : ''}`
-}
-function switchKnobCss(on: boolean) {
-  return `width:18px;height:18px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,0.15);transform:translateX(${on ? '18px' : '0px'});transition:transform 150ms ease;display:block;`
-}
 
 function toggleDropdown(key: string) {
   openDropdown.value = openDropdown.value === key ? null : key
@@ -481,9 +469,6 @@ function removeInitialComponent(i: number) {
   if (!c || c.feeId === FEE_BASE_ID) return
   form.initialComponents = form.initialComponents.filter((_, idx) => idx !== i)
 }
-function toggleSubscription() {
-  isSubscription.value = !isSubscription.value
-}
 function onPricingFocus() {
   if (pricingEditing.value) return
   pricingSnapshot.value = form.priceMonthly
@@ -504,13 +489,7 @@ const showProductPrice = computed(() => productType.value !== 'variant')
 const pricePerVariant = computed(() => productType.value === 'variant')
 
 // ── status ──
-function togglePublished() {
-  published.value = !published.value
-}
 const statusHelper = computed(() => published.value ? 'Active — available for use' : 'Inactive — hidden from use')
-function toggleNotForSale() {
-  notForSale.value = !notForSale.value
-}
 const notForSaleHelper = computed(() =>
   notForSale.value ? 'Marked as gift' : 'Regular product'
 )
@@ -949,9 +928,7 @@ function onConfirmDiscard() {
                 {{ statusHelper }}
               </div>
             </div>
-            <button type="button" :style="trackStyle(published)" @click="togglePublished">
-              <span :style="knobStyle(published)" />
-            </button>
+            <USwitch v-model="published" class="shrink-0" />
           </div>
 
           <!-- not for sale -->
@@ -964,9 +941,7 @@ function onConfirmDiscard() {
                 {{ notForSaleHelper }}
               </div>
             </div>
-            <button type="button" :style="trackStyle(notForSale)" @click="toggleNotForSale">
-              <span :style="knobStyle(notForSale)" />
-            </button>
+            <USwitch v-model="notForSale" class="shrink-0" />
           </div>
         </UCard>
       </div>
@@ -1165,9 +1140,11 @@ function onConfirmDiscard() {
                       @update:model-value="updateVariant(v.key, 'sku', String($event))"
                     />
                     <div class="text-center">
-                      <button type="button" :style="trackStyle(v.active)" @click="toggleVariantActive(v.key)">
-                        <span :style="knobStyle(v.active)" />
-                      </button>
+                      <USwitch
+                        :model-value="v.active"
+                        class="inline-flex"
+                        @update:model-value="toggleVariantActive(v.key)"
+                      />
                     </div>
                     <UButton
                       variant="ghost"
@@ -1313,9 +1290,7 @@ function onConfirmDiscard() {
                     {{ subscriptionHelper }}
                   </div>
                 </div>
-                <button type="button" :style="trackStyle(isSubscription)" @click="toggleSubscription">
-                  <span :style="knobStyle(isSubscription)" />
-                </button>
+                <USwitch v-model="isSubscription" class="shrink-0" />
               </div>
 
               <template v-if="showProductPrice">
@@ -1420,15 +1395,13 @@ function onConfirmDiscard() {
                           />
                         </div>
                         <div class="w-24 flex-shrink-0 flex justify-center">
-                          <button
-                            type="button"
+                          <USwitch
+                            :model-value="c.published"
                             :disabled="c.publishLocked"
                             :title="c.publishTitle"
-                            :style="switchTrackCss(c.published, c.publishLocked)"
-                            @click="toggleComponentPublish(c.index)"
-                          >
-                            <span :style="switchKnobCss(c.published)" />
-                          </button>
+                            :ui="{ root: c.publishLocked ? 'opacity-[0.65]' : '' }"
+                            @update:model-value="toggleComponentPublish(c.index)"
+                          />
                         </div>
                         <div class="w-[38px] flex-shrink-0">
                           <UButton

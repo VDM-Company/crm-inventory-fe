@@ -102,16 +102,6 @@ const optionRows = computed(() =>
 )
 
 // ── required toggle ──
-function toggleRequired() {
-  required.value = !required.value
-}
-const requiredTrackStyle = computed(() =>
-  `width:40px;height:22px;border-radius:999px;border:none;cursor:pointer;background:${required.value ? '#00c16a' : '#e2e8f0'};position:relative;padding:2px;display:inline-flex;align-items:center;transition:background 150ms ease;`
-)
-const requiredKnobStyle = computed(() =>
-  `width:18px;height:18px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,0.15);transform:translateX(${required.value ? '18px' : '0px'});transition:transform 150ms ease;display:block;`
-)
-
 // ── live preview ──
 const cleanedOptions = computed(() => options.value.map(o => (o || '').trim()).filter(Boolean))
 const previewOptions = computed(() => cleanedOptions.value.length ? cleanedOptions.value : ['Option 1', 'Option 2'])
@@ -204,9 +194,7 @@ function onSubmit(event: FormSubmitEvent<Schema>) {
                   Require at least one value to save.
                 </div>
               </div>
-              <button type="button" :style="requiredTrackStyle" @click="toggleRequired">
-                <span :style="requiredKnobStyle" />
-              </button>
+              <USwitch v-model="required" />
             </div>
 
             <div class="mt-2">

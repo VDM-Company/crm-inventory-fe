@@ -161,18 +161,6 @@ const attrPairs = computed(() => {
 })
 
 // ── style helpers (this screen's toggles are larger than the other pages') ──
-function trackStyle(on: boolean, disabled: boolean) {
-  return `width:44px;height:24px;border-radius:999px;border:none;background:${on ? '#00c16a' : '#e2e8f0'};position:relative;padding:2px;display:inline-flex;align-items:center;transition:background 150ms ease;cursor:${disabled ? 'not-allowed' : 'pointer'};${disabled ? 'opacity:0.6;' : ''}`
-}
-function knobStyle(on: boolean) {
-  return `width:20px;height:20px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,0.2);transform:translateX(${on ? '20px' : '0px'});transition:transform 150ms ease;display:block;`
-}
-function smallTrack(on: boolean) {
-  return `width:38px;height:22px;border-radius:999px;border:none;background:${on ? '#00c16a' : '#e2e8f0'};position:relative;padding:2px;display:inline-flex;align-items:center;cursor:pointer;transition:background 150ms ease;`
-}
-function smallKnob(on: boolean) {
-  return `width:18px;height:18px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,0.2);transform:translateX(${on ? '16px' : '0px'});transition:transform 150ms ease;display:block;`
-}
 function scopeOptionStyle(selected: boolean) {
   return `width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;border:none;border-radius:6px;background:${selected ? '#ecfdf5' : 'transparent'};padding:8px 10px;font-size:14px;color:${selected ? '#047857' : '#334155'};font-weight:${selected ? 600 : 400};cursor:pointer;`
 }
@@ -373,8 +361,6 @@ const pricingComponents = computed(() =>
       published: pub,
       publishedLabel: pub ? 'Published' : 'Unpublished',
       publishedStyle: pub ? BADGE_PUBLISHED : BADGE_UNPUBLISHED,
-      publishTrackStyle: smallTrack(pub),
-      publishKnobStyle: smallKnob(pub),
       canRemove: isEditMode.value && c.feeId !== FEE_BASE_ID,
       rowStyle: `display:grid;grid-template-columns:1fr 150px 130px 40px;gap:8px;align-items:center;padding:11px 16px;border-bottom:1px solid #f1f5f9;${pub ? '' : 'background:#fafafa;color:#94a3b8;'}`
     }
@@ -758,13 +744,13 @@ function onSaveEdit() {
                 {{ statusHelper }}
               </div>
             </div>
-            <button
+            <USwitch
+              :model-value="active"
               :disabled="isViewMode"
-              :style="trackStyle(active, isViewMode)"
-              @click="onToggleStatus"
-            >
-              <span :style="knobStyle(active)" />
-            </button>
+              size="xl"
+              :ui="{ root: isViewMode ? 'opacity-60' : '' }"
+              @update:model-value="onToggleStatus"
+            />
           </div>
 
           <div class="flex items-center justify-between gap-3 py-3.5 border-t border-slate-100">
@@ -780,9 +766,12 @@ function onSaveEdit() {
               v-if="isViewMode && giftOn"
               class="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-0.5"
             >Gift</span>
-            <button v-else-if="isEditMode" :style="smallTrack(giftOn)" @click="onToggleGift">
-              <span :style="smallKnob(giftOn)" />
-            </button>
+            <USwitch
+              v-else-if="isEditMode"
+              :model-value="giftOn"
+              size="sm"
+              @update:model-value="onToggleGift"
+            />
           </div>
 
           <div class="pt-3.5 border-t border-slate-100">
@@ -883,9 +872,13 @@ function onSaveEdit() {
             </div>
             <span>
               <span v-if="isViewMode" :style="c.publishedStyle">{{ c.publishedLabel }}</span>
-              <button v-else :style="c.publishTrackStyle" @click="togglePublish(c.feeId)">
-                <span :style="c.publishKnobStyle" />
-              </button>
+              <USwitch
+                v-else
+                :model-value="c.published"
+                size="sm"
+                class="inline-flex"
+                @update:model-value="togglePublish(c.feeId)"
+              />
             </span>
             <span class="text-center">
               <UButton

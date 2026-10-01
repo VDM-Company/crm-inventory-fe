@@ -191,12 +191,6 @@ const isEditMode = computed(() => mode.value === 'edit')
 const isViewMode = computed(() => mode.value === 'view')
 
 // ── inline-style helpers (ported) ──
-function trackStyle(active: boolean) {
-  return `width:40px;height:22px;border-radius:999px;border:none;cursor:pointer;background:${active ? '#00c16a' : '#e2e8f0'};position:relative;padding:2px;display:inline-flex;align-items:center;flex-shrink:0;transition:background 150ms ease;`
-}
-function knobStyle(active: boolean) {
-  return `width:18px;height:18px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,0.15);transform:translateX(${active ? '18px' : '0px'});transition:transform 150ms ease;display:block;`
-}
 function badgeStyle(status: string) {
   const active = status === 'Active'
   return `display:inline-block;font-size:12px;font-weight:700;padding:3px 12px;border-radius:999px;background:${active ? '#ecfdf5' : '#f1f5f9'};color:${active ? '#00a155' : '#64748b'};border:1px solid ${active ? '#a7f3d0' : '#e2e8f0'};`
@@ -1238,14 +1232,12 @@ function onConfirmDelete() {
               </div>
             </div>
             <VertexStatusBadge v-if="isViewMode" :active="product.status === 'Active'" :label="product.status" />
-            <button
+            <USwitch
               v-else
-              type="button"
-              :style="trackStyle(draftActive)"
-              @click="toggleStatus"
-            >
-              <span :style="knobStyle(draftActive)" />
-            </button>
+              :model-value="draftActive"
+              class="shrink-0"
+              @update:model-value="toggleStatus"
+            />
           </div>
 
           <!-- not for sale -->
@@ -1260,14 +1252,12 @@ function onConfirmDelete() {
             </div>
             <span v-if="isViewMode && product.notForSale" :style="notForSaleBadgeStyle">{{ notForSaleBadge }}</span>
             <span v-else-if="isViewMode" />
-            <button
+            <USwitch
               v-else
-              type="button"
-              :style="trackStyle(!!draft.notForSale)"
-              @click="toggleNotForSale"
-            >
-              <span :style="knobStyle(!!draft.notForSale)" />
-            </button>
+              :model-value="!!draft.notForSale"
+              class="shrink-0"
+              @update:model-value="toggleNotForSale"
+            />
           </div>
         </UCard>
       </div>
@@ -1415,9 +1405,11 @@ function onConfirmDelete() {
                         @update:model-value="updateEditVariant(ev.name, 'sku', String($event))"
                       />
                       <div class="text-center">
-                        <button type="button" :style="trackStyle(!!ev.active)" @click="updateEditVariant(ev.name, 'active', !ev.active)">
-                          <span :style="knobStyle(!!ev.active)" />
-                        </button>
+                        <USwitch
+                          :model-value="!!ev.active"
+                          class="inline-flex"
+                          @update:model-value="updateEditVariant(ev.name, 'active', $event)"
+                        />
                       </div>
                       <UButton
                         variant="ghost"
@@ -1702,16 +1694,13 @@ function onConfirmDelete() {
                     </div>
 
                     <div class="w-24 flex-shrink-0 flex justify-center">
-                      <button
-                        type="button"
-                        :style="trackStyle(!!c.published)"
+                      <USwitch
+                        :model-value="!!c.published"
                         :disabled="c.publishLocked"
                         :title="c.publishTitle"
-                        :class="c.publishLocked ? 'opacity-60 cursor-not-allowed' : ''"
-                        @click="toggleComponentPublish(c.index)"
-                      >
-                        <span :style="knobStyle(!!c.published)" />
-                      </button>
+                        :ui="{ root: c.publishLocked ? 'opacity-60' : '' }"
+                        @update:model-value="toggleComponentPublish(c.index)"
+                      />
                     </div>
 
                     <div class="w-[38px] flex-shrink-0">
