@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import * as z from 'zod'
+import type { FormSubmitEvent } from '@nuxt/ui'
 import type { ConfigValues, Platform } from '~/types'
 
 useHead({ title: 'Edit Platform — Vertex' })
@@ -16,7 +18,11 @@ const platform = computed<Platform | null>(() => {
 
 const identity = reactive({ name: '', code: '', url: '' })
 const cfg = ref<ConfigValues>({})
-const errors = reactive<{ name: string, url: string }>({ name: '', url: '' })
+const schema = z.object({
+  name: z.string().trim().min(1, 'Name is required.'),
+  url: z.string().trim().min(1, 'URL / Path is required.')
+})
+type Schema = { name: string, url: string }
 const dirty = ref(false)
 const discardOpen = ref(false)
 
@@ -44,16 +50,11 @@ function onCfgUpdate(next: ConfigValues) {
 }
 function setIdentity(field: 'name' | 'url', value: string) {
   identity[field] = value
-  errors[field] = ''
   dirty.value = true
 }
 
 // ── save ──
-function save() {
-  errors.name = identity.name.trim() ? '' : 'Name is required.'
-  errors.url = identity.url.trim() ? '' : 'URL / Path is required.'
-  if (errors.name || errors.url) return
-
+function onSubmit(_event: FormSubmitEvent<Schema>) {
   const p = platform.value
   if (p) {
     savePlatforms(loadPlatforms().map(x => x.id === p.id
@@ -113,81 +114,81 @@ const crumbLast = computed(() => platform.value ? platform.value.name : 'Platfor
     </p>
 
     <!-- IDENTITY -->
-    <UCard class="mb-4 p-6">
-      <h2 class="text-base font-bold text-slate-900 mt-0 mb-1">
-        Platform Information
-      </h2>
-      <p class="text-[13px] text-slate-500 mt-0 mb-5">
-        Identity for this sales channel.
-      </p>
+    <UForm :schema="schema" :state="identity" @submit="onSubmit">
+      <UCard class="mb-4 p-6">
+        <h2 class="text-base font-bold text-slate-900 mt-0 mb-1">
+          Platform Information
+        </h2>
+        <p class="text-[13px] text-slate-500 mt-0 mb-5">
+          Identity for this sales channel.
+        </p>
 
-      <VertexField
-        label="Name"
-        required
-        :error="errors.name"
-        class="mb-[18px]"
-      >
-        <input
-          :value="identity.name"
-          type="text"
-          class="field-input"
-          :class="errors.name ? 'err' : ''"
-          placeholder="e.g. SIM Point"
-          @input="setIdentity('name', ($event.target as HTMLInputElement).value)"
+        <UFormField
+          name="name"
+          label="Name"
+          required
+          class="mb-[18px]"
         >
-      </VertexField>
+          <input
+            :value="identity.name"
+            type="text"
+            class="field-input"
+            placeholder="e.g. SIM Point"
+            @input="setIdentity('name', ($event.target as HTMLInputElement).value)"
+          >
+        </UFormField>
 
-      <VertexField
-        label="Code"
-        required
-        hint="Locked — the code can't change after creation."
-        class="mb-[18px]"
-      >
-        <input
-          :value="identity.code"
-          type="text"
-          disabled
-          class="field-input font-mono"
-          placeholder="e.g. sim_point"
+        <UFormField
+          name="code"
+          label="Code"
+          required
+          help="Locked — the code can't change after creation."
+          class="mb-[18px]"
         >
-      </VertexField>
+          <input
+            :value="identity.code"
+            type="text"
+            disabled
+            class="field-input font-mono"
+            placeholder="e.g. sim_point"
+          >
+        </UFormField>
 
-      <VertexField label="URL / Path" required :error="errors.url">
-        <input
-          :value="identity.url"
-          type="text"
-          class="field-input"
-          :class="errors.url ? 'err' : ''"
-          placeholder="e.g. vdm.com/sp-sim"
-          @input="setIdentity('url', ($event.target as HTMLInputElement).value)"
+        <UFormField name="url" label="URL / Path" required>
+          <input
+            :value="identity.url"
+            type="text"
+            class="field-input"
+            placeholder="e.g. vdm.com/sp-sim"
+            @input="setIdentity('url', ($event.target as HTMLInputElement).value)"
+          >
+        </UFormField>
+      </UCard>
+
+      <VertexPlatformConfigGroups
+        :model-value="cfg"
+        :synced-url="identity.url"
+        @update:model-value="onCfgUpdate"
+      />
+
+      <div class="flex justify-end gap-2.5 mt-5">
+        <UButton
+          variant="ghost"
+
+          :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-[15px] font-semibold px-5 py-2.5 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors' }"
+          @click="tryLeave"
         >
-      </VertexField>
-    </UCard>
-
-    <VertexPlatformConfigGroups
-      :model-value="cfg"
-      :synced-url="identity.url"
-      @update:model-value="onCfgUpdate"
-    />
-
-    <div class="flex justify-end gap-2.5 mt-5">
-      <UButton
-        variant="ghost"
-
-        :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-[15px] font-semibold px-5 py-2.5 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors' }"
-        @click="tryLeave"
-      >
-        Cancel
-      </UButton>
-      <UButton
-        variant="ghost"
-
-        :ui="{ base: 'border-none bg-green-500 text-white text-[15px] font-bold px-[22px] py-2.5 rounded-lg cursor-pointer shadow-sm hover:bg-green-600 transition-colors' }"
-        @click="save"
-      >
-        Save Platform
-      </UButton>
-    </div>
+          Cancel
+        </UButton>
+        <UButton
+          type="submit"
+          variant="ghost"
+          :ui="{ base: 'border-none bg-green-500 text-white text-[15px] font-bold px-[22px] py-2.5 rounded-lg cursor-pointer shadow-sm hover:bg-green-600 transition-colors' }"
+        >
+          Save Platform
+        </UButton>
+      </div>
+    </UForm>
 
     <!-- discard confirm -->
     <VertexConfirmModal

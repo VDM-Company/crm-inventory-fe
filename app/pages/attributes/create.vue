@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import * as z from 'zod'
+import type { FormSubmitEvent } from '@nuxt/ui'
 import type { AttributeDef } from '~/types'
 
 const route = useRoute()
@@ -15,11 +17,14 @@ const editId = computed(() => {
 
 // ── state ──
 const attrs = ref<AttributeDef[]>([])
-const name = ref('')
-const type = ref('Select')
+// UForm drives validation off a single reactive state object; `name`/`type`
+// stay as computed refs so the rest of the page (preview, option rows) is
+// untouched.
+const state = reactive({ name: '', type: 'Select' })
+const name = computed({ get: () => state.name, set: v => (state.name = v) })
+const type = computed({ get: () => state.type, set: v => (state.type = v) })
 const required = ref(true)
 const options = ref<string[]>([''])
-const nameError = ref('')
 const optionsError = ref('')
 
 const pageTitle = computed(() => editId.value ? 'Edit Attribute' : 'Create Attribute')
@@ -38,17 +43,27 @@ onMounted(() => {
   options.value = (existing.values || []).slice()
 })
 
+// Schema is a computed so the duplicate-name refinement sees the current
+// store and the row being edited.
+const schema = computed(() => z.object({
+  name: z.string()
+    .trim()
+    .min(1, 'Attribute name is required.')
+    .refine(
+      v => !attrs.value.some(a => a.name.toLowerCase() === v.toLowerCase() && a.id !== editId.value),
+      'An attribute with this name already exists.'
+    ),
+  type: z.string().min(1, 'Type is required.')
+}))
+type Schema = { name: string, type: string }
+
 const isOptionType = computed(() => OPTION_TYPES.indexOf(type.value) !== -1)
 const freeTypeHint = computed(() =>
   type.value === 'Numeric' ? 'Numeric inputs have no predefined values.' : 'Text inputs have no predefined values.'
 )
 
-function onNameChange(e: Event) {
-  name.value = (e.target as HTMLInputElement).value
-  nameError.value = ''
-}
 function onTypeChange(e: Event) {
-  type.value = (e.target as HTMLSelectElement).value
+  state.type = (e.target as HTMLSelectElement).value
   optionsError.value = ''
 }
 
@@ -104,28 +119,17 @@ const previewLabel = computed(() => name.value || 'Attribute')
 const previewPlaceholder = computed(() => 'Enter ' + (name.value || 'value').toLowerCase())
 
 // ── save ──
-function validateAndBuild(): { name: string, type: string, values: string[] } | null {
-  const clean = name.value.trim()
-  if (!clean) {
-    nameError.value = 'Attribute name is required.'
-    return null
-  }
-  if (attrs.value.some(a => a.name.toLowerCase() === clean.toLowerCase() && a.id !== editId.value)) {
-    nameError.value = 'An attribute with this name already exists.'
-    return null
-  }
+// UForm validates name/type against the schema before this runs; the
+// option-count rule depends on the `required` toggle and stays here.
+function onSubmit(event: FormSubmitEvent<Schema>) {
   if (isOptionType.value && required.value && cleanedOptions.value.length === 0) {
     optionsError.value = 'Add at least one value.'
-    return null
+    return
   }
-  return { name: clean, type: type.value, values: cleanedOptions.value }
-}
-function onSave() {
-  const built = validateAndBuild()
-  if (!built) return
+  const built = { name: event.data.name, type: event.data.type, values: cleanedOptions.value }
   const next = editId.value
-    ? attrs.value.map(a => a.id === editId.value ? { ...a, name: built.name, type: built.type, values: built.values } : a)
-    : [...attrs.value, { id: 'attr_' + Date.now(), name: built.name, type: built.type, values: built.values }]
+    ? attrs.value.map(a => a.id === editId.value ? { ...a, ...built } : a)
+    : [...attrs.value, { id: 'attr_' + Date.now(), ...built }]
   saveAttributeDefs(next)
   return navigateTo('/attributes')
 }
@@ -155,7 +159,12 @@ function onSave() {
       </h1>
     </div>
 
-    <div class="flex gap-6 items-start flex-wrap">
+    <UForm
+      :schema="schema"
+      :state="state"
+      class="flex gap-6 items-start flex-wrap"
+      @submit="onSubmit"
+    >
       <!-- config -->
       <div class="grow shrink basis-[420px] min-w-0 flex flex-col gap-6">
         <UCard class="p-6">
@@ -163,28 +172,27 @@ function onSave() {
             Attribute Details
           </h2>
 
-          <VertexField
+          <UFormField
+            name="name"
             label="Attribute Name"
             required
-            :error="nameError"
             class="mb-[18px]"
           >
-            <input
-              class="field-input"
-              type="text"
-              :value="name"
-              placeholder="e.g. Duration"
-              @input="onNameChange"
-            >
-          </VertexField>
+            <UInput v-model="state.name" placeholder="e.g. Duration" />
+          </UFormField>
 
-          <VertexField label="Input Type" required class="mb-[18px]">
+          <UFormField
+            name="type"
+            label="Input Type"
+            required
+            class="mb-[18px]"
+          >
             <select class="field-input" :value="type" @change="onTypeChange">
               <option v-for="t in INPUT_TYPES" :key="t" :value="t">
                 {{ t }}
               </option>
             </select>
-          </VertexField>
+          </UFormField>
 
           <template v-if="isOptionType">
             <div class="flex items-center justify-between gap-3 py-3 border-t border-slate-100">
@@ -275,10 +283,9 @@ function onSave() {
             Cancel
           </NuxtLink>
           <UButton
+            type="submit"
             variant="ghost"
-
             :ui="{ base: 'border-none bg-green-500 text-white text-[15px] font-bold px-[22px] py-2.5 rounded-lg cursor-pointer shadow-sm hover:bg-green-600 transition-colors' }"
-            @click="onSave"
           >
             Save
           </UButton>
@@ -336,7 +343,7 @@ function onSave() {
           </div>
         </UCard>
       </div>
-    </div>
+    </UForm>
   </div>
 </template>
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import * as z from 'zod'
+import type { FormSubmitEvent, TableColumn } from '@nuxt/ui'
 import type { Category, CatEntry, CatScopeEntry, Platform } from '~/types'
 
 useHead({ title: 'Categories — Vertex' })
@@ -178,16 +179,28 @@ function showToast(msg: string) {
 }
 
 // ── add / delete / save ──
-function confirmAdd() {
+// Uniqueness is scoped to the chosen parent, so the schema is a computed that
+// closes over the modal's current parentId.
+const addSchema = computed(() => z.object({
+  name: z.string()
+    .trim()
+    .min(1, 'Enter a unique category name.')
+    .refine(
+      v => !cats.value.some(c =>
+        c.name.toLowerCase() === v.toLowerCase()
+        && (c.parentId || null) === (addModal.value?.parentId || null)
+      ),
+      'Enter a unique category name.'
+    )
+}))
+type AddSchema = { name: string }
+
+function onAddSubmit(event: FormSubmitEvent<AddSchema>) {
   const m = addModal.value
   if (!m) return
-  const name = (m.name || '').trim()
+  const name = event.data.name
+  // the parent picker is outside the schema; a forced subcategory needs one
   if (m.forceSub && !m.parentId) {
-    addModal.value = { ...m, error: true }
-    return
-  }
-  const dup = cats.value.some(c => c.name.toLowerCase() === name.toLowerCase() && (c.parentId || null) === (m.parentId || null))
-  if (!name || dup) {
     addModal.value = { ...m, error: true }
     return
   }
@@ -863,102 +876,96 @@ function onReset() {
       class="fixed inset-0 bg-slate-900/45 backdrop-blur-[2px] flex items-center justify-center z-[210] p-5"
     >
       <div class="bg-white rounded-[14px] w-[460px] max-w-[92vw] shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
-        <div class="flex items-center justify-between px-6 py-5 border-b border-slate-100">
-          <h3 class="text-[17px] font-bold text-slate-900 m-0">
-            {{ addTitle }}
-          </h3>
-          <UButton
-            variant="ghost"
+        <UForm :schema="addSchema" :state="addModal" @submit="onAddSubmit">
+          <div class="flex items-center justify-between px-6 py-5 border-b border-slate-100">
+            <h3 class="text-[17px] font-bold text-slate-900 m-0">
+              {{ addTitle }}
+            </h3>
+            <UButton
+              variant="ghost"
 
-            :ui="{ base: 'btn-icon-hover border-none bg-transparent text-slate-500 w-8 h-8 rounded-lg cursor-pointer flex items-center justify-center' }"
-            @click="addModal = null"
-          >
-            <UIcon name="i-lucide-x" class="w-[18px] h-[18px]" />
-          </UButton>
-        </div>
-        <div class="p-6">
-          <div v-if="addModal.forceSub" class="mb-[18px]">
-            <label class="field-label">Parent Category</label>
-            <div class="select-wrap">
-              <select
-                class="field-input"
-                :value="addModal.parentId || ''"
-                @change="addModal.parentId = ($event.target as HTMLSelectElement).value || null"
-              >
-                <option v-for="opt in parentOptions" :key="opt.id" :value="opt.id">
-                  {{ opt.name }}
-                </option>
-              </select>
-            </div>
-          </div>
-          <VertexField
-            label="Category Name"
-            required
-            :error="addModal.error ? 'Enter a unique category name.' : ''"
-            class="mb-[18px] pb-[18px] border-b border-slate-100"
-          >
-            <input
-              class="field-input"
-              type="text"
-              :value="addModal.name"
-              placeholder="e.g. Resident SIM"
-              @input="addModal.name = ($event.target as HTMLInputElement).value; addModal.error = false"
-              @keydown.enter.prevent="confirmAdd"
+              :ui="{ base: 'btn-icon-hover border-none bg-transparent text-slate-500 w-8 h-8 rounded-lg cursor-pointer flex items-center justify-center' }"
+              @click="addModal = null"
             >
-          </VertexField>
-
-          <div class="flex items-center justify-between gap-3 mb-4">
-            <div>
-              <div class="text-sm font-semibold text-slate-900">
-                Enable Category
-              </div>
-              <div class="text-[12.5px] text-slate-400 mt-0.5">
-                {{ addModal.enabled ? 'Visible on the storefront' : 'Hidden from the storefront' }}
+              <UIcon name="i-lucide-x" class="w-[18px] h-[18px]" />
+            </UButton>
+          </div>
+          <div class="p-6">
+            <div v-if="addModal.forceSub" class="mb-[18px]">
+              <label class="field-label">Parent Category</label>
+              <div class="select-wrap">
+                <select
+                  class="field-input"
+                  :value="addModal.parentId || ''"
+                  @change="addModal.parentId = ($event.target as HTMLSelectElement).value || null"
+                >
+                  <option v-for="opt in parentOptions" :key="opt.id" :value="opt.id">
+                    {{ opt.name }}
+                  </option>
+                </select>
               </div>
             </div>
-            <div class="flex items-center gap-[9px] flex-shrink-0">
-              <button :style="trackStyle(addModal.enabled)" @click="addModal.enabled = !addModal.enabled">
-                <span :style="knobStyle(addModal.enabled)" />
-              </button>
-              <span class="text-[13.5px] font-semibold text-slate-700 w-[26px]">{{ addModal.enabled ? 'Yes' : 'No' }}</span>
+            <UFormField
+              name="name"
+              label="Category Name"
+              required
+              class="mb-[18px] pb-[18px] border-b border-slate-100"
+            >
+              <UInput v-model="addModal.name" placeholder="e.g. Resident SIM" />
+            </UFormField>
+
+            <div class="flex items-center justify-between gap-3 mb-4">
+              <div>
+                <div class="text-sm font-semibold text-slate-900">
+                  Enable Category
+                </div>
+                <div class="text-[12.5px] text-slate-400 mt-0.5">
+                  {{ addModal.enabled ? 'Visible on the storefront' : 'Hidden from the storefront' }}
+                </div>
+              </div>
+              <div class="flex items-center gap-[9px] flex-shrink-0">
+                <button :style="trackStyle(addModal.enabled)" @click="addModal.enabled = !addModal.enabled">
+                  <span :style="knobStyle(addModal.enabled)" />
+                </button>
+                <span class="text-[13.5px] font-semibold text-slate-700 w-[26px]">{{ addModal.enabled ? 'Yes' : 'No' }}</span>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <div class="text-sm font-semibold text-slate-900">
+                  Include in Menu
+                </div>
+                <div class="text-[12.5px] text-slate-400 mt-0.5">
+                  {{ addModal.inMenu ? 'Shown in storefront navigation' : 'Not shown in navigation' }}
+                </div>
+              </div>
+              <div class="flex items-center gap-[9px] flex-shrink-0">
+                <button :style="trackStyle(addModal.inMenu)" @click="addModal.inMenu = !addModal.inMenu">
+                  <span :style="knobStyle(addModal.inMenu)" />
+                </button>
+                <span class="text-[13.5px] font-semibold text-slate-700 w-[26px]">{{ addModal.inMenu ? 'Yes' : 'No' }}</span>
+              </div>
             </div>
           </div>
+          <div class="flex justify-end gap-2.5 px-6 py-4 border-t border-slate-100">
+            <UButton
+              variant="ghost"
 
-          <div class="flex items-center justify-between gap-3">
-            <div>
-              <div class="text-sm font-semibold text-slate-900">
-                Include in Menu
-              </div>
-              <div class="text-[12.5px] text-slate-400 mt-0.5">
-                {{ addModal.inMenu ? 'Shown in storefront navigation' : 'Not shown in navigation' }}
-              </div>
-            </div>
-            <div class="flex items-center gap-[9px] flex-shrink-0">
-              <button :style="trackStyle(addModal.inMenu)" @click="addModal.inMenu = !addModal.inMenu">
-                <span :style="knobStyle(addModal.inMenu)" />
-              </button>
-              <span class="text-[13.5px] font-semibold text-slate-700 w-[26px]">{{ addModal.inMenu ? 'Yes' : 'No' }}</span>
-            </div>
+              :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-[15px] font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer' }"
+              @click="addModal = null"
+            >
+              Cancel
+            </UButton>
+            <UButton
+              type="submit"
+              variant="ghost"
+              :ui="{ base: 'border-none bg-green-500 text-white text-[15px] font-bold px-5 py-[9px] rounded-lg cursor-pointer' }"
+            >
+              Create
+            </UButton>
           </div>
-        </div>
-        <div class="flex justify-end gap-2.5 px-6 py-4 border-t border-slate-100">
-          <UButton
-            variant="ghost"
-
-            :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-[15px] font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer' }"
-            @click="addModal = null"
-          >
-            Cancel
-          </UButton>
-          <UButton
-            variant="ghost"
-
-            :ui="{ base: 'border-none bg-green-500 text-white text-[15px] font-bold px-5 py-[9px] rounded-lg cursor-pointer' }"
-            @click="confirmAdd"
-          >
-            Create
-          </UButton>
-        </div>
+        </UForm>
       </div>
     </div>
 

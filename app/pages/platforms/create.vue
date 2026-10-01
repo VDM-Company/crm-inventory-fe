@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import * as z from 'zod'
+import type { FormSubmitEvent } from '@nuxt/ui'
 import type { ConfigValues, Platform } from '~/types'
 
 useHead({ title: 'Create Platform — Vertex' })
@@ -6,14 +8,11 @@ useHead({ title: 'Create Platform — Vertex' })
 const route = useRoute()
 const router = useRouter()
 
-interface FormErrors { name?: string, code?: string, url?: string }
-
 // ── state (mirrors the design's DCLogic state) ──
 const editId = ref<string | null>(null)
 const form = reactive({ name: '', code: '', url: '' })
 const codeTouched = ref(false)
 const dirty = ref(false)
-const errors = ref<FormErrors>({})
 const discardOpen = ref(false)
 // Config starts blank on this screen (the design does not preload an existing
 // platform's saved values here) and is written on save.
@@ -44,9 +43,23 @@ function onCfgUpdate(next: ConfigValues) {
   cfg.value = next
   dirty.value = true
 }
+// Schema is a computed so the duplicate-code refinement sees the current store
+// and the row being edited.
+const schema = computed(() => z.object({
+  name: z.string().trim().min(1, 'Name is required.'),
+  code: z.string()
+    .trim()
+    .min(1, 'Code is required.')
+    .refine(
+      v => !loadPlatforms().some(p => p.code === v && p.id !== editId.value),
+      'This code is already in use.'
+    ),
+  url: z.string().trim().min(1, 'URL / Path is required.')
+}))
+type Schema = { name: string, code: string, url: string }
+
 function set(field: 'name' | 'code' | 'url', value: string) {
   form[field] = value
-  errors.value = { ...errors.value, [field]: undefined }
   if (field === 'name' && !codeTouched.value && !editId.value) {
     form.code = platformSlug(value)
   }
@@ -59,27 +72,8 @@ function onCodeModel(value: string) {
 
 const saveDisabled = computed(() => !(form.name.trim() && form.code.trim() && form.url.trim()))
 
-function validate(): FormErrors {
-  const f = form
-  const errs: FormErrors = {}
-  if (!f.name || !f.name.trim()) errs.name = 'Name is required.'
-  if (!f.code || !f.code.trim()) {
-    errs.code = 'Code is required.'
-  } else {
-    const dup = loadPlatforms().find(p => p.code === f.code.trim() && p.id !== editId.value)
-    if (dup) errs.code = 'This code is already in use.'
-  }
-  if (!f.url || !f.url.trim()) errs.url = 'URL / Path is required.'
-  return errs
-}
-
-function save() {
-  const errs = validate()
-  if (Object.keys(errs).length) {
-    errors.value = errs
-    return
-  }
-  const f = form
+function onSubmit(event: FormSubmitEvent<Schema>) {
+  const f = event.data
   const list = loadPlatforms()
   let next: Platform[]
   let savedId = editId.value
@@ -133,7 +127,7 @@ function onConfirmDiscard() {
       </h1>
     </div>
 
-    <div>
+    <UForm :schema="schema" :state="form" @submit="onSubmit">
       <UCard class="p-6">
         <h2 class="text-[17px] font-bold text-slate-900 mt-0 mb-1">
           Platform Information
@@ -142,44 +136,42 @@ function onConfirmDiscard() {
           A sales channel under Vertex Digital Marketing.
         </p>
 
-        <VertexField
+        <UFormField
+          name="name"
           label="Name"
           required
-          :error="errors.name"
           class="mb-[18px]"
         >
           <UInput
             :model-value="form.name"
-            :ui="{ base: errors.name ? 'border-red-600' : '' }"
             placeholder="e.g. SIM Point"
             @update:model-value="set('name', String($event))"
           />
-        </VertexField>
+        </UFormField>
 
-        <VertexField
+        <UFormField
+          name="code"
           label="Code"
           required
-          :error="errors.code"
-          :hint="editId ? '' : 'Lowercase identifier, auto-filled from the name. Editable before saving; locked after creation.'"
+          :help="editId ? undefined : 'Lowercase identifier, auto-filled from the name. Editable before saving; locked after creation.'"
           class="mb-[18px]"
         >
           <UInput
             :model-value="form.code"
             :disabled="codeLocked"
-            :ui="{ base: ['font-mono', errors.code ? 'border-red-600' : ''] }"
+            :ui="{ base: 'font-mono' }"
             placeholder="e.g. sim_point"
             @update:model-value="onCodeModel(String($event))"
           />
-        </VertexField>
+        </UFormField>
 
-        <VertexField label="URL / Path" required :error="errors.url">
+        <UFormField name="url" label="URL / Path" required>
           <UInput
             :model-value="form.url"
-            :ui="{ base: errors.url ? 'border-red-600' : '' }"
             placeholder="e.g. vdm.com/sp-sim"
             @update:model-value="set('url', String($event))"
           />
-        </VertexField>
+        </UFormField>
       </UCard>
 
       <VertexPlatformConfigGroups
@@ -199,18 +191,17 @@ function onConfirmDiscard() {
           Cancel
         </UButton>
         <UButton
+          type="submit"
           variant="ghost"
-
           :disabled="saveDisabled"
           :ui="{ base: ['border-none text-[15px] font-bold px-[22px] py-2.5 rounded-lg', saveDisabled
             ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
             : 'bg-green-500 text-white cursor-pointer shadow-sm hover:bg-green-600 transition-colors'] }"
-          @click="save"
         >
           Save Platform
         </UButton>
       </div>
-    </div>
+    </UForm>
 
     <!-- discard confirm -->
     <VertexConfirmModal

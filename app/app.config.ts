@@ -35,6 +35,26 @@ export default defineAppConfig({
         variant: 'outline'
       }
     },
+    // UFormField carries the design's label/error/help scale so forms can use
+    // UForm + zod without per-field class overrides. `.form-compact` pages
+    // (the two product forms) shrink the label to 13px via main.css.
+    formField: {
+      slots: {
+        root: '',
+        label: 'block text-sm font-semibold text-slate-700 mb-1.5',
+        error: 'mt-1.5 text-[13px] text-red-600',
+        help: 'mt-1.5 text-[13px] text-slate-400',
+        description: 'mt-1.5 text-[13px] text-slate-400',
+        hint: 'text-[13px] text-slate-400'
+      },
+      variants: {
+        required: {
+          true: {
+            label: 'after:content-[\'*\'] after:ms-1 after:text-red-600'
+          }
+        }
+      }
+    },
     input: {
       slots: {
         root: 'w-full',
