@@ -352,8 +352,14 @@ function onNameReset() {
 // ── form validation (zod + UForm) ──
 const productSchema = z.object({
   name: z.string().trim().min(1, 'Product name is required.')
+}).superRefine((_val, ctx) => {
+  // the field above shows the *effective* name, so a blank global name can hide
+  // behind a platform override — check it too
+  if (!String(draft.value.name || '').trim()) {
+    ctx.addIssue({ code: 'custom', path: ['name'], message: 'Product name is required.' })
+  }
 })
-type ProductSchema = z.output<typeof productSchema>
+type ProductSchema = { name: string }
 
 // the validated name is the *effective* one, which differs per scope
 const formState = reactive({
@@ -1233,7 +1239,12 @@ function onConfirmDelete() {
               </div>
             </div>
             <VertexStatusBadge v-if="isViewMode" :active="product.status === 'Active'" :label="product.status" />
-            <button v-else :style="trackStyle(draftActive)" @click="toggleStatus">
+            <button
+              v-else
+              type="button"
+              :style="trackStyle(draftActive)"
+              @click="toggleStatus"
+            >
               <span :style="knobStyle(draftActive)" />
             </button>
           </div>
@@ -1250,7 +1261,12 @@ function onConfirmDelete() {
             </div>
             <span v-if="isViewMode && product.notForSale" :style="notForSaleBadgeStyle">{{ notForSaleBadge }}</span>
             <span v-else-if="isViewMode" />
-            <button v-else :style="trackStyle(!!draft.notForSale)" @click="toggleNotForSale">
+            <button
+              v-else
+              type="button"
+              :style="trackStyle(!!draft.notForSale)"
+              @click="toggleNotForSale"
+            >
               <span :style="knobStyle(!!draft.notForSale)" />
             </button>
           </div>
@@ -1401,7 +1417,7 @@ function onConfirmDelete() {
                         @input="updateEditVariant(ev.name, 'sku', ($event.target as HTMLInputElement).value)"
                       >
                       <div class="text-center">
-                        <button :style="trackStyle(!!ev.active)" @click="updateEditVariant(ev.name, 'active', !ev.active)">
+                        <button type="button" :style="trackStyle(!!ev.active)" @click="updateEditVariant(ev.name, 'active', !ev.active)">
                           <span :style="knobStyle(!!ev.active)" />
                         </button>
                       </div>
@@ -1688,6 +1704,7 @@ function onConfirmDelete() {
 
                     <div class="w-24 flex-shrink-0 flex justify-center">
                       <button
+                        type="button"
                         :style="trackStyle(!!c.published)"
                         :disabled="c.publishLocked"
                         :title="c.publishTitle"

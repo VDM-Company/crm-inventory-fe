@@ -526,7 +526,7 @@ const productSchema = computed(() => z.object({
   categoryId: z.string()
 }).superRefine((val, ctx) => {
   if (!val.category && !val.categoryId) {
-    ctx.addIssue({ code: 'custom', path: ['categoryId'], message: 'Category' })
+    ctx.addIssue({ code: 'custom', path: ['categoryId'], message: 'Category is required' })
   }
 
   const sku = val.sku.trim().toLowerCase()
@@ -565,6 +565,14 @@ const validationResult = computed(() => productSchema.value.safeParse({
 const saveConfirmName = computed(() => form.name.trim() || 'this product')
 // Matches the design: the button stays disabled until the product is valid.
 const saveDisabled = computed(() => !validationResult.value.success)
+
+// the variant rules have no field of their own, so render them beside the table
+const variantIssue = computed(() => {
+  const r = validationResult.value
+  if (r.success) return null
+  const issue = r.error.issues.find(i => i.path[0] === 'variants')
+  return issue ? issue.message : null
+})
 
 function onSaveProduct(_event: FormSubmitEvent<ProductSchema>) {
   saveConfirmOpen.value = true
@@ -922,7 +930,7 @@ function onConfirmDiscard() {
                 {{ statusHelper }}
               </div>
             </div>
-            <button :style="trackStyle(published)" @click="togglePublished">
+            <button type="button" :style="trackStyle(published)" @click="togglePublished">
               <span :style="knobStyle(published)" />
             </button>
           </div>
@@ -937,7 +945,7 @@ function onConfirmDiscard() {
                 {{ notForSaleHelper }}
               </div>
             </div>
-            <button :style="trackStyle(notForSale)" @click="toggleNotForSale">
+            <button type="button" :style="trackStyle(notForSale)" @click="toggleNotForSale">
               <span :style="knobStyle(notForSale)" />
             </button>
           </div>
@@ -1139,7 +1147,7 @@ function onConfirmDiscard() {
                       @input="updateVariant(v.key, 'sku', ($event.target as HTMLInputElement).value)"
                     >
                     <div class="text-center">
-                      <button :style="trackStyle(v.active)" @click="toggleVariantActive(v.key)">
+                      <button type="button" :style="trackStyle(v.active)" @click="toggleVariantActive(v.key)">
                         <span :style="knobStyle(v.active)" />
                       </button>
                     </div>
@@ -1167,6 +1175,16 @@ function onConfirmDiscard() {
               <div class="text-[13px] text-slate-400">
                 Click Apply to generate variant combinations.
               </div>
+            </div>
+
+            <!-- Save stays disabled until the variants are valid, so surface the
+                 reason here rather than leaving a dead button -->
+            <div
+              v-if="variantIssue"
+              class="mt-3 flex items-center gap-2 text-[13px] text-red-600"
+            >
+              <UIcon name="i-lucide-circle-alert" class="w-[15px] h-[15px] flex-shrink-0" />
+              <span>{{ variantIssue }}</span>
             </div>
           </UCard>
 
@@ -1277,7 +1295,7 @@ function onConfirmDiscard() {
                     {{ subscriptionHelper }}
                   </div>
                 </div>
-                <button :style="trackStyle(isSubscription)" @click="toggleSubscription">
+                <button type="button" :style="trackStyle(isSubscription)" @click="toggleSubscription">
                   <span :style="knobStyle(isSubscription)" />
                 </button>
               </div>
@@ -1382,6 +1400,7 @@ function onConfirmDiscard() {
                         </div>
                         <div class="w-24 flex-shrink-0 flex justify-center">
                           <button
+                            type="button"
                             :disabled="c.publishLocked"
                             :title="c.publishTitle"
                             :style="switchTrackCss(c.published, c.publishLocked)"
