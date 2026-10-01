@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import * as z from 'zod'
+import type { FormSubmitEvent, TableColumn } from '@nuxt/ui'
 import type {
   AttributeDef,
   Category,
@@ -124,7 +125,6 @@ const editInitialComponents = ref<PricingComponent[]>([])
 const editAttributes = ref<EditAttr[]>([])
 const editVariants = ref<DetailVariant[]>([])
 const editAppliedKey = ref<string | null>(null)
-const errors = ref<{ name?: string }>({})
 const cancelConfirmOpen = ref(false)
 const deleteConfirmOpen = ref(false)
 const toastMessage = ref<string | null>(null)
@@ -333,8 +333,8 @@ const nameHasOverride = computed(() => isPlatformScope.value && Object.prototype
 const nameFieldValue = computed(() =>
   isPlatformScope.value ? (nameHasOverride.value ? scopeOv.value.name : draft.value.name) : draft.value.name
 )
-function onNameChange(e: Event) {
-  const val = (e.target as HTMLInputElement).value
+function onNameChange(raw: string | number) {
+  const val = String(raw ?? '')
   if (isPlatformScope.value) {
     const sc = scope.value
     draftOverrides.value = { ...draftOverrides.value, [sc]: { ...(draftOverrides.value[sc] || {}), name: val } }
@@ -348,6 +348,19 @@ function onNameReset() {
   delete o.name
   draftOverrides.value = { ...draftOverrides.value, [sc]: o }
 }
+
+// ── form validation (zod + UForm) ──
+const productSchema = z.object({
+  name: z.string().trim().min(1, 'Product name is required.')
+})
+type ProductSchema = z.output<typeof productSchema>
+
+// the validated name is the *effective* one, which differs per scope
+const formState = reactive({
+  get name() {
+    return String(nameFieldValue.value ?? '')
+  }
+})
 
 // ── stock / status / not for sale ──
 const stockValue = computed(() => draft.value.stock === 'out_stock' ? 'out_stock' : 'in_stock')
@@ -708,7 +721,6 @@ function onEditClick() {
   editAppliedKey.value = attrKey(seed.attrs)
   draftOverrides.value = JSON.parse(JSON.stringify(product.value.overrides || {}))
   seedPricingEdit(product.value)
-  errors.value = {}
   scope.value = 'default'
   mode.value = 'edit'
 }
@@ -717,7 +729,6 @@ function onCancelClick() {
     cancelConfirmOpen.value = true
   } else {
     mode.value = 'view'
-    errors.value = {}
   }
 }
 function onKeepEditing() {
@@ -730,7 +741,6 @@ function onConfirmDiscard() {
   editVariants.value = seed.variants
   editAppliedKey.value = attrKey(seed.attrs)
   cancelConfirmOpen.value = false
-  errors.value = {}
   scope.value = 'default'
   mode.value = 'view'
 }
@@ -748,14 +758,8 @@ function persist(merged: DetailProduct) {
     // ignore storage failure
   }
 }
-function onSaveClick() {
+function onSaveClick(_event: FormSubmitEvent<ProductSchema>) {
   const d = draft.value
-  const errs: { name?: string } = {}
-  if (!d.name || !d.name.trim()) errs.name = 'Product name is required.'
-  if (Object.keys(errs).length) {
-    errors.value = errs
-    return
-  }
   const merged: DetailProduct = { ...d }
   if (isSinglePricing.value) {
     const comps = editInitialComponents.value
@@ -800,7 +804,6 @@ function onSaveClick() {
   product.value = merged
   draft.value = { ...merged }
   mode.value = 'view'
-  errors.value = {}
   toastMessage.value = 'Product updated successfully'
   toastTimer = window.setTimeout(() => {
     toastMessage.value = null
@@ -889,17 +892,24 @@ function onConfirmDelete() {
           Cancel
         </UButton>
         <UButton
+          type="submit"
+          form="product-detail"
           variant="ghost"
 
           :ui="{ base: 'border-none bg-green-500 text-white text-sm font-bold px-5 py-[9px] rounded-lg cursor-pointer shadow-sm hover:bg-green-600 transition-colors' }"
-          @click="onSaveClick"
         >
           Save Changes
         </UButton>
       </div>
     </div>
 
-    <div class="flex flex-col gap-6">
+    <UForm
+      id="product-detail"
+      :schema="productSchema"
+      :state="formState"
+      class="flex flex-col gap-6"
+      @submit="onSaveClick"
+    >
       <!-- scope card -->
       <UCard v-if="showScopeCard" class="px-5 py-4">
         <div class="flex items-center gap-3.5 flex-wrap">
@@ -958,13 +968,13 @@ function onConfirmDelete() {
                   <label class="field-label mb-1.5">Product Name</label>
                   <span v-if="isPlatformScope" :style="nameHasOverride ? BADGE_OVERRIDE : BADGE_INHERIT">{{ nameHasOverride ? 'Overridden' : 'Inherited' }}</span>
                 </div>
-                <input
-                  :class="['field-input', errors.name ? 'has-error' : '']"
-                  type="text"
-                  :value="nameFieldValue"
-                  placeholder="e.g. Tourist SIM 15GB"
-                  @input="onNameChange"
-                >
+                <UFormField name="name">
+                  <UInput
+                    :model-value="nameFieldValue"
+                    placeholder="e.g. Tourist SIM 15GB"
+                    @update:model-value="onNameChange"
+                  />
+                </UFormField>
                 <UButton
                   v-if="nameHasOverride"
 
@@ -975,9 +985,6 @@ function onConfirmDelete() {
                 >
                   <UIcon name="i-lucide-rotate-ccw" class="w-[11px] h-[11px]" /> Reset to default
                 </UButton>
-                <div v-if="errors.name" class="text-xs text-red-600 mt-[5px]">
-                  {{ errors.name }}
-                </div>
               </template>
             </div>
 
@@ -1738,7 +1745,7 @@ function onConfirmDelete() {
           aria-hidden="true"
         />
       </div>
-    </div>
+    </UForm>
 
     <!-- cancel confirm -->
     <VertexConfirmModal

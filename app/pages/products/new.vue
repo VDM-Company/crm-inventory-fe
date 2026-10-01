@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import * as z from 'zod'
+import type { FormSubmitEvent } from '@nuxt/ui'
 import type {
   AttributeDef,
   Category,
@@ -68,7 +70,6 @@ const componentModal = ref<ComponentModalState | null>(null)
 const saveConfirmOpen = ref(false)
 const cancelConfirmOpen = ref(false)
 const savedToast = ref(false)
-const saveError = ref<string[] | null>(null)
 const formDirty = ref(false)
 // snapshot of the attributes last "applied" — variant combinations only
 // regenerate when the user clicks Apply (design no longer auto-regenerates).
@@ -105,7 +106,6 @@ watch(
   [() => form, productType, isSubscription, published, notForSale, attributes, variants, bundleComponents],
   () => {
     formDirty.value = true
-    saveError.value = null
   },
   { deep: true }
 )
@@ -205,7 +205,6 @@ function pickCategory(id: string) {
   if (!cat) return
   form.categoryId = id
   form.category = cat.name
-  saveError.value = null
   closeDropdown()
 }
 
@@ -223,7 +222,6 @@ const platformAddLabel = computed(() => assignedPlatformChips.value.length ? 'Ad
 function addPlatform(id: string) {
   form.platformIds = [...form.platformIds, id]
   closeDropdown()
-  saveError.value = null
 }
 function removePlatform(id: string) {
   form.platformIds = form.platformIds.filter(x => x !== id)
@@ -466,11 +464,9 @@ const initialComponentRows = computed(() => {
 })
 function setComponentFeeId(i: number, feeId: string) {
   form.initialComponents = form.initialComponents.map((c, idx) => idx === i ? { ...c, feeId } : c)
-  saveError.value = null
 }
 function setComponentAmount(i: number, amount: string) {
   form.initialComponents = form.initialComponents.map((c, idx) => idx === i ? { ...c, amount } : c)
-  saveError.value = null
 }
 function toggleComponentPublish(i: number) {
   const c = form.initialComponents[i]
@@ -520,42 +516,57 @@ const notForSaleHelper = computed(() =>
 )
 
 // ── save / cancel ──
-function validate(): string[] {
-  const f = form
-  const missing: string[] = []
-  if (!f.name || !f.name.trim()) missing.push('Product name is required')
-  if (!f.sku || !f.sku.trim()) missing.push('Enter a SKU')
-  if (!f.category && !f.categoryId) missing.push('Category')
-  if (productType.value === 'variant') {
-    const attrs = attributes.value.filter(a => a.name && a.name.trim() && a.values.length)
-    if (!attrs.length) missing.push('Add at least one attribute value and click Apply')
-    else if (!variants.value.length) missing.push('Click Apply to generate combinations')
-    else if (variants.value.some(v => !v.sku || !String(v.sku).trim())) missing.push('Each variant needs a SKU')
+// Validation lives in one zod schema. The flat fields surface inline through
+// UFormField; the variant rules depend on state outside the schema (product
+// type, the applied attribute set) so they are raised in `superRefine`.
+const productSchema = computed(() => z.object({
+  name: z.string().trim().min(1, 'Product name is required'),
+  sku: z.string().trim().min(1, 'Enter a SKU'),
+  category: z.string(),
+  categoryId: z.string()
+}).superRefine((val, ctx) => {
+  if (!val.category && !val.categoryId) {
+    ctx.addIssue({ code: 'custom', path: ['categoryId'], message: 'Category' })
   }
-  const skuVal = (f.sku || '').trim()
-  if (skuVal) {
-    let existing: { sku?: string }[] = []
-    try {
-      existing = JSON.parse(localStorage.getItem('vertex_products') || '[]')
-    } catch {
-      // ignore malformed storage
-    }
-    if (existing.some(p => (p.sku || '').trim().toLowerCase() === skuVal.toLowerCase())) missing.push('SKU already exists')
-  }
-  return missing
-}
-const showSaveError = computed(() => (saveError.value || []).length > 0)
-const missingFieldsLabel = computed(() => (saveError.value || []).join(', '))
-const saveConfirmName = computed(() => form.name.trim() || 'this product')
-const saveDisabled = computed(() => validate().length > 0)
 
-function onSaveProduct() {
-  const missing = validate()
-  if (missing.length) {
-    saveError.value = missing
-    return
+  const sku = val.sku.trim().toLowerCase()
+  if (sku && storedSkus().includes(sku)) {
+    ctx.addIssue({ code: 'custom', path: ['sku'], message: 'SKU already exists' })
   }
-  saveError.value = null
+
+  if (productType.value !== 'variant') return
+  const applied = attributes.value.filter(a => a.name && a.name.trim() && a.values.length)
+  if (!applied.length) {
+    ctx.addIssue({ code: 'custom', path: ['variants'], message: 'Add at least one attribute value and click Apply' })
+  } else if (!variants.value.length) {
+    ctx.addIssue({ code: 'custom', path: ['variants'], message: 'Click Apply to generate combinations' })
+  } else if (variants.value.some(v => !v.sku || !String(v.sku).trim())) {
+    ctx.addIssue({ code: 'custom', path: ['variants'], message: 'Each variant needs a SKU' })
+  }
+}))
+type ProductSchema = { name: string, sku: string, category: string, categoryId: string }
+
+function storedSkus(): string[] {
+  if (!import.meta.client) return []
+  try {
+    const list = JSON.parse(localStorage.getItem('vertex_products') || '[]')
+    return (list as { sku?: string }[]).map(p => (p.sku || '').trim().toLowerCase()).filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
+const validationResult = computed(() => productSchema.value.safeParse({
+  name: form.name,
+  sku: form.sku,
+  category: form.category,
+  categoryId: form.categoryId
+}))
+const saveConfirmName = computed(() => form.name.trim() || 'this product')
+// Matches the design: the button stays disabled until the product is valid.
+const saveDisabled = computed(() => !validationResult.value.success)
+
+function onSaveProduct(_event: FormSubmitEvent<ProductSchema>) {
   saveConfirmOpen.value = true
 }
 function commitSave() {
@@ -658,35 +669,24 @@ function onConfirmDiscard() {
           Cancel
         </UButton>
         <UButton
+          type="submit"
+          form="create-product"
           variant="ghost"
-
           :disabled="saveDisabled"
-
           :ui="{ base: ['border-none text-sm font-semibold px-5 py-[9px] rounded-lg transition-colors', saveDisabled ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-green-500 text-white cursor-pointer shadow-sm hover:bg-green-600'] }"
-          @click="onSaveProduct"
         >
           Save Product
         </UButton>
       </div>
     </div>
 
-    <div class="flex flex-col gap-6">
-      <!-- save error -->
-      <div
-        v-if="showSaveError"
-        class="flex items-start gap-3 bg-red-50 border border-red-200 rounded-[10px] px-4 py-3.5"
-      >
-        <UIcon name="i-lucide-circle-alert" class="w-[18px] h-[18px] text-red-600 flex-shrink-0 mt-px" />
-        <div>
-          <div class="text-sm font-semibold text-red-700">
-            Please complete all required fields before saving
-          </div>
-          <div class="text-[13px] text-red-600 mt-0.5">
-            Missing: {{ missingFieldsLabel }}
-          </div>
-        </div>
-      </div>
-
+    <UForm
+      id="create-product"
+      :schema="productSchema"
+      :state="form"
+      class="flex flex-col gap-6"
+      @submit="onSaveProduct"
+    >
       <!-- ROW 1: Core identification + Settings -->
       <div class="flex flex-wrap gap-6 items-stretch">
         <!-- Core identification -->
@@ -699,24 +699,12 @@ function onConfirmDiscard() {
           </p>
 
           <div class="grid gap-4 mb-4 grid-cols-[repeat(auto-fit,minmax(min(180px,100%),1fr))]">
-            <div>
-              <label class="field-label">Product Name</label>
-              <input
-                v-model="form.name"
-                class="field-input"
-                type="text"
-                placeholder="e.g. Premium Cotton T-Shirt"
-              >
-            </div>
-            <div>
-              <label class="field-label">SKU</label>
-              <input
-                v-model="form.sku"
-                class="field-input"
-                type="text"
-                placeholder="e.g. TSH-001"
-              >
-            </div>
+            <UFormField name="name" label="Product Name" required>
+              <UInput v-model="form.name" placeholder="e.g. Premium Cotton T-Shirt" />
+            </UFormField>
+            <UFormField name="sku" label="SKU" required>
+              <UInput v-model="form.sku" placeholder="e.g. TSH-001" />
+            </UFormField>
             <div>
               <label class="field-label">Product Type</label>
               <div class="relative">
@@ -817,8 +805,12 @@ function onConfirmDiscard() {
           </h2>
 
           <!-- category -->
-          <div class="mb-4">
-            <label class="field-label">Category</label>
+          <UFormField
+            name="categoryId"
+            label="Category"
+            required
+            class="mb-4"
+          >
             <div class="relative flex-1 min-w-0">
               <button type="button" :style="ddTrigger(openDropdown === 'category')" @click="toggleDropdown('category')">
                 <span
@@ -843,7 +835,7 @@ function onConfirmDiscard() {
                 </div>
               </template>
             </div>
-          </div>
+          </UFormField>
 
           <!-- platforms -->
           <div class="mb-5">
@@ -1437,7 +1429,7 @@ function onConfirmDiscard() {
           </UCard>
         </div>
       </div>
-    </div>
+    </UForm>
 
     <!-- cancel confirm -->
     <VertexConfirmModal
