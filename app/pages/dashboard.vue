@@ -288,6 +288,33 @@ const allRows = computed<EnrichedRow[]>(() => {
 })
 
 // ── filter dropdown options (only values actually present in the table) ──
+// Reka rejects '' as a SelectItem value (it reserves '' for "cleared"), so the
+// "All ..." choices travel as a sentinel and map back to '' for the filters.
+const ALL = '__all'
+function allOption(r: Ref<string>) {
+  return computed({
+    get: () => r.value || ALL,
+    set: (v: string) => {
+      r.value = v === ALL ? '' : v
+    }
+  })
+}
+const TYPE_FILTER_ITEMS = [
+  { value: ALL, label: 'All types' },
+  { value: 'single', label: 'Single' },
+  { value: 'variant', label: 'Variant' },
+  { value: 'bundle', label: 'Bundle' }
+]
+const STATUS_FILTER_ITEMS = [
+  { value: ALL, label: 'All statuses' },
+  { value: 'Active', label: 'Active' },
+  { value: 'Inactive', label: 'Inactive' }
+]
+const catFilterSel = allOption(catFilter)
+const platFilterSel = allOption(platFilter)
+const typeFilterSel = allOption(typeFilter)
+const statusFilterSel = allOption(statusFilter)
+
 const categoryOptions = computed(() => flattenCategories(categories.value)
   .filter(o => allRows.value.some(r => (r.categoryId || r.productCategory) === o.id || r.productCategory === o.name))
   .map(o => ({ value: o.id, label: o.name })))
@@ -477,72 +504,39 @@ function onNewProduct() {
                 <div class="flex flex-col gap-3.5">
                   <div>
                     <label class="text-[13px] font-semibold text-slate-700 mb-1.5 block">Category</label>
-                    <select
-                      v-model="catFilter"
-                      class="ff-select"
-                      @change="page = 1"
-                    >
-                      <option value="">
-                        All categories
-                      </option>
-                      <option v-for="o in categoryOptions" :key="o.value" :value="o.value">
-                        {{ o.label }}
-                      </option>
-                    </select>
+                    <USelect
+                      v-model="catFilterSel"
+                      :items="[{ value: ALL, label: 'All categories' }, ...categoryOptions]"
+                      :ui="SELECT_FILTER"
+                      @update:model-value="page = 1"
+                    />
                   </div>
                   <div>
                     <label class="text-[13px] font-semibold text-slate-700 mb-1.5 block">Platform</label>
-                    <select
-                      v-model="platFilter"
-                      class="ff-select"
-                      @change="page = 1"
-                    >
-                      <option value="">
-                        All platforms
-                      </option>
-                      <option v-for="o in platformOptions" :key="o.value" :value="o.value">
-                        {{ o.label }}
-                      </option>
-                    </select>
+                    <USelect
+                      v-model="platFilterSel"
+                      :items="[{ value: ALL, label: 'All platforms' }, ...platformOptions]"
+                      :ui="SELECT_FILTER"
+                      @update:model-value="page = 1"
+                    />
                   </div>
                   <div>
                     <label class="text-[13px] font-semibold text-slate-700 mb-1.5 block">Product Type</label>
-                    <select
-                      v-model="typeFilter"
-                      class="ff-select"
-                      @change="page = 1"
-                    >
-                      <option value="">
-                        All types
-                      </option>
-                      <option value="single">
-                        Single
-                      </option>
-                      <option value="variant">
-                        Variant
-                      </option>
-                      <option value="bundle">
-                        Bundle
-                      </option>
-                    </select>
+                    <USelect
+                      v-model="typeFilterSel"
+                      :items="TYPE_FILTER_ITEMS"
+                      :ui="SELECT_FILTER"
+                      @update:model-value="page = 1"
+                    />
                   </div>
                   <div>
                     <label class="text-[13px] font-semibold text-slate-700 mb-1.5 block">Status</label>
-                    <select
-                      v-model="statusFilter"
-                      class="ff-select"
-                      @change="page = 1"
-                    >
-                      <option value="">
-                        All statuses
-                      </option>
-                      <option value="Active">
-                        Active
-                      </option>
-                      <option value="Inactive">
-                        Inactive
-                      </option>
-                    </select>
+                    <USelect
+                      v-model="statusFilterSel"
+                      :items="STATUS_FILTER_ITEMS"
+                      :ui="SELECT_FILTER"
+                      @update:model-value="page = 1"
+                    />
                   </div>
                   <UButton
                     v-if="hasActiveFilters"
@@ -721,27 +715,4 @@ function onNewProduct() {
 </template>
 
 <style scoped>
-/* Native select styling from the design's `.ff-select`. */
-.ff-select {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 100%;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 9px 20px 9px 12px;
-  font-size: 14px;
-  color: #0f172a;
-  background-color: #fff;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 16px center;
-  background-size: 16px 16px;
-  outline: none;
-  cursor: pointer;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
-}
-.ff-select:focus {
-  border-color: #00c16a;
-  box-shadow: 0 0 0 3px rgba(0, 193, 106, 0.15);
-}
 </style>

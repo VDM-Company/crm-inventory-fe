@@ -62,11 +62,6 @@ const freeTypeHint = computed(() =>
   type.value === 'Numeric' ? 'Numeric inputs have no predefined values.' : 'Text inputs have no predefined values.'
 )
 
-function onTypeChange(e: Event) {
-  state.type = (e.target as HTMLSelectElement).value
-  optionsError.value = ''
-}
-
 // ── option rows ──
 function setOption(i: number, v: string) {
   options.value = options.value.map((o, idx) => idx === i ? v : o)
@@ -177,11 +172,12 @@ function onSubmit(event: FormSubmitEvent<Schema>) {
             required
             class="mb-[18px]"
           >
-            <select class="field-input" :value="type" @change="onTypeChange">
-              <option v-for="t in INPUT_TYPES" :key="t" :value="t">
-                {{ t }}
-              </option>
-            </select>
+            <USelect
+              v-model="type"
+              :items="INPUT_TYPES"
+              :ui="{ trailing: 'pe-[14px]' }"
+              @update:model-value="optionsError = ''"
+            />
           </UFormField>
 
           <template v-if="isOptionType">
@@ -303,11 +299,13 @@ function onSubmit(event: FormSubmitEvent<Schema>) {
             placeholder="0"
             disabled
           />
-          <select v-else-if="type === 'Select'" class="field-input" disabled>
-            <option v-for="o in previewOptions" :key="o">
-              {{ o }}
-            </option>
-          </select>
+          <USelect
+            v-else-if="type === 'Select'"
+            :model-value="previewOptions[0]"
+            :items="previewOptions"
+            disabled
+            :ui="{ trailing: 'pe-[14px]' }"
+          />
           <div v-else class="flex flex-col gap-2.5">
             <label
               v-for="o in previewOptions"
@@ -332,17 +330,3 @@ function onSubmit(event: FormSubmitEvent<Schema>) {
     </UForm>
   </div>
 </template>
-
-<style scoped>
-select.field-input {
-  appearance: none;
-  -webkit-appearance: none;
-  padding-right: 40px;
-  background-color: #fff;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 14px center;
-  background-size: 16px 16px;
-  cursor: pointer;
-}
-</style>

@@ -444,7 +444,7 @@ const deleteCancelLabel = computed(() => blockedDelete.value ? 'Close' : 'Cancel
 
 // ── add modal derived ──
 const addTitle = computed(() => addModal.value ? (addModal.value.forceSub || addModal.value.parentId ? 'Add Subcategory' : 'Add Category') : '')
-const parentOptions = computed(() => [{ id: '', name: 'Select parent…' }].concat(categoryTopLevel(cats.value).map(c => ({ id: c.id, name: c.name }))))
+const parentOptions = computed(() => categoryTopLevel(cats.value).map(c => ({ id: c.id, name: c.name })))
 function onReset() {
   if (selectedId.value) {
     select(selectedId.value)
@@ -884,15 +884,14 @@ function onReset() {
             <div v-if="addModal.forceSub" class="mb-[18px]">
               <label class="field-label">Parent Category</label>
               <div class="select-wrap">
-                <select
-                  class="field-input"
-                  :value="addModal.parentId || ''"
-                  @change="addModal.parentId = ($event.target as HTMLSelectElement).value || null"
-                >
-                  <option v-for="opt in parentOptions" :key="opt.id" :value="opt.id">
-                    {{ opt.name }}
-                  </option>
-                </select>
+                <USelect
+                  :model-value="addModal.parentId || undefined"
+                  :items="parentOptions"
+                  value-key="id"
+                  label-key="name"
+                  placeholder="Select parent…"
+                  @update:model-value="addModal.parentId = $event || null"
+                />
               </div>
             </div>
             <UFormField
@@ -959,27 +958,3 @@ function onReset() {
     <VertexToast :message="toast" />
   </div>
 </template>
-
-<style scoped>
-select.field-input {
-  appearance: none;
-  -webkit-appearance: none;
-  padding-right: 28px;
-  background-color: #fff;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 16px 16px;
-  cursor: pointer;
-}
-.tree-row:hover {
-  background: #f1f5f9;
-}
-.tree-row {
-  animation: treeRowIn 170ms ease;
-}
-@keyframes treeRowIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-</style>

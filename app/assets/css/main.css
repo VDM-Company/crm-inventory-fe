@@ -18,43 +18,18 @@
 }
 
 /* These live in the `components` layer so Tailwind utilities still win.
-   Unlayered CSS outranks every Tailwind layer, which made the `padding`
-   shorthand on `.field-input` silently beat per-site `pl-*`/`px-*` overrides
-   (the ¥ prefix then sat underneath the value). */
+   Unlayered CSS outranks every Tailwind layer, which is what once let a
+   `padding` shorthand here silently beat a per-site `pl-*` override. */
 @layer components {
   /* ── Vertex shared form + table primitives ─────────────────────────────────
      Ported from the design's per-screen <style> blocks. These were duplicated
      verbatim across 8-11 pages; they live here so a screen only declares what
      is genuinely its own.
-     `.field-input` now dresses the native <select>s only — every <input> and
-     <textarea> is a UInput / UTextarea, themed in `app.config.ts` and sized by
-     the presets in `app/utils/field.ts`.
-     `.form-compact` is the tighter variant used by the two large product forms
-     (Create New Product / Product Detail). */
+     Every form control is now a Nuxt UI component (UInput / UTextarea /
+     USelect / USwitch), themed in `app.config.ts` and sized by the presets in
+     `app/utils/field.ts`. What is left here is the label, the select wrapper's
+     layout, and the table header. */
 
-  .field-input {
-    width: 100%;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 10px 12px;
-    font-size: 15px;
-    color: #0f172a;
-    background: #fff;
-    outline: none;
-    transition: border-color 150ms ease, box-shadow 150ms ease;
-  }
-  .field-input:focus {
-    border-color: #00c16a;
-    box-shadow: 0 0 0 3px rgba(0, 193, 106, 0.15);
-  }
-  .field-input:disabled {
-    background: #f1f5f9;
-    color: #94a3b8;
-    cursor: not-allowed;
-  }
-  .field-input::placeholder {
-    color: #94a3b8;
-  }
   .field-label {
     font-size: 14px;
     font-weight: 600;
@@ -63,10 +38,6 @@
     display: block;
   }
 
-  .form-compact .field-input {
-    padding: 9px 12px;
-    font-size: 14px;
-  }
   .form-compact .field-label {
     font-size: 13px;
   }
@@ -74,9 +45,6 @@
   .select-wrap {
     position: relative;
     min-width: 0;
-  }
-  .select-wrap select {
-    width: 100%;
   }
 
 

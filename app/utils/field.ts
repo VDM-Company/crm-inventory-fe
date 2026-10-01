@@ -29,3 +29,16 @@ export function fieldUi(extraBase: string) {
 
 /** `.form-compact` shrinks labels to 13px; UFormField needs it spelled out. */
 export const FORM_FIELD_COMPACT = { label: 'text-[13px]' }
+
+/** The dashboard's filter selects (the design's `.ff-select`: compact scale,
+ *  chevron sitting 16px in rather than the usual 10px). */
+export const SELECT_FILTER = {
+  base: 'px-3 py-[9px] text-[14px]/[21px] md:text-[14px]/[21px]',
+  trailing: 'pe-4'
+}
+
+/** The "+ Add value" pickers: the compact field box at the 13px chip scale.
+ *  Not `fieldCompactSm`, which is the tighter variant-row input. */
+export const SELECT_ADD_VALUE = {
+  base: 'px-3 py-[9px] text-[13px]/[19.5px] md:text-[13px]/[19.5px]'
+}

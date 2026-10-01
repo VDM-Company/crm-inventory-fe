@@ -123,8 +123,12 @@ function onAddVariant() {
 function onViewDetail() {
   router.push('/products/detail')
 }
-function onDemoModeChange(e: Event) {
-  demoMode.value = (e.target as HTMLSelectElement).value as 'populated' | 'empty'
+const DEMO_MODE_ITEMS = [
+  { value: 'populated', label: 'Populated (variants listed)' },
+  { value: 'empty', label: 'Empty — no variants yet' }
+]
+function onDemoModeChange(v: string) {
+  demoMode.value = v as 'populated' | 'empty'
   page.value = 1
 }
 function onSearchChange(e: Event) {
@@ -139,18 +143,13 @@ function onSearchChange(e: Event) {
     <div class="bg-amber-50 border-b border-amber-200 px-6 py-2 flex items-center gap-2.5 text-xs text-amber-800">
       <UIcon name="i-lucide-flask-conical" class="w-3.5 h-3.5" />
       <span class="font-semibold">Prototype view:</span>
-      <select
-        :value="demoMode"
-        class="border border-amber-200 bg-white rounded-md px-2 py-1 text-xs text-amber-800"
-        @change="onDemoModeChange"
-      >
-        <option value="populated">
-          Populated (variants listed)
-        </option>
-        <option value="empty">
-          Empty — no variants yet
-        </option>
-      </select>
+      <USelect
+        :model-value="demoMode"
+        :items="DEMO_MODE_ITEMS"
+        class="w-auto"
+        :ui="{ base: 'px-2 py-1 text-[12px]/[18px] md:text-[12px]/[18px] border-amber-200 rounded-md text-amber-800', trailing: 'pe-1.5', trailingIcon: 'size-3.5 text-amber-700' }"
+        @update:model-value="onDemoModeChange"
+      />
     </div>
 
     <div class="px-8 pt-7 pb-20 flex-1">

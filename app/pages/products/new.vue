@@ -238,16 +238,17 @@ function removeAttribute(id: string) {
 function onAttributeSelect(id: string, name: string) {
   attributes.value = attributes.value.map(a => a.id === id ? { ...a, name, values: [] } : a)
 }
+// The "+ Add value" pickers are menus, not selects: the value is never kept.
+// `null` holds Reka in controlled mode so the trigger falls back to its
+// placeholder after each pick — `undefined` makes it go uncontrolled and the
+// last pick sticks. The cast is only to satisfy USelect's prop type.
+const NO_VALUE = null as unknown as string | undefined
+
 function addAttributeValue(id: string, value: string) {
   if (!value) return
   attributes.value = attributes.value.map(a =>
     a.id === id && a.values.indexOf(value) === -1 ? { ...a, values: [...a.values, value] } : a
   )
-}
-function onPickValue(id: string, e: Event) {
-  const el = e.target as HTMLSelectElement
-  addAttributeValue(id, el.value)
-  el.value = ''
 }
 function removeAttributeValue(id: string, value: string) {
   attributes.value = attributes.value.map(a =>
@@ -974,23 +975,13 @@ function onConfirmDiscard() {
                   <div class="basis-[150px] grow shrink min-w-[120px] max-w-[240px]">
                     <label class="field-label text-xs">Attribute Name</label>
                     <div class="select-wrap">
-                      <select
-                        class="field-input"
-                        :value="attr.name"
-                        @change="onAttributeSelect(attr.id, ($event.target as HTMLSelectElement).value)"
-                      >
-                        <option value="">
-                          Select attribute...
-                        </option>
-                        <option
-                          v-for="opt in attr.typeOptions"
-                          :key="opt.value"
-                          :value="opt.value"
-                          :disabled="opt.disabled"
-                        >
-                          {{ opt.label }}
-                        </option>
-                      </select>
+                      <USelect
+                        :model-value="attr.name || undefined"
+                        :items="attr.typeOptions"
+                        placeholder="Select attribute..."
+                        :ui="fieldCompact()"
+                        @update:model-value="onAttributeSelect(attr.id, String($event))"
+                      />
                     </div>
                   </div>
                   <div class="basis-[170px] grow shrink min-w-0">
@@ -1055,18 +1046,13 @@ function onConfirmDiscard() {
                         </UButton>
                       </span>
                       <div v-if="attr.canAddValue" class="select-wrap basis-[130px] grow shrink min-w-[120px]">
-                        <select
-                          class="field-input text-[13px]"
-                          :value="''"
-                          @change="onPickValue(attr.id, $event)"
-                        >
-                          <option value="">
-                            + Add value
-                          </option>
-                          <option v-for="opt in attr.availableValues" :key="opt" :value="opt">
-                            {{ opt }}
-                          </option>
-                        </select>
+                        <USelect
+                          :model-value="NO_VALUE"
+                          :items="attr.availableValues"
+                          placeholder="+ Add value"
+                          :ui="SELECT_ADD_VALUE"
+                          @update:model-value="addAttributeValue(attr.id, String($event))"
+                        />
                       </div>
                       <span v-if="attr.noChoices" class="text-xs text-slate-400 p-1">No preset values — add on the Attributes page</span>
                       <span v-else-if="attr.allSelected" class="text-xs text-slate-400 p-1">All values added</span>
@@ -1370,18 +1356,15 @@ function onConfirmDiscard() {
                             <span class="text-[11px] font-semibold px-2 py-px rounded-full bg-blue-50 text-blue-600 border border-blue-200">Base</span>
                           </div>
                           <div v-else class="select-wrap">
-                            <select
-                              class="field-input"
-                              :value="c.feeId"
-                              @change="setComponentFeeId(c.index, ($event.target as HTMLSelectElement).value)"
-                            >
-                              <option value="">
-                                Select component...
-                              </option>
-                              <option v-for="opt in c.options" :key="opt.id" :value="opt.id">
-                                {{ opt.name }}
-                              </option>
-                            </select>
+                            <USelect
+                              :model-value="c.feeId || undefined"
+                              :items="c.options"
+                              value-key="id"
+                              label-key="name"
+                              placeholder="Select component..."
+                              :ui="fieldCompact()"
+                              @update:model-value="setComponentFeeId(c.index, String($event))"
+                            />
                           </div>
                         </div>
                         <div class="relative w-[150px] flex-shrink-0">
@@ -1492,18 +1475,14 @@ function onConfirmDiscard() {
           <div class="flex flex-col gap-2.5 mb-3">
             <div v-for="row in componentModal.rows" :key="row.id" class="flex gap-2 items-center">
               <div class="select-wrap flex-1">
-                <select
-                  class="field-input"
-                  :value="row.productId"
-                  @change="updateModalRow(row.id, ($event.target as HTMLSelectElement).value)"
-                >
-                  <option value="">
-                    Select one
-                  </option>
-                  <option v-for="opt in catalogOptions" :key="opt.id" :value="opt.id">
-                    {{ opt.label }}
-                  </option>
-                </select>
+                <USelect
+                  :model-value="row.productId || undefined"
+                  :items="catalogOptions"
+                  value-key="id"
+                  placeholder="Select one"
+                  :ui="fieldCompact()"
+                  @update:model-value="updateModalRow(row.id, String($event))"
+                />
               </div>
               <UButton
                 v-if="componentModal.rows.length > 1"
@@ -1567,17 +1546,3 @@ function onConfirmDiscard() {
     />
   </div>
 </template>
-
-<style scoped>
-select.field-input {
-  appearance: none;
-  -webkit-appearance: none;
-  padding-right: 28px;
-  background-color: #fff;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 16px 16px;
-  cursor: pointer;
-}
-</style>

@@ -6,7 +6,7 @@ export default defineAppConfig({
     },
     // The Vertex screens are pixel-ported from the design, so the Nuxt UI form
     // primitives are re-themed once here rather than overridden per usage.
-    // These mirror `.field-input` in main.css (which native <select> still uses).
+    // These carry the design's standard field scale (12px/10px padding, 15px).
     // Padding/size live in the `size` variant and the background in the
     // `variant` slot, because those win over `slots.base` in the merge order.
     // UCard: the design uses a 1px slate border (NOT Nuxt UI's `ring`), a 12px
@@ -92,6 +92,57 @@ export default defineAppConfig({
       },
       // Nuxt UI adds `md:text-sm` through a compoundVariant (an iOS zoom guard)
       // that lands after the size variant; re-assert the design 15px there.
+      compoundVariants: [
+        { fixed: false, size: 'md', class: 'md:text-[15px]' }
+      ],
+      defaultVariants: {
+        variant: 'none'
+      }
+    },
+    // USelect replaces the native <select>s. The trigger is themed to match
+    // the inputs; the panel and its items match the hand-rolled dropdowns
+    // this app already uses (see `ddTrigger` / `ddOption` in the product forms),
+    // since the old menu was drawn by the OS and has no styling to port.
+    select: {
+      slots: {
+        base: [
+          'w-full border border-slate-200 rounded-lg text-slate-900 cursor-pointer',
+          'transition-[border-color,box-shadow] duration-150',
+          'focus:border-green-500 focus:ring-[3px] focus:ring-green-500/15',
+          'data-[state=open]:border-green-500 data-[state=open]:ring-[3px] data-[state=open]:ring-green-500/15',
+          // the design's select rule set `background-color:#fff` unconditionally,
+          // so a disabled select stays white rather than going slate
+          'disabled:bg-white disabled:text-slate-400 disabled:cursor-not-allowed disabled:opacity-100'
+        ].join(' '),
+        placeholder: 'text-slate-400',
+        value: 'truncate text-left',
+        trailingIcon: 'size-4 text-slate-500',
+        content: 'bg-white border border-slate-200 rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.14)] ring-0 p-1',
+        viewport: 'divide-y-0',
+        group: 'p-0',
+        item: [
+          'rounded-md px-2.5 py-2 text-[14px] text-slate-700 cursor-pointer',
+          'data-highlighted:not-data-disabled:bg-slate-50 data-highlighted:not-data-disabled:text-slate-900',
+          'data-[state=checked]:bg-emerald-50 data-[state=checked]:text-emerald-700 data-[state=checked]:font-semibold',
+          'data-disabled:text-slate-300'
+        ].join(' ')
+      },
+      variants: {
+        variant: {
+          none: 'bg-white text-slate-900'
+        },
+        size: {
+          // `pe-[10px]` + a 16px icon puts the chevron's centre 18px from the
+          // right edge, which is where the background-image chevron sat.
+          md: {
+            base: 'px-3 py-2.5 text-[15px] md:text-[15px]',
+            trailing: 'pe-[10px]',
+            trailingIcon: 'size-4',
+            // `size.md` also carries the item padding, which beats `slots.item`
+            item: 'px-2.5 py-2 text-[14px] gap-2'
+          }
+        }
+      },
       compoundVariants: [
         { fixed: false, size: 'md', class: 'md:text-[15px]' }
       ],

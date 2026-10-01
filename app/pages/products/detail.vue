@@ -475,10 +475,13 @@ function updateEditAttr(id: string, fn: (a: EditAttr) => EditAttr) {
 function onAttrNameChange(id: string, name: string) {
   updateEditAttr(id, a => ({ ...a, name, values: [] }))
 }
-function onAttrPickValue(id: string, e: Event) {
-  const el = e.target as HTMLSelectElement
-  const v = el.value
-  el.value = ''
+// The "+ Add value" pickers are menus, not selects: the value is never kept.
+// `null` holds Reka in controlled mode so the trigger falls back to its
+// placeholder after each pick — `undefined` makes it go uncontrolled and the
+// last pick sticks. The cast is only to satisfy USelect's prop type.
+const NO_VALUE = null as unknown as string | undefined
+
+function addAttrValue(id: string, v: string) {
   if (!v) return
   updateEditAttr(id, a => a.values.indexOf(v) === -1 ? { ...a, values: [...a.values, v] } : a)
 }
@@ -579,7 +582,11 @@ const editComponentRows = computed(() => {
       locked: isBase,
       selectable: !isBase,
       selectDisabled: locked,
-      options: fees.value.filter(f => f.id === c.feeId || chosen.indexOf(f.id) === -1),
+      // name only: USelect renders a `description` field if the item carries
+      // one, which the native <option> ignored
+      options: fees.value
+        .filter(f => f.id === c.feeId || chosen.indexOf(f.id) === -1)
+        .map(f => ({ id: f.id, name: f.name })),
       amount: amt,
       published: c.published,
       publishLocked: isBase || locked,
@@ -1291,18 +1298,13 @@ function onConfirmDelete() {
                     <div class="basis-[150px] grow shrink min-w-[120px] max-w-[240px]">
                       <label class="field-label text-xs">Attribute Name</label>
                       <div class="select-wrap">
-                        <select
-                          class="field-input"
-                          :value="attr.name"
-                          @change="onAttrNameChange(attr.id, ($event.target as HTMLSelectElement).value)"
-                        >
-                          <option value="">
-                            Select attribute...
-                          </option>
-                          <option v-for="opt in attributeTypeOptions" :key="opt" :value="opt">
-                            {{ opt }}
-                          </option>
-                        </select>
+                        <USelect
+                          :model-value="attr.name || undefined"
+                          :items="attributeTypeOptions"
+                          placeholder="Select attribute..."
+                          :ui="fieldCompact()"
+                          @update:model-value="onAttrNameChange(attr.id, String($event))"
+                        />
                       </div>
                     </div>
                     <div class="basis-[170px] grow shrink min-w-0">
@@ -1324,18 +1326,13 @@ function onConfirmDelete() {
                           </UButton>
                         </span>
                         <div v-if="attr.canAddValue" class="select-wrap basis-[130px] grow shrink min-w-[120px]">
-                          <select
-                            class="field-input text-[13px]"
-                            :value="''"
-                            @change="onAttrPickValue(attr.id, $event)"
-                          >
-                            <option value="">
-                              + Add value
-                            </option>
-                            <option v-for="opt in attr.valueOptions" :key="opt" :value="opt">
-                              {{ opt }}
-                            </option>
-                          </select>
+                          <USelect
+                            :model-value="NO_VALUE"
+                            :items="attr.valueOptions"
+                            placeholder="+ Add value"
+                            :ui="SELECT_ADD_VALUE"
+                            @update:model-value="addAttrValue(attr.id, String($event))"
+                          />
                         </div>
                         <span v-if="attr.noValueOptions" class="text-xs text-slate-400 p-1">{{ attr.valuesEmptyHint }}</span>
                       </div>
@@ -1666,19 +1663,16 @@ function onConfirmDelete() {
                         <span class="text-[11px] font-semibold px-2 py-px rounded-full bg-blue-50 text-blue-600 border border-blue-200">Base</span>
                       </div>
                       <div v-else class="select-wrap">
-                        <select
-                          class="field-input bg-white"
-                          :value="c.feeId"
+                        <USelect
+                          :model-value="c.feeId || undefined"
+                          :items="c.options"
+                          value-key="id"
+                          label-key="name"
                           :disabled="c.selectDisabled"
-                          @change="setComponentFee(c.index, ($event.target as HTMLSelectElement).value)"
-                        >
-                          <option value="">
-                            Select component...
-                          </option>
-                          <option v-for="opt in c.options" :key="opt.id" :value="opt.id">
-                            {{ opt.name }}
-                          </option>
-                        </select>
+                          placeholder="Select component..."
+                          :ui="fieldCompact()"
+                          @update:model-value="setComponentFee(c.index, String($event))"
+                        />
                       </div>
                     </div>
 
@@ -1854,44 +1848,3 @@ function onConfirmDelete() {
     </template>
   </div>
 </template>
-
-<style scoped>
-select.field-input {
-  appearance: none;
-  -webkit-appearance: none;
-  padding-right: 28px;
-  background-color: #fff;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 16px 16px;
-  cursor: pointer;
-}
-.static-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: #94a3b8;
-  margin-bottom: 5px;
-  display: block;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-.static-value {
-  font-size: 14px;
-  color: #0f172a;
-  font-weight: 500;
-}
-.drawer {
-  animation: drawerIn 240ms ease;
-}
-@keyframes drawerIn {
-  from {
-    transform: translateX(24px);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-</style>
