@@ -1,26 +1,26 @@
-import type { ApiList, Draft, ListQuery, Persisted, StoredProduct } from '#shared/types'
+import type { ApiList, Draft, ListQuery, Persisted } from '#shared/types'
 
 /**
  * A typed client for one `server/api` resource.
  *
  * Replaces passing the resource name as a string to generic helpers: the name
- * is written once here, and the record type travels with it, so
+ * is written once per resource, and the record type travels with it, so
  * `apiCreate<Category>('products', …)` stops being something TypeScript will
  * happily accept.
  *
  * Reads and writes only — loading and error state belong to the caller, and
  * the pure helpers over an already-loaded list stay in `app/utils/*`.
  *
- * The second type parameter on `get` / `create` / `update` is an escape hatch
- * for the two product screens that work with their own shapes
- * (`DetailProduct`, `ParentProduct`). It governs the body as well as the
- * return, so those screens send and receive their own type instead of casting.
+ * Bind it to a resource in its own `useApiX.ts` file (see `useApiProducts.ts`)
+ * rather than calling it inline, so each resource has one place to hang the
+ * endpoints that are not plain CRUD.
  *
- * It is deliberately unconstrained, and so is an unchecked assertion: those
- * two interfaces are not supersets of `StoredProduct` — they widen `id` to
- * `string | null` and make `hasVariants` / `variantCount` optional — so
- * `<R extends T>` does not compile. Reconciling the three shapes is its own
- * job; until then `get<Whatever>(id)` will type-check against any `R`.
+ * The second type parameter on `get` / `create` / `update` lets a caller work
+ * with a shape of its own instead of `T`. It governs the body as well as the
+ * return, so a screen with its own view model sends and receives that model
+ * instead of casting. It is deliberately unconstrained, and so is an unchecked
+ * assertion — `get<Whatever>(id)` compiles. `<R extends T>` would be safer but
+ * does not compile today; the resource bindings that rely on this say why.
  */
 export function useApiResource<T>(resource: string) {
   const base = `/api/${resource}`
@@ -50,5 +50,3 @@ export function useApiResource<T>(resource: string) {
     }
   }
 }
-
-export const useApiProducts = () => useApiResource<StoredProduct>('products')

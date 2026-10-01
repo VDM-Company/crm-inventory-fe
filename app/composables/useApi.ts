@@ -1,7 +1,7 @@
 /**
  * Typed client for `server/api`.
  *
- * Products go through `useApiProducts()` (see `useApiResource.ts`). The other
+ * Products go through `useApiProducts()` (see `useApiProducts.ts`). The other
  * resources still call the `app/utils/*` stores for reads (`loadCategories()`,
  * `loadPlatforms()`, …) and the mutation helpers here for writes. Both go
  * through `/api`; no page touches localStorage any more.
