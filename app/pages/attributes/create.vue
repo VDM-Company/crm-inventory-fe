@@ -26,14 +26,19 @@ const type = computed({ get: () => state.type, set: v => (state.type = v) })
 const required = ref(true)
 const options = ref<string[]>([''])
 const optionsError = ref('')
+const saveError = ref('')
 
 const pageTitle = computed(() => editId.value ? 'Edit Attribute' : 'Create Attribute')
 useHead({ title: () => pageTitle.value + ' — Vertex' })
 
-// SSR-safe: the store is read on mount (localStorage is client-only), then the
-// edited attribute seeds the form.
-onMounted(() => {
-  attrs.value = loadAttributeDefs()
+// The list is fetched on mount, then the edited attribute seeds the form.
+onMounted(async () => {
+  try {
+    attrs.value = await loadAttributeDefs()
+  } catch (err) {
+    saveError.value = apiErrorMessage(err, 'Could not load attributes.')
+    return
+  }
   if (!editId.value) return
   const existing = attrs.value.find(a => a.id === editId.value)
   if (!existing) return
@@ -106,16 +111,25 @@ const previewPlaceholder = computed(() => 'Enter ' + (name.value || 'value').toL
 // ── save ──
 // UForm validates name/type against the schema before this runs; the
 // option-count rule depends on the `required` toggle and stays here.
-function onSubmit(event: FormSubmitEvent<Schema>) {
+const saving = ref(false)
+
+async function onSubmit(event: FormSubmitEvent<Schema>) {
   if (isOptionType.value && required.value && cleanedOptions.value.length === 0) {
     optionsError.value = 'Add at least one value.'
     return
   }
+  if (saving.value) return
   const built = { name: event.data.name, type: event.data.type, values: cleanedOptions.value }
-  const next = editId.value
-    ? attrs.value.map(a => a.id === editId.value ? { ...a, ...built } : a)
-    : [...attrs.value, { id: 'attr_' + Date.now(), ...built }]
-  saveAttributeDefs(next)
+  saving.value = true
+  try {
+    if (editId.value) await apiUpdate<AttributeDef>('attributes', editId.value, built)
+    else await apiCreate<AttributeDef>('attributes', built)
+  } catch (err) {
+    saving.value = false
+    saveError.value = apiErrorMessage(err, 'Could not save the attribute.')
+    return
+  }
+  saving.value = false
   return navigateTo('/attributes')
 }
 </script>
@@ -270,10 +284,19 @@ function onSubmit(event: FormSubmitEvent<Schema>) {
           <UButton
             type="submit"
             variant="ghost"
+            :disabled="saving"
             :ui="{ base: 'border-none bg-green-500 text-white text-[15px] font-bold px-[22px] py-2.5 rounded-lg cursor-pointer shadow-sm hover:bg-green-600 transition-colors' }"
           >
             Save
           </UButton>
+        </div>
+
+        <div
+          v-if="saveError"
+          class="mt-3 flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3.5 py-3 text-[13px] text-red-700"
+        >
+          <UIcon name="i-lucide-circle-alert" class="w-[15px] h-[15px] flex-shrink-0" />
+          <span>{{ saveError }}</span>
         </div>
       </div>
 

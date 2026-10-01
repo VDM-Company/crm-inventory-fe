@@ -18,10 +18,10 @@ response shape regardless of what the upstream does.
 
 Check which is live: `curl localhost:3000/api/_health`.
 
-The mock is **in-memory**: it resets when the server restarts, it is shared by
-every visitor, and it is NOT the same data as the browser's localStorage, which
-the screens still use today. It exists so the routes return real shapes and real
-status codes before the upstream exists.
+The mock is **in-memory**: it resets when the server restarts and it is shared
+by every visitor. Since the screens now read and write through it, restarting
+the dev server discards anything created in the UI. It exists so the routes
+return real shapes and real status codes before the upstream exists.
 
 ## Endpoints
 
@@ -57,8 +57,9 @@ see `apiFieldErrors()` in `app/composables/useApi.ts`.
 ## Before deploying with a token
 
 `/api/*` has **no authentication**, and `nuxt.config.ts` still sets
-`'/api/**': { cors: true }`. That is harmless while the layer is a mock on a
-dev machine. It is not harmless once `NUXT_API_TOKEN` is set: the route then
+`'/api/**': { cors: true }`. The whole UI now writes through it, so a deployed
+instance is a shared store that any visitor — or any other website's
+JavaScript — can modify. That is tolerable only on a dev machine. It is not harmless once `NUXT_API_TOKEN` is set: the route then
 becomes an open proxy holding a privileged credential, and the CORS rule lets
 any site's JavaScript drive it from a visitor's browser.
 
@@ -96,7 +97,7 @@ server/utils/backend.ts   THE SEAM — mock or proxy
 server/utils/mock-db.ts   in-memory store
 server/utils/crud.ts      shared handler bodies
 server/utils/errors.ts    404 / 422 helpers
-app/composables/useApi.ts typed client (unused so far)
+app/composables/useApi.ts typed client used by every screen
 ```
 
 `shared/` cannot import from `app/` or `server/`, and cannot use Vue or Nuxt

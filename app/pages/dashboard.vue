@@ -8,9 +8,9 @@ import type {
   StoredProduct
 } from '~/types'
 
-// ── seed catalog (design's SEED_PRODUCTS) ──
-// Written to `vertex_products` on first mount when the store is empty, so the
-// dashboard, Product Detail and Variant Detail all read the same records.
+// Renders on the server and on the first client paint, then `onMounted`
+// replaces it with the API's list. The API's mock is seeded from the same
+// rows, so the swap is invisible while it is the backend.
 import { PRODUCT_SEED as SEED_PRODUCTS } from '#shared/seeds'
 
 useHead({ title: 'Dashboard — Vertex' })
@@ -35,25 +35,20 @@ const platforms = ref<Platform[]>([])
 // store on mount.
 const storedProducts = ref<StoredProduct[]>(SEED_PRODUCTS)
 const nowTs = ref(0)
+const loadError = ref('')
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined
 
 // SSR-safe browser reads happen only after mount.
-onMounted(() => {
-  categories.value = loadCategories()
-  platforms.value = loadPlatforms()
+onMounted(async () => {
   nowTs.value = Date.now()
 
   try {
-    const raw = JSON.parse(localStorage.getItem('vertex_products') || '[]')
-    if (Array.isArray(raw) && raw.length) {
-      storedProducts.value = raw
-    } else {
-      localStorage.setItem('vertex_products', JSON.stringify(SEED_PRODUCTS))
-      storedProducts.value = SEED_PRODUCTS
-    }
-  } catch {
-    // ignore malformed storage
+    ;[categories.value, platforms.value, storedProducts.value] = await Promise.all([
+      loadCategories(), loadPlatforms(), loadProducts()
+    ])
+  } catch (err) {
+    loadError.value = apiErrorMessage(err, 'Could not load the dashboard.')
   }
 
   try {
@@ -303,6 +298,7 @@ function onNewProduct() {
 
 <template>
   <div class="px-8 pt-7 pb-20">
+    <VertexErrorBanner :message="loadError" class="mb-4" />
     <!-- TOAST -->
     <VertexToast :message="toast" />
 

@@ -128,6 +128,7 @@ const editAppliedKey = ref<string | null>(null)
 const cancelConfirmOpen = ref(false)
 const deleteConfirmOpen = ref(false)
 const toastMessage = ref<string | null>(null)
+const saveError = ref('')
 const historyOpen = ref(false)
 const historyExpanded = ref<Record<string, boolean>>({})
 const historyEntries = ref<HistoryEntry[]>([])
@@ -158,24 +159,36 @@ const seededDemo = normalizeProduct(null).product
 const product = ref<DetailProduct>({ ...seededDemo })
 const draft = ref<DetailProduct>({ ...seededDemo })
 
-function loadRecordById(rawId: unknown): DetailProduct | null {
+async function loadRecordById(rawId: unknown): Promise<DetailProduct | null> {
   const id = Array.isArray(rawId) ? rawId[0] : rawId
   if (!id) return null
   try {
-    const list = JSON.parse(localStorage.getItem('vertex_products') || '[]')
-    return list.find((r: DetailProduct) => r.id === id) || null
-  } catch {
-    return null
+    return await loadProduct(id) as DetailProduct
+  } catch (err) {
+    // Only an unknown id falls back to the demo record. Any other failure has
+    // to surface: showing demo data for a real id would let someone edit it
+    // and get a success toast while `persist` quietly skips the write.
+    if ((err as { statusCode?: number })?.statusCode === 404) return null
+    saveError.value = apiErrorMessage(err, 'Could not load this product.')
+    throw err
   }
 }
 
-onMounted(() => {
-  categories.value = loadCategories()
-  platforms.value = loadPlatforms()
-  attributeDefs.value = loadAttributeDefs()
-  fees.value = loadFees()
+onMounted(async () => {
+  try {
+    ;[categories.value, platforms.value, attributeDefs.value, fees.value] = await Promise.all([
+      loadCategories(), loadPlatforms(), loadAttributeDefs(), loadFees()
+    ])
+  } catch (err) {
+    saveError.value = apiErrorMessage(err, 'Could not load the form data.')
+  }
   historyEntries.value = seedHistory()
-  const rec = loadRecordById(route.query.id)
+  let rec: DetailProduct | null = null
+  try {
+    rec = await loadRecordById(route.query.id)
+  } catch {
+    return // the error is already on screen; don't present the demo record
+  }
   const norm = normalizeProduct(rec)
   product.value = norm.product
   draft.value = { ...norm.product }
@@ -752,20 +765,11 @@ function onConfirmDiscard() {
   mode.value = 'view'
 }
 
-function persist(merged: DetailProduct) {
+async function persist(merged: DetailProduct) {
   if (!isStored.value || !merged.id) return
-  try {
-    const list = JSON.parse(localStorage.getItem('vertex_products') || '[]')
-    const idx = list.findIndex((r: DetailProduct) => r.id === merged.id)
-    if (idx >= 0) {
-      list[idx] = { ...list[idx], ...merged }
-      localStorage.setItem('vertex_products', JSON.stringify(list))
-    }
-  } catch {
-    // ignore storage failure
-  }
+  await apiUpdate<DetailProduct>('products', merged.id, merged)
 }
-function onSaveClick(_event: FormSubmitEvent<ProductSchema>) {
+async function onSaveClick(_event: FormSubmitEvent<ProductSchema>) {
   const d = draft.value
   const merged: DetailProduct = { ...d }
   if (isSinglePricing.value) {
@@ -803,7 +807,12 @@ function onSaveClick(_event: FormSubmitEvent<ProductSchema>) {
     // deviation from source: keep the denormalised count the Dashboard reads
     merged.variantCount = merged.variants.length
   }
-  persist(merged)
+  try {
+    await persist(merged)
+  } catch (err) {
+    saveError.value = apiErrorMessage(err, 'Could not save the product.')
+    return
+  }
   const changes = diffChanges(product.value, merged)
   if (changes.length) {
     historyEntries.value = [{ id: 'h' + Date.now(), actor: 'Olivia Rhye', ts: Date.now(), changes }, ...historyEntries.value]
@@ -824,13 +833,14 @@ function onDeleteClick() {
 function onCancelDelete() {
   deleteConfirmOpen.value = false
 }
-function onConfirmDelete() {
+async function onConfirmDelete() {
   if (isStored.value && product.value.id) {
     try {
-      const list = JSON.parse(localStorage.getItem('vertex_products') || '[]')
-      localStorage.setItem('vertex_products', JSON.stringify(list.filter((r: DetailProduct) => r.id !== product.value.id)))
-    } catch {
-      // ignore storage failure
+      await apiRemove('products', product.value.id)
+    } catch (err) {
+      deleteConfirmOpen.value = false
+      saveError.value = apiErrorMessage(err, 'Could not delete the product.')
+      return
     }
   }
   deleteConfirmOpen.value = false
@@ -917,6 +927,14 @@ function onConfirmDelete() {
       class="flex flex-col gap-6"
       @submit="onSaveClick"
     >
+      <div
+        v-if="saveError"
+        class="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3.5 py-3 text-[13px] text-red-700"
+      >
+        <UIcon name="i-lucide-circle-alert" class="w-[15px] h-[15px] flex-shrink-0" />
+        <span>{{ saveError }}</span>
+      </div>
+
       <!-- scope card -->
       <UCard v-if="showScopeCard" class="px-5 py-4">
         <div class="flex items-center gap-3.5 flex-wrap">

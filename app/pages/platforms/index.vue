@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
-import type { Platform } from '~/types'
+import type { Platform, StoredProduct } from '~/types'
 
 useHead({ title: 'Platforms — Vertex' })
 
@@ -8,11 +8,16 @@ useHead({ title: 'Platforms — Vertex' })
 const platforms = ref<Platform[]>([...PLATFORM_SEED])
 const deleteTarget = ref<Platform | null>(null)
 const toast = ref<string | null>(null)
+const products = ref<StoredProduct[]>([])
 
 let toastTimer: number | null = null
 
-onMounted(() => {
-  platforms.value = loadPlatforms()
+onMounted(async () => {
+  try {
+    ;[platforms.value, products.value] = await Promise.all([loadPlatforms(), loadProducts()])
+  } catch (err) {
+    showToast(apiErrorMessage(err, 'Could not load platforms.'))
+  }
   // cross-page success toast set by the Create Platform screen
   try {
     const t = sessionStorage.getItem('vertex_platform_toast')
@@ -48,14 +53,19 @@ function editHref(id: string) {
 }
 
 // ── delete ──
-const deleteAssigned = computed(() => deleteTarget.value ? platformAssignedCount(deleteTarget.value.id) : 0)
+const deleteAssigned = computed(() => deleteTarget.value ? platformAssignedCount(products.value, deleteTarget.value.id) : 0)
 const deleteBlocked = computed(() => deleteAssigned.value > 0)
-function confirmDelete() {
+async function confirmDelete() {
   const t = deleteTarget.value
   if (!t || deleteBlocked.value) return
-  const next = platforms.value.filter(p => p.id !== t.id)
-  savePlatforms(next)
-  platforms.value = next
+  try {
+    await apiRemove('platforms', t.id)
+  } catch (err) {
+    deleteTarget.value = null
+    showToast(apiErrorMessage(err, 'Could not delete the platform.'))
+    return
+  }
+  platforms.value = platforms.value.filter(p => p.id !== t.id)
   deleteTarget.value = null
   showToast('Platform deleted')
 }

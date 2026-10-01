@@ -1,52 +1,24 @@
-import type { AttributeDef } from '~/types'
+import type { ApiList, AttributeDef, StoredProduct } from '~/types'
 
-import { ATTRIBUTE_SEED as SEED } from '#shared/seeds'
-
-// Port of the design's `window.VertexAttrs` (attribute-store.js).
-// Master list of variant attribute names + their preset values, persisted
-// in localStorage. Used by the Create form's variant builder (and, later,
-// the Attributes master page). SSR-safe reads fall back to the seed.
-
-const KEY = 'vertex_attributes_v1'
+// Master list of variant attribute names + their preset values, served by
+// `server/api`. Used by the Create form's variant builder and the Attributes
+// master page. The read is async; the helpers below stay pure.
 
 function clone(a: AttributeDef): AttributeDef {
   return { id: a.id, name: a.name, type: a.type, values: (a.values || []).slice() }
 }
 
-export function loadAttributeDefs(): AttributeDef[] {
-  if (import.meta.client) {
-    try {
-      const r = JSON.parse(localStorage.getItem(KEY) || 'null')
-      if (Array.isArray(r) && r.length) return r.map(clone)
-    } catch {
-      // ignore malformed storage
-    }
-  }
-  return SEED.map(clone)
-}
-
-export function saveAttributeDefs(list: AttributeDef[]): void {
-  if (import.meta.client) {
-    try {
-      localStorage.setItem(KEY, JSON.stringify(list))
-    } catch {
-      // ignore storage failure
-    }
-  }
+export async function loadAttributeDefs(): Promise<AttributeDef[]> {
+  const res = await $fetch<ApiList<AttributeDef>>('/api/attributes')
+  return (res.data || []).map(clone)
 }
 
 // How many stored products reference this attribute name (delete-protection).
-export function attributeUsageCount(name: string): number {
-  if (!import.meta.client) return 0
-  const target = (name || '').toLowerCase()
-  try {
-    const products: { attributes?: { name?: string }[] }[] = JSON.parse(localStorage.getItem('vertex_products') || '[]') || []
-    return products.filter(p =>
-      (p.attributes || []).some(a => (a.name || '').toLowerCase() === target)
-    ).length
-  } catch {
-    return 0
-  }
+// How many products use this attribute (delete-protection).
+// Pure: pass a list loaded with `loadProducts()` so it can drive a computed.
+export function attributeUsageCount(products: StoredProduct[], name: string): number {
+  const needle = (name || '').toLowerCase()
+  return products.filter(p => (p.attributes || []).some(a => String(a?.name || '').toLowerCase() === needle)).length
 }
 
 export function attributeNames(list: AttributeDef[]): string[] {

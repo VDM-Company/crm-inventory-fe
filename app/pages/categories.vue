@@ -48,17 +48,22 @@ const toast = ref<string | null>(null)
 
 let toastTimer: number | null = null
 
-onMounted(() => {
-  const list = loadCategories()
+onMounted(async () => {
+  let list: Category[] = []
+  try {
+    ;[list, platforms.value] = await Promise.all([loadCategories(), loadPlatforms()])
+  } catch (err) {
+    showToast(apiErrorMessage(err, 'Could not load categories.'))
+    return
+  }
   cats.value = list
-  platforms.value = loadPlatforms()
   const exp: Record<string, boolean> = {}
   list.forEach((c) => {
     if (!c.parentId) exp[c.id] = true
   })
   expanded.value = exp
   const first = list.find(c => !c.parentId) || list[0] || null
-  if (first) select(first.id)
+  if (first) await select(first.id)
 })
 
 onBeforeUnmount(() => {
@@ -120,10 +125,22 @@ function productCount(catId: string): number {
 }
 
 // ── selection ──
-function select(id: string) {
+// Clicks can outpace responses, so a slow fetch for one node must not land
+// after a later one and overwrite it.
+let selectSeq = 0
+
+async function select(id: string) {
   const cat = categoryById(cats.value, id)
   if (!cat) return
-  const entry = categoryEntry(id)
+  const seq = ++selectSeq
+  let entry: CatEntry
+  try {
+    entry = await categoryEntry(id)
+  } catch (err) {
+    if (seq === selectSeq) showToast(apiErrorMessage(err, 'Could not load this category.'))
+    return
+  }
+  if (seq !== selectSeq) return
   const pos: Record<string, Record<string, number>> = {}
   const ov: Record<string, boolean> = {}
   Object.keys(entry.scopes || {}).forEach((k) => {
@@ -189,7 +206,7 @@ const addSchema = computed(() => z.object({
 }))
 type AddSchema = { name: string }
 
-function onAddSubmit(event: FormSubmitEvent<AddSchema>) {
+async function onAddSubmit(event: FormSubmitEvent<AddSchema>) {
   const m = addModal.value
   if (!m) return
   const name = event.data.name
@@ -198,13 +215,19 @@ function onAddSubmit(event: FormSubmitEvent<AddSchema>) {
     addModal.value = { ...m, error: true }
     return
   }
-  const cat: Category = { id: 'cat_' + Date.now(), name, parentId: m.parentId || null, enabled: m.enabled !== false }
-  const next = [...cats.value, cat]
-  saveCategories(next)
-  cats.value = next
+  let cat: Category
+  try {
+    cat = await apiCreate<Category>('categories', {
+      name, parentId: m.parentId || null, enabled: m.enabled !== false
+    })
+  } catch (err) {
+    showToast(apiErrorMessage(err, 'Could not create the category.'))
+    return
+  }
+  cats.value = [...cats.value, cat]
   if (m.parentId) expanded.value = { ...expanded.value, [m.parentId]: true }
   addModal.value = null
-  select(cat.id)
+  await select(cat.id)
   showToast(m.parentId ? 'Subcategory created' : 'Category created')
 }
 
@@ -213,23 +236,23 @@ const blockedDelete = computed(() => {
   if (!sel) return false
   return categoryChildren(cats.value, sel).length > 0 || members.value.length > 0
 })
-function confirmDelete() {
+async function confirmDelete() {
   const id = selectedId.value
   if (!id) return
   if (categoryChildren(cats.value, id).length || members.value.length) return
+  try {
+    await apiRemove('categories', id)
+  } catch (err) {
+    deleteOpen.value = false
+    showToast(apiErrorMessage(err, 'Could not delete the category.'))
+    return
+  }
   const next = cats.value.filter(c => c.id !== id)
-  saveCategories(next)
   cats.value = next
-  const all = loadCatProducts()
-  const nextAll: Record<string, CatEntry> = {}
-  Object.keys(all).forEach((k) => {
-    if (k !== id) nextAll[k] = all[k]!
-  })
-  saveCatProducts(nextAll)
   const nextSel = next.find(c => !c.parentId) || next[0] || null
   deleteOpen.value = false
   selectedId.value = null
-  if (nextSel) select(nextSel.id)
+  if (nextSel) await select(nextSel.id)
   showToast('Category deleted')
 }
 
@@ -268,14 +291,16 @@ function onToggleUseDefaultOrder(e: Event) {
   }
 }
 
-function save() {
+const saving = ref(false)
+
+async function save() {
   const name = (draftName.value || '').trim()
   if (!name) {
     nameError.value = true
     return
   }
-  const nextCats = cats.value.map(c => c.id === selectedId.value ? { ...c, name, enabled: draftEnabled.value } : c)
-  saveCategories(nextCats)
+  const id = selectedId.value
+  if (!id || saving.value) return
   const scopes: Record<string, CatScopeEntry> = {}
   Object.keys(positions.value).forEach((k) => {
     scopes[k] = { positions: positions.value[k] || {} }
@@ -284,8 +309,17 @@ function save() {
   Object.keys(scopeOverride.value).forEach((k) => {
     if (!scopes[k]) scopes[k] = { positions: {}, override: !!scopeOverride.value[k] }
   })
-  if (selectedId.value) saveCategoryEntry(selectedId.value, { members: members.value, scopes } as CatEntry)
-  cats.value = nextCats
+  saving.value = true
+  try {
+    await apiUpdate<Category>('categories', id, { name, enabled: draftEnabled.value })
+    await saveCategoryEntry(id, { members: members.value, scopes } as CatEntry)
+  } catch (err) {
+    saving.value = false
+    showToast(apiErrorMessage(err, 'Could not save the category.'))
+    return
+  }
+  saving.value = false
+  cats.value = cats.value.map(c => c.id === id ? { ...c, name, enabled: draftEnabled.value } : c)
   nameError.value = false
   showToast('Category saved')
 }

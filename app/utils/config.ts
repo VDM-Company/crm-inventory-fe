@@ -5,8 +5,6 @@ import { PLATFORM_CONFIG_SEED, GENERIC_CONFIG_SEED } from '#shared/seeds'
 // Each platform owns its full set of values — there is no Default scope and no
 // per-field override (that model was dropped in Master v3).
 
-const KEY = 'vertex_platform_config_v1'
-
 export const CONFIG_GROUPS: ConfigGroup[] = [
   { group: 'store', title: 'Store Information', icon: 'store', fields: [
     { key: 'storeName', label: 'Store Name', type: 'text', placeholder: 'e.g. Vertex Digital Marketing' },
@@ -36,26 +34,12 @@ export function platformConfigSeed(platformId: string): ConfigValues {
   return { ...(PLATFORM_CONFIG_SEED[platformId] || GENERIC_CONFIG_SEED) }
 }
 
-function loadConfigAll(): Record<string, ConfigValues> {
-  if (!import.meta.client) return {}
-  try {
-    return JSON.parse(localStorage.getItem(KEY) || '{}') || {}
-  } catch {
-    return {}
-  }
+export async function loadPlatformConfig(platformId: string): Promise<ConfigValues> {
+  const stored = await $fetch<ConfigValues>(`/api/platforms/${platformId}/config`)
+  // the seed supplies any key the stored record has not been given yet
+  return { ...platformConfigSeed(platformId), ...(stored || {}) }
 }
 
-export function loadPlatformConfig(platformId: string): ConfigValues {
-  return { ...platformConfigSeed(platformId), ...(loadConfigAll()[platformId] || {}) }
-}
-
-export function savePlatformConfig(platformId: string, cfg: ConfigValues): void {
-  if (!import.meta.client) return
-  const all = loadConfigAll()
-  all[platformId] = cfg
-  try {
-    localStorage.setItem(KEY, JSON.stringify(all))
-  } catch {
-    // ignore storage failure
-  }
+export async function savePlatformConfig(platformId: string, cfg: ConfigValues): Promise<ConfigValues> {
+  return apiPutRaw<ConfigValues>(`platforms/${platformId}/config`, cfg)
 }

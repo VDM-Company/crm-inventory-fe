@@ -63,7 +63,7 @@ const variantNameQuery = qParam(route.query.variant)
 
 // ── state ──
 // SSR-safe: server and first client paint both render the DEMO product; the
-// stored record is swapped in on mount (localStorage is client-only).
+// stored record is fetched on mount.
 const product = ref<ParentProduct>({ ...DEMO_PRODUCT })
 const isStored = ref(false)
 const mode = ref<'view' | 'edit'>('view')
@@ -71,25 +71,32 @@ const scope = ref('default')
 const scopeOpen = ref(false)
 const draft = ref<VariantRow | null>(null)
 const toast = ref<string | null>(null)
+const saveError = ref('')
 
 const platforms = ref<Platform[]>([])
 const fees = ref<Fee[]>([...FEE_SEED])
 const imageInput = ref<HTMLInputElement | null>(null)
 let toastTimer: number | null = null
 
-onMounted(() => {
-  platforms.value = loadPlatforms()
-  fees.value = loadFees()
+onMounted(async () => {
+  try {
+    ;[platforms.value, fees.value] = await Promise.all([loadPlatforms(), loadFees()])
+  } catch (err) {
+    saveError.value = apiErrorMessage(err, 'Could not load this variant.')
+  }
   if (productKey && productKey !== 'demo') {
     try {
-      const list = JSON.parse(localStorage.getItem('vertex_products') || '[]')
-      const rec = list.find((r: ParentProduct) => r.id === productKey)
+      const rec = await loadProduct(productKey) as ParentProduct
       if (rec) {
         product.value = rec
         isStored.value = !!rec.id
       }
-    } catch {
-      // ignore malformed storage
+    } catch (err) {
+      // only an unknown id keeps the demo record; anything else must surface,
+      // or an edit here would report success without saving
+      if ((err as { statusCode?: number })?.statusCode !== 404) {
+        saveError.value = apiErrorMessage(err, 'Could not load this product.')
+      }
     }
   }
 })
@@ -391,7 +398,7 @@ function onCancelEdit() {
   scopeOpen.value = false
   mode.value = 'view'
 }
-function onSaveEdit() {
+async function onSaveEdit() {
   const d = draft.value
   if (!d) return
   const merged: ParentProduct = {
@@ -400,14 +407,10 @@ function onSaveEdit() {
   }
   if (isStored.value && merged.id) {
     try {
-      const list = JSON.parse(localStorage.getItem('vertex_products') || '[]')
-      const idx = list.findIndex((r: ParentProduct) => r.id === merged.id)
-      if (idx >= 0) {
-        list[idx] = merged
-        localStorage.setItem('vertex_products', JSON.stringify(list))
-      }
-    } catch {
-      // ignore storage failure
+      await apiUpdate<ParentProduct>('products', merged.id, merged)
+    } catch (err) {
+      saveError.value = apiErrorMessage(err, 'Could not save the variant.')
+      return
     }
   }
   product.value = merged
@@ -422,6 +425,7 @@ function onSaveEdit() {
 
 <template>
   <div class="p-5 max-w-[1280px]">
+    <VertexErrorBanner :message="saveError" class="mb-4" />
     <!-- breadcrumb -->
     <VertexBreadcrumb
       :items="[

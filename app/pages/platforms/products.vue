@@ -16,14 +16,15 @@ const categories = ref<Category[]>([])
 const storedProducts = ref<StoredProduct[]>([])
 const search = ref('')
 
-onMounted(() => {
-  platforms.value = loadPlatforms()
-  categories.value = loadCategories()
+const loadError = ref('')
+
+onMounted(async () => {
   try {
-    const raw = JSON.parse(localStorage.getItem('vertex_products') || '[]')
-    if (Array.isArray(raw)) storedProducts.value = raw
-  } catch {
-    // ignore malformed storage
+    ;[platforms.value, categories.value, storedProducts.value] = await Promise.all([
+      loadPlatforms(), loadCategories(), loadProducts()
+    ])
+  } catch (err) {
+    loadError.value = apiErrorMessage(err, 'Could not load this platform.')
   }
 })
 
@@ -108,6 +109,7 @@ const emptyHint = computed(() => search.value.trim()
 
 <template>
   <div class="flex-1 min-w-0 px-8 pt-7 pb-20">
+    <VertexErrorBanner :message="loadError" class="mb-4" />
     <VertexBreadcrumb
       :items="[
         { label: 'Inventory', to: '/dashboard' },

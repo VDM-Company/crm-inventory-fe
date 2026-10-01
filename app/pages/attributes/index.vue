@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
-import type { AttributeDef } from '~/types'
+import type { AttributeDef, StoredProduct } from '~/types'
 
 useHead({ title: 'Attributes — Vertex' })
 
@@ -8,6 +8,7 @@ useHead({ title: 'Attributes — Vertex' })
 const attrs = ref<AttributeDef[]>([])
 const deleteTarget = ref<AttributeDef | null>(null)
 const toast = ref<string | null>(null)
+const products = ref<StoredProduct[]>([])
 
 let toastTimer: number | null = null
 
@@ -20,8 +21,12 @@ const columns: TableColumn<AttributeDef>[] = [
   { id: 'action', header: 'Action', meta: { class: { th: 'px-5 text-right w-[130px]', td: TABLE_EDGE.td } } }
 ]
 
-onMounted(() => {
-  attrs.value = loadAttributeDefs()
+onMounted(async () => {
+  try {
+    ;[attrs.value, products.value] = await Promise.all([loadAttributeDefs(), loadProducts()])
+  } catch (err) {
+    showToast(apiErrorMessage(err, 'Could not load attributes.'))
+  }
 })
 onBeforeUnmount(() => {
   if (toastTimer !== null) clearTimeout(toastTimer)
@@ -44,14 +49,19 @@ function onEdit(a: AttributeDef) {
 }
 
 // ── delete ──
-const deleteUsage = computed(() => deleteTarget.value ? attributeUsageCount(deleteTarget.value.name) : 0)
+const deleteUsage = computed(() => deleteTarget.value ? attributeUsageCount(products.value, deleteTarget.value.name) : 0)
 const deleteBlocked = computed(() => deleteUsage.value > 0)
-function confirmDelete() {
+async function confirmDelete() {
   const t = deleteTarget.value
   if (!t || deleteBlocked.value) return
-  const next = attrs.value.filter(a => a.id !== t.id)
-  saveAttributeDefs(next)
-  attrs.value = next
+  try {
+    await apiRemove('attributes', t.id)
+  } catch (err) {
+    deleteTarget.value = null
+    showToast(apiErrorMessage(err, 'Could not delete the attribute.'))
+    return
+  }
+  attrs.value = attrs.value.filter(a => a.id !== t.id)
   deleteTarget.value = null
   showToast('Attribute deleted')
 }

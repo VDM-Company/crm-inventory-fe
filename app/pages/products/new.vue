@@ -77,11 +77,15 @@ const appliedKey = ref('')
 
 // masters — fees seeded deterministically so the pre-selected Pricing rows
 // render identically on server + first client paint; the rest follow the
-// Dashboard pattern (empty until `onMounted` reads localStorage).
+// Fetched on mount, like the Dashboard.
 const categories = ref<Category[]>([])
 const platforms = ref<Platform[]>([])
 const attributeDefs = ref<AttributeDef[]>([])
 const fees = ref<Fee[]>([...FEE_SEED])
+const existingSkus = ref<string[]>([])
+const catalogProducts = ref<StoredProduct[]>([])
+const saveError = ref('')
+const saving = ref(false)
 
 const prodImageInput = ref<HTMLInputElement | null>(null)
 let toastTimer: number | null = null
@@ -89,11 +93,20 @@ let toastTimer: number | null = null
 const hasVariants = computed(() => productType.value === 'variant')
 const isBundle = computed(() => productType.value === 'bundle')
 
-onMounted(() => {
-  categories.value = loadCategories()
-  platforms.value = loadPlatforms()
-  attributeDefs.value = loadAttributeDefs()
-  fees.value = loadFees()
+onMounted(async () => {
+  try {
+    ;[categories.value, platforms.value, attributeDefs.value, fees.value, existingSkus.value] = await Promise.all([
+      loadCategories(), loadPlatforms(), loadAttributeDefs(), loadFees(),
+      // the duplicate-SKU rule runs inside a zod refine, which cannot await —
+      // so the list it checks against is fetched once here
+      loadProducts().then((list) => {
+        catalogProducts.value = list
+        return productSkus(list)
+      })
+    ])
+  } catch (err) {
+    saveError.value = apiErrorMessage(err, 'Could not load the form data.')
+  }
 })
 
 onBeforeUnmount(() => {
@@ -351,16 +364,14 @@ function bundleComponentTitle(name: string) {
   const n = (name || '').trim()
   return /component$/i.test(n) ? n : (n + ' Component')
 }
-function getCatalog() {
-  let stored: { id: string, name: string, sku: string }[] = []
-  try {
-    stored = JSON.parse(localStorage.getItem('vertex_products') || '[]')
-  } catch {
-    // ignore malformed storage
-  }
-  return stored.map(p => ({ id: p.id, name: p.name, sku: p.sku })).concat(SEED_CATALOG)
-}
-const catalogOptions = computed(() => getCatalog().map(c => ({ id: c.id, label: c.name + ' (' + c.sku + ')' })))
+// The bundle picker offers the stored products (fetched on mount) plus the
+// design's demo catalog.
+const catalogOptions = computed(() =>
+  catalogProducts.value
+    .map(p => ({ id: p.id || '', name: p.name, sku: p.sku }))
+    .concat(SEED_CATALOG)
+    .map(c => ({ id: c.id, label: c.name + ' (' + c.sku + ')' }))
+)
 const bundleComponentRows = computed(() =>
   bundleComponents.value.map(c => ({ id: c.id, title: bundleComponentTitle(c.name), products: c.products }))
 )
@@ -397,7 +408,9 @@ const componentSaveDisabled = computed(() =>
 function saveComponent() {
   const m = componentModal.value
   if (!m) return
-  const catalog = getCatalog()
+  const catalog = catalogProducts.value
+    .map(p => ({ id: p.id || '', name: p.name, sku: p.sku }))
+    .concat(SEED_CATALOG)
   const products = m.rows.filter(r => r.productId).map((r) => {
     const p = catalog.find(c => c.id === r.productId)
     return { id: r.productId, name: p?.name || '', sku: p?.sku || '' }
@@ -510,7 +523,7 @@ const productSchema = computed(() => z.object({
   }
 
   const sku = val.sku.trim().toLowerCase()
-  if (sku && storedSkus().includes(sku)) {
+  if (sku && existingSkus.value.includes(sku)) {
     ctx.addIssue({ code: 'custom', path: ['sku'], message: 'SKU already exists' })
   }
 
@@ -525,16 +538,6 @@ const productSchema = computed(() => z.object({
   }
 }))
 type ProductSchema = { name: string, sku: string, category: string, categoryId: string }
-
-function storedSkus(): string[] {
-  if (!import.meta.client) return []
-  try {
-    const list = JSON.parse(localStorage.getItem('vertex_products') || '[]')
-    return (list as { sku?: string }[]).map(p => (p.sku || '').trim().toLowerCase()).filter(Boolean)
-  } catch {
-    return []
-  }
-}
 
 const validationResult = computed(() => productSchema.value.safeParse({
   name: form.name,
@@ -557,14 +560,13 @@ const variantIssue = computed(() => {
 function onSaveProduct(_event: FormSubmitEvent<ProductSchema>) {
   saveConfirmOpen.value = true
 }
-function commitSave() {
+async function commitSave() {
   const f = form
   const variantsOn = productType.value === 'variant'
   const vList = variantsOn
     ? variants.value.map(v => ({ name: v.name, sku: v.sku, price: v.price, stock: v.stock, active: v.active }))
     : []
-  const rec: StoredProduct = {
-    id: 'u' + Date.now(),
+  const rec: Omit<StoredProduct, 'id'> = {
     name: f.name.trim() || 'Untitled Product',
     sku: f.sku.trim() || '—',
     notes: f.notes,
@@ -595,13 +597,17 @@ function commitSave() {
       : [],
     createdAt: Date.now()
   }
+  if (saving.value) return
+  saving.value = true
   try {
-    const list = JSON.parse(localStorage.getItem('vertex_products') || '[]')
-    list.unshift(rec)
-    localStorage.setItem('vertex_products', JSON.stringify(list))
-  } catch {
-    // ignore storage failure
+    await apiCreate<StoredProduct>('products', rec)
+  } catch (err) {
+    saving.value = false
+    saveConfirmOpen.value = false
+    saveError.value = apiErrorMessage(err, 'Could not save the product.')
+    return
   }
+  saving.value = false
   try {
     sessionStorage.setItem('vertex_toast', 'Product created')
   } catch {
@@ -1424,6 +1430,14 @@ function onConfirmDiscard() {
             </div>
           </UCard>
         </div>
+      </div>
+
+      <div
+        v-if="saveError"
+        class="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3.5 py-3 text-[13px] text-red-700"
+      >
+        <UIcon name="i-lucide-circle-alert" class="w-[15px] h-[15px] flex-shrink-0" />
+        <span>{{ saveError }}</span>
       </div>
     </UForm>
 

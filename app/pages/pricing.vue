@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import * as z from 'zod'
 import type { FormSubmitEvent, TableColumn } from '@nuxt/ui'
-import type { Fee } from '~/types'
+import type { Fee, StoredProduct } from '~/types'
 
 useHead({ title: 'Pricing Setting — Vertex' })
 
@@ -34,11 +34,16 @@ const fees = ref<Fee[]>([...FEE_SEED])
 const modal = ref<ModalState | null>(null)
 const deleteTarget = ref<Fee | null>(null)
 const toast = ref<string | null>(null)
+const products = ref<StoredProduct[]>([])
 
 let toastTimer: number | null = null
 
-onMounted(() => {
-  fees.value = loadFees()
+onMounted(async () => {
+  try {
+    ;[fees.value, products.value] = await Promise.all([loadFees(), loadProducts()])
+  } catch (err) {
+    showToast(apiErrorMessage(err, 'Could not load pricing components.'))
+  }
 })
 onBeforeUnmount(() => {
   if (toastTimer !== null) clearTimeout(toastTimer)
@@ -92,28 +97,42 @@ const modalSchema = computed(() => z.object({
 }))
 type ModalSchema = { name: string }
 
-function onModalSubmit(event: FormSubmitEvent<ModalSchema>) {
+async function onModalSubmit(event: FormSubmitEvent<ModalSchema>) {
   const m = modal.value
   if (!m) return
   const name = event.data.name
-  const next = m.id
-    ? fees.value.map(f => f.id === m.id ? { ...f, name, description: m.desc, icon: m.icon } : f)
-    : [...fees.value, { id: 'fee_' + Date.now(), name, description: m.desc, icon: m.icon || DEFAULT_ICON, system: false }]
-  saveFees(next)
-  fees.value = next
+  try {
+    if (m.id) {
+      const saved = await apiUpdate<Fee>('fees', m.id, { name, description: m.desc, icon: m.icon })
+      fees.value = fees.value.map(f => f.id === m.id ? saved : f)
+    } else {
+      const saved = await apiCreate<Fee>('fees', {
+        name, description: m.desc, icon: m.icon || DEFAULT_ICON, system: false
+      })
+      fees.value = [...fees.value, saved]
+    }
+  } catch (err) {
+    showToast(apiErrorMessage(err, 'Could not save the component.'))
+    return
+  }
   modal.value = null
   showToast(m.id ? 'Component updated' : 'Component created')
 }
 
 // ── delete ──
-const deleteUsage = computed(() => deleteTarget.value ? feeUsageCount(deleteTarget.value.id) : 0)
+const deleteUsage = computed(() => deleteTarget.value ? feeUsageCount(products.value, deleteTarget.value.id) : 0)
 const deleteBlocked = computed(() => deleteUsage.value > 0)
-function confirmDelete() {
+async function confirmDelete() {
   const t = deleteTarget.value
   if (!t || t.system || deleteBlocked.value) return
-  const next = fees.value.filter(f => f.id !== t.id)
-  saveFees(next)
-  fees.value = next
+  try {
+    await apiRemove('fees', t.id)
+  } catch (err) {
+    deleteTarget.value = null
+    showToast(apiErrorMessage(err, 'Could not delete the component.'))
+    return
+  }
+  fees.value = fees.value.filter(f => f.id !== t.id)
   deleteTarget.value = null
   showToast('Component deleted')
 }

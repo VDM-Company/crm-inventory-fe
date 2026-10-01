@@ -13,6 +13,8 @@ const editId = ref<string | null>(null)
 const form = reactive({ name: '', code: '', url: '' })
 const codeTouched = ref(false)
 const dirty = ref(false)
+const saveError = ref('')
+const allPlatforms = ref<Platform[]>([])
 const discardOpen = ref(false)
 // Config starts blank on this screen (the design does not preload an existing
 // platform's saved values here) and is written on save.
@@ -20,11 +22,16 @@ const cfg = ref<ConfigValues>({ ...GENERIC_CONFIG_SEED })
 
 // SSR-safe: resolve the edit target from localStorage only after mount, so
 // server + first client paint both render the empty "Create" form.
-onMounted(() => {
+onMounted(async () => {
+  try {
+    allPlatforms.value = await loadPlatforms()
+  } catch {
+    // leave the list empty; the duplicate-code check simply cannot run
+  }
   const rawId = route.query.id
   const id = Array.isArray(rawId) ? rawId[0] : rawId
   if (id) {
-    const existing = platformById(loadPlatforms(), id)
+    const existing = platformById(allPlatforms.value, id)
     if (existing) {
       editId.value = id
       form.name = existing.name
@@ -51,7 +58,7 @@ const schema = computed(() => z.object({
     .trim()
     .min(1, 'Code is required.')
     .refine(
-      v => !loadPlatforms().some(p => p.code === v && p.id !== editId.value),
+      v => !allPlatforms.value.some(p => p.code === v && p.id !== editId.value),
       'This code is already in use.'
     ),
   url: z.string().trim().min(1, 'URL / Path is required.')
@@ -72,19 +79,29 @@ function onCodeModel(value: string) {
 
 const saveDisabled = computed(() => !(form.name.trim() && form.code.trim() && form.url.trim()))
 
-function onSubmit(event: FormSubmitEvent<Schema>) {
+const saving = ref(false)
+
+async function onSubmit(event: FormSubmitEvent<Schema>) {
   const f = event.data
-  const list = loadPlatforms()
-  let next: Platform[]
+  if (saving.value) return
+  saving.value = true
   let savedId = editId.value
-  if (editId.value) {
-    next = list.map(p => p.id === editId.value ? { ...p, name: f.name.trim(), url: f.url.trim() } : p)
-  } else {
-    savedId = 'plat_' + Date.now()
-    next = [...list, { id: savedId, name: f.name.trim(), code: f.code.trim(), url: f.url.trim() }]
+  try {
+    if (editId.value) {
+      await apiUpdate<Platform>('platforms', editId.value, { name: f.name.trim(), url: f.url.trim() })
+    } else {
+      const created = await apiCreate<Platform>('platforms', {
+        name: f.name.trim(), code: f.code.trim(), url: f.url.trim()
+      })
+      savedId = created.id
+    }
+    if (savedId) await savePlatformConfig(savedId, { ...cfg.value, baseUrl: f.url.trim() })
+  } catch (err) {
+    saving.value = false
+    saveError.value = apiErrorMessage(err, 'Could not save the platform.')
+    return
   }
-  savePlatforms(next)
-  if (savedId) savePlatformConfig(savedId, { ...cfg.value, baseUrl: f.url.trim() })
+  saving.value = false
   try {
     sessionStorage.setItem('vertex_platform_toast', editId.value ? 'Platform updated successfully' : 'Platform created successfully')
   } catch {
@@ -193,13 +210,21 @@ function onConfirmDiscard() {
         <UButton
           type="submit"
           variant="ghost"
-          :disabled="saveDisabled"
+          :disabled="saveDisabled || saving"
           :ui="{ base: ['border-none text-[15px] font-bold px-[22px] py-2.5 rounded-lg', saveDisabled
             ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
             : 'bg-green-500 text-white cursor-pointer shadow-sm hover:bg-green-600 transition-colors'] }"
         >
           Save Platform
         </UButton>
+      </div>
+
+      <div
+        v-if="saveError"
+        class="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3.5 py-3 text-[13px] text-red-700"
+      >
+        <UIcon name="i-lucide-circle-alert" class="w-[15px] h-[15px] flex-shrink-0" />
+        <span>{{ saveError }}</span>
       </div>
     </UForm>
 

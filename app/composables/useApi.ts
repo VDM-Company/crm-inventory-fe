@@ -1,17 +1,13 @@
 /**
  * Typed client for `server/api`.
  *
- * NOTE: no page uses this yet — the screens still read and write localStorage
- * through `app/utils/*`. It is here so adopting the API is a per-page change
- * with no plumbing to invent.
+ * The screens call the `app/utils/*` stores for reads (`loadProducts()`,
+ * `loadCategories()`, …) and the mutation helpers here for writes. Both go
+ * through `/api`; no page touches localStorage any more.
  *
- * Reads use `useFetch` (SSR-aware, deduped, gives you `status`/`refresh`);
- * writes use `$fetch` because they are event-driven.
- *
- * Migration trap: a page that switches a read to `useApiList` renders from the
- * SERVER's store, while anything still on `app/utils/*` renders from
- * localStorage. Move a screen's reads and writes together, or the two sources
- * will disagree after the first mutation.
+ * Reads happen in `onMounted` via `$fetch`, which keeps the existing
+ * render-then-fill behaviour and avoids a hydration mismatch. `useApiList` /
+ * `useApiItem` are the SSR-aware alternative, unused so far.
  */
 import type { ApiList, FieldErrors, ListQuery } from '#shared/types'
 

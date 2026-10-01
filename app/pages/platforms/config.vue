@@ -24,22 +24,29 @@ const schema = z.object({
 })
 type Schema = { name: string, url: string }
 const dirty = ref(false)
+const saveError = ref('')
 const discardOpen = ref(false)
 
 // Seed identity + config from whatever platform the route resolves to.
-function hydrate() {
+/** Identity fields come from the already-loaded list; config is a separate read. */
+function hydrateIdentity() {
   const p = platform.value
   identity.name = p ? p.name : ''
   identity.code = p ? p.code : ''
   identity.url = p ? p.url : ''
-  cfg.value = p ? loadPlatformConfig(p.id) : { ...GENERIC_CONFIG_SEED }
 }
 
-hydrate()
+hydrateIdentity()
 
-onMounted(() => {
-  platforms.value = loadPlatforms()
-  hydrate()
+onMounted(async () => {
+  try {
+    platforms.value = await loadPlatforms()
+    hydrateIdentity()
+    const p = platform.value
+    cfg.value = p ? await loadPlatformConfig(p.id) : { ...GENERIC_CONFIG_SEED }
+  } catch (err) {
+    saveError.value = apiErrorMessage(err, 'Could not load this platform.')
+  }
   dirty.value = false
 })
 
@@ -54,13 +61,22 @@ function setIdentity(field: 'name' | 'url', value: string) {
 }
 
 // ── save ──
-function onSubmit(_event: FormSubmitEvent<Schema>) {
+const saving = ref(false)
+
+async function onSubmit(_event: FormSubmitEvent<Schema>) {
   const p = platform.value
+  if (saving.value) return
   if (p) {
-    savePlatforms(loadPlatforms().map(x => x.id === p.id
-      ? { ...x, name: identity.name.trim(), url: identity.url.trim() }
-      : x))
-    savePlatformConfig(p.id, { ...cfg.value, baseUrl: identity.url.trim() })
+    saving.value = true
+    try {
+      await apiUpdate<Platform>('platforms', p.id, { name: identity.name.trim(), url: identity.url.trim() })
+      await savePlatformConfig(p.id, { ...cfg.value, baseUrl: identity.url.trim() })
+    } catch (err) {
+      saving.value = false
+      saveError.value = apiErrorMessage(err, 'Could not save the platform.')
+      return
+    }
+    saving.value = false
   }
   try {
     sessionStorage.setItem('vertex_platform_toast', identity.name.trim() + ' updated')
@@ -182,6 +198,14 @@ const crumbLast = computed(() => platform.value ? platform.value.name : 'Platfor
         >
           Save Platform
         </UButton>
+
+        <div
+          v-if="saveError"
+          class="basis-full flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3.5 py-3 text-[13px] text-red-700"
+        >
+          <UIcon name="i-lucide-circle-alert" class="w-[15px] h-[15px] flex-shrink-0" />
+          <span>{{ saveError }}</span>
+        </div>
       </div>
     </UForm>
 
