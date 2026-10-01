@@ -15,9 +15,8 @@ const router = useRouter()
 // ── reactive state (mirrors the design's DCLogic component state) ──
 const search = ref('')
 const filtersOpen = ref(false)
-const page = ref(1)
 const moreHoverKey = ref<string | null>(null)
-const toast = ref<string | null>(null)
+const { message: toast, show: showToast } = usePageToast(3000)
 
 const catFilter = ref('')
 const platFilter = ref('')
@@ -32,8 +31,6 @@ const storedProducts = ref<StoredProduct[]>([])
 const loading = ref(true)
 const nowTs = ref(0)
 const loadError = ref('')
-
-let toastTimer: ReturnType<typeof setTimeout> | undefined
 
 // SSR-safe browser reads happen only after mount.
 onMounted(async () => {
@@ -53,17 +50,12 @@ onMounted(async () => {
     const msg = sessionStorage.getItem('vertex_toast')
     if (msg) {
       sessionStorage.removeItem('vertex_toast')
-      toast.value = msg
-      toastTimer = setTimeout(() => {
-        toast.value = null
-      }, 3000)
+      showToast(msg)
     }
   } catch {
     // sessionStorage unavailable
   }
 })
-
-onBeforeUnmount(() => clearTimeout(toastTimer))
 
 // ── summary tiles ──
 const stats: DashStat[] = [
@@ -250,11 +242,8 @@ const filteredRows = computed(() => {
 })
 
 // ── pagination ──
-const pageSize = 15
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredRows.value.length / pageSize)))
-const clampedPage = computed(() => Math.min(page.value, totalPages.value))
-const startIdx = computed(() => (clampedPage.value - 1) * pageSize)
-const pagedRows = computed(() => filteredRows.value.slice(startIdx.value, startIdx.value + pageSize))
+const { page, totalPages, clampedPage, startIdx, slice: pageSlice } = usePagination(() => filteredRows.value.length, 15)
+const pagedRows = computed(() => pageSlice(filteredRows.value))
 
 function goPage(p: number) {
   page.value = Math.min(Math.max(1, p), totalPages.value)

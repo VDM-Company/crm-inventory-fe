@@ -63,8 +63,6 @@ const initialPid = Array.isArray(rawProduct) ? rawProduct[0] : rawProduct
 const productId = ref(initialPid && PRODUCTS[initialPid] ? initialPid : 'p1')
 const demoMode = ref<'populated' | 'empty'>('populated')
 const searchQuery = ref('')
-const page = ref(1)
-const pageSize = 8
 
 const product = computed(() => PRODUCTS[productId.value] || PRODUCTS.p1!)
 const allVariants = computed(() => demoMode.value === 'empty' ? [] : buildVariants(product.value))
@@ -74,9 +72,7 @@ const filtered = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   return allVariants.value.filter(v => !q || v.name.toLowerCase().includes(q) || v.sku.toLowerCase().includes(q))
 })
-const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / pageSize)))
-const clampedPage = computed(() => Math.min(page.value, totalPages.value))
-const startIdx = computed(() => (clampedPage.value - 1) * pageSize)
+const { page, totalPages, clampedPage, startIdx, endIdx, isFirstPage, isLastPage, slice: pageSlice } = usePagination(() => filtered.value.length, 8)
 
 const columns: TableColumn<VariantRow & { priceLabel: string }>[] = [
   { accessorKey: 'name', header: 'Variant', meta: { class: { th: 'px-4', td: 'px-4' } } },
@@ -89,7 +85,7 @@ const columns: TableColumn<VariantRow & { priceLabel: string }>[] = [
 ]
 
 const pageRows = computed(() =>
-  filtered.value.slice(startIdx.value, startIdx.value + pageSize).map(v => ({
+  pageSlice(filtered.value).map(v => ({
     ...v,
     priceLabel: '$' + v.price.toFixed(2)
   }))
@@ -102,11 +98,9 @@ const showNoResultsRow = computed(() => noResults.value)
 const showTable = computed(() => !isEmpty.value && !noResults.value)
 
 const paginationLabel = computed(() =>
-  `Showing ${filtered.value.length === 0 ? 0 : startIdx.value + 1}–${Math.min(startIdx.value + pageSize, filtered.value.length)} of ${filtered.value.length} variant(s)`
+  `Showing ${filtered.value.length === 0 ? 0 : startIdx.value + 1}–${Math.min(endIdx.value, filtered.value.length)} of ${filtered.value.length} variant(s)`
 )
 const pageNumbers = computed(() => Array.from({ length: totalPages.value }, (_, i) => i + 1))
-const isFirstPage = computed(() => clampedPage.value === 1)
-const isLastPage = computed(() => clampedPage.value === totalPages.value)
 
 function goToPage(p: number) {
   page.value = Math.min(Math.max(1, p), totalPages.value)

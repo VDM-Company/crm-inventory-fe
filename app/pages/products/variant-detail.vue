@@ -70,14 +70,13 @@ const mode = ref<'view' | 'edit'>('view')
 const scope = ref('default')
 const scopeOpen = ref(false)
 const draft = ref<VariantRow | null>(null)
-const toast = ref<string | null>(null)
+const { message: toast, show: showToast } = usePageToast()
 const saveError = ref('')
 const loading = ref(true)
 
 const platforms = ref<Platform[]>([])
 const fees = ref<Fee[]>([])
 const imageInput = ref<HTMLInputElement | null>(null)
-let toastTimer: number | null = null
 
 onMounted(async () => {
   try {
@@ -104,10 +103,6 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
-})
-
-onBeforeUnmount(() => {
-  if (toastTimer !== null) clearTimeout(toastTimer)
 })
 
 const isViewMode = computed(() => mode.value === 'view')
@@ -420,11 +415,7 @@ async function onSaveEdit() {
   }
   product.value = merged
   mode.value = 'view'
-  toast.value = 'Variant updated successfully'
-  if (toastTimer !== null) clearTimeout(toastTimer)
-  toastTimer = window.setTimeout(() => {
-    toast.value = null
-  }, 2800)
+  showToast('Variant updated successfully')
 }
 </script>
 

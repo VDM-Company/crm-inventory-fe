@@ -34,11 +34,8 @@ const fees = ref<Fee[]>([])
 const loading = ref(true)
 const loadError = ref('')
 const modal = ref<ModalState | null>(null)
-const deleteTarget = ref<Fee | null>(null)
-const toast = ref<string | null>(null)
+const { message: toast, show: showToast } = usePageToast()
 const products = ref<StoredProduct[]>([])
-
-let toastTimer: number | null = null
 
 onMounted(async () => {
   try {
@@ -49,17 +46,6 @@ onMounted(async () => {
     loading.value = false
   }
 })
-onBeforeUnmount(() => {
-  if (toastTimer !== null) clearTimeout(toastTimer)
-})
-
-function showToast(msg: string) {
-  toast.value = msg
-  if (toastTimer !== null) clearTimeout(toastTimer)
-  toastTimer = window.setTimeout(() => {
-    toast.value = null
-  }, 2800)
-}
 
 const columns: TableColumn<Fee>[] = [
   { accessorKey: 'name', header: 'Component Name', meta: { class: { th: 'px-5', td: TABLE_EDGE.td } } },
@@ -124,35 +110,26 @@ async function onModalSubmit(event: FormSubmitEvent<ModalSchema>) {
 }
 
 // ── delete ──
-const deleteUsage = computed(() => deleteTarget.value ? feeUsageCount(products.value, deleteTarget.value.id) : 0)
-const deleteBlocked = computed(() => deleteUsage.value > 0)
-async function confirmDelete() {
-  const t = deleteTarget.value
-  if (!t || t.system || deleteBlocked.value) return
-  try {
-    await apiRemove('fees', t.id)
-  } catch (err) {
-    deleteTarget.value = null
-    showToast(apiErrorMessage(err, 'Could not delete the component.'))
-    return
-  }
-  fees.value = fees.value.filter(f => f.id !== t.id)
-  deleteTarget.value = null
-  showToast('Component deleted')
-}
-const deleteIcon = computed(() => deleteBlocked.value ? 'shield-alert' : 'trash-2')
-const deleteTitle = computed(() => {
-  const t = deleteTarget.value
-  if (!t) return ''
-  return deleteBlocked.value ? 'Cannot delete component' : 'Delete ' + t.name + '?'
+const {
+  target: deleteTarget,
+  blocked: deleteBlocked,
+  icon: deleteIcon,
+  title: deleteTitle,
+  message: deleteMessage,
+  cancelLabel: deleteCancelLabel,
+  confirm: confirmDelete,
+  cancel: cancelDelete
+} = useResourceDelete<Fee>({
+  resource: 'fees',
+  noun: 'component',
+  usageCount: t => feeUsageCount(products.value, t.id),
+  blockedMessage: u => `This component is used by ${u} product${u === 1 ? '' : 's'}. Remove it from them first.`,
+  isLocked: t => t.system,
+  onDeleted: (t) => {
+    fees.value = fees.value.filter(f => f.id !== t.id)
+  },
+  notify: showToast
 })
-const deleteMessage = computed(() => {
-  if (!deleteTarget.value) return ''
-  if (!deleteBlocked.value) return 'This action cannot be undone.'
-  const u = deleteUsage.value
-  return `This component is used by ${u} product${u === 1 ? '' : 's'}. Remove it from them first.`
-})
-const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel')
 </script>
 
 <template>
@@ -333,7 +310,7 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
       :tone="deleteBlocked ? 'warning' : 'danger'"
       :cancel-label="deleteCancelLabel"
       :show-confirm="!deleteBlocked"
-      @cancel="deleteTarget = null"
+      @cancel="cancelDelete"
       @confirm="confirmDelete"
     />
 

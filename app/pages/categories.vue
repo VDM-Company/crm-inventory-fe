@@ -41,12 +41,9 @@ const members = ref<string[]>([])
 const positions = ref<Record<string, Record<string, number>>>({ default: {} })
 const scopeOverride = ref<Record<string, boolean>>({})
 const search = ref('')
-const page = ref(1)
 const addModal = ref<AddModalState | null>(null)
 const deleteOpen = ref(false)
-const toast = ref<string | null>(null)
-
-let toastTimer: number | null = null
+const { message: toast, show: showToast } = usePageToast(2600)
 
 onMounted(async () => {
   let list: Category[] = []
@@ -66,17 +63,7 @@ onMounted(async () => {
   if (first) await select(first.id)
 })
 
-onBeforeUnmount(() => {
-  if (toastTimer !== null) clearTimeout(toastTimer)
-})
-
 // ── style helpers (ported) ──
-function ddTrigger(open: boolean) {
-  return `width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;border:1px solid ${open ? '#00c16a' : '#e2e8f0'};border-radius:8px;padding:9px 12px;height:40px;font-size:14px;background:#fff;cursor:pointer;color:#0f172a;${open ? 'box-shadow:0 0 0 3px rgba(0,193,106,0.15);' : ''}`
-}
-function ddChevron(open: boolean) {
-  return `display:inline-flex;align-items:center;color:#64748b;flex-shrink:0;transition:transform 150ms ease;transform:rotate(${open ? '180deg' : '0deg'});`
-}
 
 // ── deterministic catalog (design's hash-based catalogFor) ──
 function hashCode(str: string): number {
@@ -179,14 +166,6 @@ async function select(id: string) {
 
 function toggleExpand(id: string) {
   expanded.value = { ...expanded.value, [id]: !expanded.value[id] }
-}
-
-function showToast(msg: string) {
-  toast.value = msg
-  if (toastTimer !== null) clearTimeout(toastTimer)
-  toastTimer = window.setTimeout(() => {
-    toast.value = null
-  }, 2600)
 }
 
 // ── add / delete / save ──
@@ -381,11 +360,12 @@ const selCat = computed(() => selectedId.value ? categoryById(cats.value, select
 const selectedPath = computed(() => selCat.value ? categoryPathById(cats.value, selCat.value.id) : '')
 
 // ── scope ──
-const scopeChoices = computed(() => [{ id: 'default', name: 'Default' }].concat(platforms.value.map(p => ({ id: p.id, name: p.name }))))
-const scopeLabel = computed(() => (scopeChoices.value.find(c => c.id === scope.value) || scopeChoices.value[0])?.name || 'Default')
-function scopeOptStyle(sel: boolean) {
-  return `width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;border:none;border-radius:6px;background:${sel ? '#ecfdf5' : 'transparent'};padding:8px 10px;font-size:14px;color:${sel ? '#047857' : '#334155'};font-weight:${sel ? 600 : 400};cursor:pointer;`
-}
+const scopeChoices = computed(() =>
+  [{ id: 'default', name: 'Default' }]
+    .concat(platforms.value.map(p => ({ id: p.id, name: p.name })))
+    .map(c => ({ value: c.id, name: c.name, selected: c.id === scope.value }))
+)
+const scopeLabel = computed(() => (scopeChoices.value.find(c => c.value === scope.value) || scopeChoices.value[0])?.name || 'Default')
 function pickScope(id: string) {
   scope.value = id
   scopeOpen.value = false
@@ -413,11 +393,8 @@ const filteredList = computed(() => {
   })
   return list
 })
-const pageSize = 8
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredList.value.length / pageSize)))
-const clampedPage = computed(() => Math.min(page.value, totalPages.value))
-const startIdx = computed(() => (clampedPage.value - 1) * pageSize)
-const paged = computed(() => filteredList.value.slice(startIdx.value, startIdx.value + pageSize))
+const { page, totalPages, clampedPage, startIdx, slice: pageSlice } = usePagination(() => filteredList.value.length, 8)
+const paged = computed(() => pageSlice(filteredList.value))
 function goPage(p: number) {
   page.value = Math.min(Math.max(1, p), totalPages.value)
 }
@@ -536,25 +513,15 @@ function onReset() {
         <span class="text-[15px] font-bold text-slate-900">Select platform</span>
       </div>
       <div class="relative mb-3">
-        <button type="button" :style="ddTrigger(scopeOpen)" @click="scopeOpen = !scopeOpen">
-          <span class="whitespace-nowrap overflow-hidden text-ellipsis">{{ scopeLabel }}</span>
-          <span :style="ddChevron(scopeOpen)"><UIcon name="i-lucide-chevron-down" class="w-4 h-4" /></span>
-        </button>
-        <template v-if="scopeOpen">
-          <div class="fixed inset-0 z-40" @click="scopeOpen = false" />
-          <div class="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.14)] p-1 max-h-[250px] overflow-y-auto">
-            <button
-              v-for="opt in scopeChoices"
-              :key="opt.id"
-              type="button"
-              :style="scopeOptStyle(opt.id === scope)"
-              @click="pickScope(opt.id)"
-            >
-              <span>{{ opt.name }}</span>
-              <UIcon v-if="opt.id === scope" name="i-lucide-check" class="w-[15px] h-[15px] text-green-600" />
-            </button>
-          </div>
-        </template>
+        <VertexSelectMenu
+          :open="scopeOpen"
+          :label="scopeLabel"
+          :items="scopeChoices"
+          max-height="250px"
+          @toggle="scopeOpen = !scopeOpen"
+          @close="scopeOpen = false"
+          @select="pickScope"
+        />
       </div>
       <div v-if="isPlatformScope" class="flex items-center gap-2.5 flex-wrap">
         <span :style="scopeBadgeStyle">{{ scopeBadgeLabel }}</span>

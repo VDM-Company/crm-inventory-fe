@@ -8,11 +8,8 @@ useHead({ title: 'Platforms — Vertex' })
 const platforms = ref<Platform[]>([])
 const loading = ref(true)
 const loadError = ref('')
-const deleteTarget = ref<Platform | null>(null)
-const toast = ref<string | null>(null)
+const { message: toast, show: showToast } = usePageToast(3000)
 const products = ref<StoredProduct[]>([])
-
-let toastTimer: number | null = null
 
 onMounted(async () => {
   try {
@@ -33,17 +30,6 @@ onMounted(async () => {
     // ignore
   }
 })
-onBeforeUnmount(() => {
-  if (toastTimer !== null) clearTimeout(toastTimer)
-})
-
-function showToast(msg: string) {
-  toast.value = msg
-  if (toastTimer !== null) clearTimeout(toastTimer)
-  toastTimer = window.setTimeout(() => {
-    toast.value = null
-  }, 3000)
-}
 
 const columns: TableColumn<Platform>[] = [
   { accessorKey: 'name', header: 'Platform Name', meta: { class: { th: 'px-5', td: TABLE_EDGE.td } } },
@@ -57,35 +43,25 @@ function editHref(id: string) {
 }
 
 // ── delete ──
-const deleteAssigned = computed(() => deleteTarget.value ? platformAssignedCount(products.value, deleteTarget.value.id) : 0)
-const deleteBlocked = computed(() => deleteAssigned.value > 0)
-async function confirmDelete() {
-  const t = deleteTarget.value
-  if (!t || deleteBlocked.value) return
-  try {
-    await apiRemove('platforms', t.id)
-  } catch (err) {
-    deleteTarget.value = null
-    showToast(apiErrorMessage(err, 'Could not delete the platform.'))
-    return
-  }
-  platforms.value = platforms.value.filter(p => p.id !== t.id)
-  deleteTarget.value = null
-  showToast('Platform deleted')
-}
-const deleteIcon = computed(() => deleteBlocked.value ? 'shield-alert' : 'trash-2')
-const deleteTitle = computed(() => {
-  const t = deleteTarget.value
-  if (!t) return ''
-  return deleteBlocked.value ? 'Cannot delete platform' : 'Delete ' + t.name + '?'
+const {
+  target: deleteTarget,
+  blocked: deleteBlocked,
+  icon: deleteIcon,
+  title: deleteTitle,
+  message: deleteMessage,
+  cancelLabel: deleteCancelLabel,
+  confirm: confirmDelete,
+  cancel: cancelDelete
+} = useResourceDelete<Platform>({
+  resource: 'platforms',
+  noun: 'platform',
+  usageCount: t => platformAssignedCount(products.value, t.id),
+  blockedMessage: u => `This platform is assigned to ${u} product${u === 1 ? '' : 's'}. Unassign it first.`,
+  onDeleted: (t) => {
+    platforms.value = platforms.value.filter(x => x.id !== t.id)
+  },
+  notify: showToast
 })
-const deleteMessage = computed(() => {
-  if (!deleteTarget.value) return ''
-  if (!deleteBlocked.value) return 'This action cannot be undone.'
-  const a = deleteAssigned.value
-  return `This platform is assigned to ${a} product${a === 1 ? '' : 's'}. Unassign it first.`
-})
-const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel')
 </script>
 
 <template>
@@ -191,7 +167,7 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
       :tone="deleteBlocked ? 'warning' : 'danger'"
       :cancel-label="deleteCancelLabel"
       :show-confirm="!deleteBlocked"
-      @cancel="deleteTarget = null"
+      @cancel="cancelDelete"
       @confirm="confirmDelete"
     />
 

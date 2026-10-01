@@ -6,13 +6,10 @@ useHead({ title: 'Attributes — Vertex' })
 
 // ── state (mirrors the design's DCLogic state) ──
 const attrs = ref<AttributeDef[]>([])
-const deleteTarget = ref<AttributeDef | null>(null)
-const toast = ref<string | null>(null)
+const { message: toast, show: showToast } = usePageToast(2800)
 const products = ref<StoredProduct[]>([])
 const loading = ref(true)
 const loadError = ref('')
-
-let toastTimer: number | null = null
 
 // UTable column defs — per-column padding/width via `meta.class`, matching the
 // design's first/last-column gutters.
@@ -32,17 +29,6 @@ onMounted(async () => {
     loading.value = false
   }
 })
-onBeforeUnmount(() => {
-  if (toastTimer !== null) clearTimeout(toastTimer)
-})
-
-function showToast(msg: string) {
-  toast.value = msg
-  if (toastTimer !== null) clearTimeout(toastTimer)
-  toastTimer = window.setTimeout(() => {
-    toast.value = null
-  }, 2800)
-}
 
 // ── create / edit (a dedicated screen, not an inline modal) ──
 function onCreate() {
@@ -53,35 +39,25 @@ function onEdit(a: AttributeDef) {
 }
 
 // ── delete ──
-const deleteUsage = computed(() => deleteTarget.value ? attributeUsageCount(products.value, deleteTarget.value.name) : 0)
-const deleteBlocked = computed(() => deleteUsage.value > 0)
-async function confirmDelete() {
-  const t = deleteTarget.value
-  if (!t || deleteBlocked.value) return
-  try {
-    await apiRemove('attributes', t.id)
-  } catch (err) {
-    deleteTarget.value = null
-    showToast(apiErrorMessage(err, 'Could not delete the attribute.'))
-    return
-  }
-  attrs.value = attrs.value.filter(a => a.id !== t.id)
-  deleteTarget.value = null
-  showToast('Attribute deleted')
-}
-const deleteIcon = computed(() => deleteBlocked.value ? 'shield-alert' : 'trash-2')
-const deleteTitle = computed(() => {
-  const t = deleteTarget.value
-  if (!t) return ''
-  return deleteBlocked.value ? 'Cannot delete attribute' : 'Delete ' + t.name + '?'
+const {
+  target: deleteTarget,
+  blocked: deleteBlocked,
+  icon: deleteIcon,
+  title: deleteTitle,
+  message: deleteMessage,
+  cancelLabel: deleteCancelLabel,
+  confirm: confirmDelete,
+  cancel: cancelDelete
+} = useResourceDelete<AttributeDef>({
+  resource: 'attributes',
+  noun: 'attribute',
+  usageCount: t => attributeUsageCount(products.value, t.name),
+  blockedMessage: u => `This attribute is used by ${u} product${u === 1 ? '' : 's'}. Remove it from them first.`,
+  onDeleted: (t) => {
+    attrs.value = attrs.value.filter(x => x.id !== t.id)
+  },
+  notify: showToast
 })
-const deleteMessage = computed(() => {
-  if (!deleteTarget.value) return ''
-  if (!deleteBlocked.value) return 'This action cannot be undone.'
-  const u = deleteUsage.value
-  return `This attribute is used by ${u} product${u === 1 ? '' : 's'}. Remove it from them first.`
-})
-const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel')
 </script>
 
 <template>
@@ -190,7 +166,7 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
       :tone="deleteBlocked ? 'warning' : 'danger'"
       :cancel-label="deleteCancelLabel"
       :show-confirm="!deleteBlocked"
-      @cancel="deleteTarget = null"
+      @cancel="cancelDelete"
       @confirm="confirmDelete"
     />
 

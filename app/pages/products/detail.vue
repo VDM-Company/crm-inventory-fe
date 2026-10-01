@@ -127,7 +127,7 @@ const editVariants = ref<DetailVariant[]>([])
 const editAppliedKey = ref<string | null>(null)
 const cancelConfirmOpen = ref(false)
 const deleteConfirmOpen = ref(false)
-const toastMessage = ref<string | null>(null)
+const { message: toastMessage, show: showToast } = usePageToast()
 const saveError = ref('')
 const loading = ref(true)
 const historyOpen = ref(false)
@@ -140,7 +140,6 @@ const attributeDefs = ref<AttributeDef[]>([])
 
 const isStored = ref(false)
 let editSnapshot: string | null = null
-let toastTimer: number | null = null
 let deleteTimer: number | null = null
 
 function normalizeProduct(rec: DetailProduct | null): { product: DetailProduct, stored: boolean } {
@@ -198,7 +197,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  if (toastTimer !== null) clearTimeout(toastTimer)
+  // the toast owns its own timer; this one drives the post-delete redirect
   if (deleteTimer !== null) clearTimeout(deleteTimer)
 })
 
@@ -209,15 +208,6 @@ const isViewMode = computed(() => mode.value === 'view')
 function badgeStyle(status: string) {
   const active = status === 'Active'
   return `display:inline-block;font-size:12px;font-weight:700;padding:3px 12px;border-radius:999px;background:${active ? '#ecfdf5' : '#f1f5f9'};color:${active ? '#00a155' : '#64748b'};border:1px solid ${active ? '#a7f3d0' : '#e2e8f0'};`
-}
-function ddTrigger(open: boolean) {
-  return `width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;border:1px solid ${open ? '#00c16a' : '#e2e8f0'};border-radius:8px;padding:9px 12px;height:40px;font-size:14px;background:#fff;cursor:pointer;color:#0f172a;${open ? 'box-shadow:0 0 0 3px rgba(0,193,106,0.15);' : ''}`
-}
-function ddChevron(open: boolean) {
-  return `display:inline-flex;align-items:center;color:#64748b;flex-shrink:0;transition:transform 150ms ease;transform:rotate(${open ? '180deg' : '0deg'});`
-}
-function ddOption(selected: boolean) {
-  return `width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;border:none;border-radius:6px;background:${selected ? '#ecfdf5' : 'transparent'};padding:8px 10px;font-size:14px;color:${selected ? '#047857' : '#334155'};font-weight:${selected ? 600 : 400};cursor:pointer;`
 }
 const BADGE_OVERRIDE = 'font-size:11px;font-weight:700;color:#047857;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:999px;padding:1px 8px;white-space:nowrap;'
 const BADGE_INHERIT = 'font-size:11px;font-weight:600;color:#64748b;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:1px 8px;white-space:nowrap;'
@@ -272,7 +262,7 @@ const catFlat = computed(() =>
     const selected = o.id === draft.value.categoryId
     // every row is selectable; parents just read bolder
     const style = `width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;border:none;border-radius:6px;background:${selected ? '#ecfdf5' : 'transparent'};padding:8px 10px;padding-left:${o.depth ? (10 + o.depth * 16) : 10}px;font-size:14px;color:${selected ? '#047857' : '#0f172a'};font-weight:${selected ? 600 : (o.header ? 600 : 400)};cursor:pointer;`
-    return { id: o.id, name: o.name, selected, style }
+    return { value: o.id, name: o.name, selected, style }
   })
 )
 const hasCat = computed(() => !!(draft.value.categoryId || draft.value.category))
@@ -307,6 +297,7 @@ const editPlatformChips = computed(() =>
 const availablePlatforms = computed(() =>
   platforms.value.filter(p => (draft.value.platformIds || []).indexOf(p.id) === -1)
 )
+const platformItems = computed(() => availablePlatforms.value.map(p => ({ value: p.id, name: p.name })))
 const platformAllAssigned = computed(() => platforms.value.length > 0 && availablePlatforms.value.length === 0)
 const platformAddLabel = computed(() => editPlatformChips.value.length ? 'Add another platform' : 'Add platform')
 function addDraftPlatform(id: string) {
@@ -329,9 +320,9 @@ const scopeOv = computed<ScopeOverride>(() => draftOverrides.value[scope.value] 
 const scopeItems = computed(() =>
   [{ id: 'default', name: 'Default (All Platforms)' }]
     .concat(assignedScopePlatforms.value.map(p => ({ id: p.id, name: p.name })))
-    .map(it => ({ id: it.id, name: it.name, selected: it.id === scope.value }))
+    .map(it => ({ value: it.id, name: it.name, selected: it.id === scope.value }))
 )
-const scopeLabel = computed(() => (scopeItems.value.find(x => x.id === scope.value) || scopeItems.value[0])?.name || 'Default (All Platforms)')
+const scopeLabel = computed(() => (scopeItems.value.find(x => x.value === scope.value) || scopeItems.value[0])?.name || 'Default (All Platforms)')
 function setScope(id: string) {
   scope.value = id
   closeDropdown()
@@ -384,10 +375,10 @@ function stockDot(colour: string) {
   return `width:8px;height:8px;border-radius:999px;flex-shrink:0;background:${colour};`
 }
 const stockDotStyle = computed(() => stockDot(stockValue.value === 'out_stock' ? '#dc2626' : '#00c16a'))
-const stockItems: [string, string, string][] = [
-  ['in_stock', 'In Stock', '#00c16a'],
-  ['out_stock', 'Out of Stock', '#dc2626']
-]
+const stockMenuItems = computed(() => ([
+  { value: 'in_stock', name: 'In Stock', dot: '#00c16a' },
+  { value: 'out_stock', name: 'Out of Stock', dot: '#dc2626' }
+]).map(o => ({ value: o.value, name: o.name, selected: stockValue.value === o.value, meta: { dot: o.dot } })))
 // under a platform scope only Name and Price are overridable — Stock is global
 const stockLocked = computed(() => isPlatformScope.value)
 function onToggleStockDropdown() {
@@ -822,10 +813,7 @@ async function onSaveClick(_event: FormSubmitEvent<ProductSchema>) {
   product.value = merged
   draft.value = { ...merged }
   mode.value = 'view'
-  toastMessage.value = 'Product updated successfully'
-  toastTimer = window.setTimeout(() => {
-    toastMessage.value = null
-  }, 2800)
+  showToast('Product updated successfully')
 }
 
 // ── delete ──
@@ -941,25 +929,15 @@ async function onConfirmDelete() {
               <span class="text-sm font-bold text-slate-900">{{ isEditMode ? 'Editing for' : 'Viewing for' }}</span>
             </div>
             <div class="relative min-w-[260px]">
-              <button type="button" :style="ddTrigger(openDropdown === 'scope')" @click="toggleDropdown('scope')">
-                <span class="whitespace-nowrap overflow-hidden text-ellipsis">{{ scopeLabel }}</span>
-                <span :style="ddChevron(openDropdown === 'scope')"><UIcon name="i-lucide-chevron-down" class="w-4 h-4" /></span>
-              </button>
-              <template v-if="openDropdown === 'scope'">
-                <div class="fixed inset-0 z-40" @click="closeDropdown" />
-                <div class="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.14)] p-1 max-h-[260px] overflow-y-auto">
-                  <button
-                    v-for="opt in scopeItems"
-                    :key="opt.id"
-                    type="button"
-                    :style="ddOption(opt.selected)"
-                    @click="setScope(opt.id)"
-                  >
-                    <span>{{ opt.name }}</span>
-                    <UIcon v-if="opt.selected" name="i-lucide-check" class="w-[15px] h-[15px] text-green-600" />
-                  </button>
-                </div>
-              </template>
+              <VertexSelectMenu
+                :open="openDropdown === 'scope'"
+                :label="scopeLabel"
+                :items="scopeItems"
+                max-height="260px"
+                @toggle="toggleDropdown('scope')"
+                @close="closeDropdown"
+                @select="setScope"
+              />
             </div>
             <span v-if="isPlatformScope" class="text-[12.5px] text-slate-500">Only <strong class="text-slate-700">Name</strong> and <strong class="text-slate-700">Price</strong> can be overridden here — other fields are global.</span>
             <span v-if="isViewPlatformScope" class="text-[12.5px] text-slate-500">Showing effective values for this platform. Click <strong class="text-slate-700">Edit</strong> to override them.</span>
@@ -1111,28 +1089,16 @@ async function onConfirmDelete() {
               <template v-else>
                 <label class="field-label">Category</label>
                 <div class="relative">
-                  <button type="button" :style="ddTrigger(openDropdown === 'category')" @click="toggleDropdown('category')">
-                    <span
-                      class="whitespace-nowrap overflow-hidden text-ellipsis"
-                      :class="hasCat ? 'text-slate-900' : 'text-slate-400'"
-                    >{{ catDisplay }}</span>
-                    <span :style="ddChevron(openDropdown === 'category')"><UIcon name="i-lucide-chevron-down" class="w-4 h-4" /></span>
-                  </button>
-                  <template v-if="openDropdown === 'category'">
-                    <div class="fixed inset-0 z-40" @click="closeDropdown" />
-                    <div class="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.14)] max-h-[280px] overflow-y-auto p-1">
-                      <button
-                        v-for="opt in catFlat"
-                        :key="opt.id"
-                        type="button"
-                        :style="opt.style"
-                        @click="pickCategory(opt.id)"
-                      >
-                        <span>{{ opt.name }}</span>
-                        <UIcon v-if="opt.selected" name="i-lucide-check" class="w-[15px] h-[15px] text-green-600" />
-                      </button>
-                    </div>
-                  </template>
+                  <VertexSelectMenu
+                    :open="openDropdown === 'category'"
+                    :label="catDisplay"
+                    :placeholder="!hasCat"
+                    :items="catFlat"
+                    max-height="280px"
+                    @toggle="toggleDropdown('category')"
+                    @close="closeDropdown"
+                    @select="pickCategory"
+                  />
                 </div>
               </template>
             </div>
@@ -1176,27 +1142,24 @@ async function onConfirmDelete() {
                   </span>
                 </div>
                 <div class="relative">
-                  <button type="button" :style="ddTrigger(openDropdown === 'platform')" @click="toggleDropdown('platform')">
-                    <span class="text-slate-500 whitespace-nowrap overflow-hidden text-ellipsis">{{ platformAddLabel }}</span>
-                    <span :style="ddChevron(openDropdown === 'platform')"><UIcon name="i-lucide-chevron-down" class="w-4 h-4" /></span>
-                  </button>
-                  <template v-if="openDropdown === 'platform'">
-                    <div class="fixed inset-0 z-40" @click="closeDropdown" />
-                    <div class="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.14)] p-1 max-h-[220px] overflow-y-auto">
-                      <button
-                        v-for="opt in availablePlatforms"
-                        :key="opt.id"
-                        type="button"
-                        :style="ddOption(false)"
-                        @click="addDraftPlatform(opt.id)"
-                      >
-                        <span>{{ opt.name }}</span>
-                      </button>
+                  <VertexSelectMenu
+                    :open="openDropdown === 'platform'"
+                    :label="platformAddLabel"
+                    :items="platformItems"
+                    max-height="220px"
+                    @toggle="toggleDropdown('platform')"
+                    @close="closeDropdown"
+                    @select="addDraftPlatform"
+                  >
+                    <template #label>
+                      <span class="text-slate-500">{{ platformAddLabel }}</span>
+                    </template>
+                    <template #empty>
                       <div v-if="platformAllAssigned" class="p-2.5 text-[13px] text-slate-400 text-center">
                         All platforms assigned
                       </div>
-                    </div>
-                  </template>
+                    </template>
+                  </VertexSelectMenu>
                 </div>
               </template>
             </div>
@@ -1215,32 +1178,26 @@ async function onConfirmDelete() {
             >
               <label class="field-label">Stock</label>
               <div class="relative">
-                <button
-                  type="button"
-                  :disabled="stockLocked"
-                  :style="ddTrigger(openDropdown === 'stock') + (stockLocked ? 'cursor:not-allowed;' : '')"
-                  @click="onToggleStockDropdown"
+                <VertexSelectMenu
+                  :open="openDropdown === 'stock'"
+                  :label="stockLabel"
+                  :items="stockMenuItems"
+                  :locked="stockLocked"
+                  @toggle="onToggleStockDropdown"
+                  @close="closeDropdown"
+                  @select="pickStock"
                 >
-                  <span class="inline-flex items-center gap-2">
-                    <span :style="stockDotStyle" />{{ stockLabel }}
-                  </span>
-                  <span :style="ddChevron(openDropdown === 'stock')"><UIcon name="i-lucide-chevron-down" class="w-4 h-4" /></span>
-                </button>
-                <template v-if="openDropdown === 'stock'">
-                  <div class="fixed inset-0 z-40" @click="closeDropdown" />
-                  <div class="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.14)] p-1">
-                    <button
-                      v-for="opt in stockItems"
-                      :key="opt[0]"
-                      type="button"
-                      :style="ddOption(stockValue === opt[0])"
-                      @click="pickStock(opt[0])"
-                    >
-                      <span class="inline-flex items-center gap-2"><span :style="stockDot(opt[2])" />{{ opt[1] }}</span>
-                      <UIcon v-if="stockValue === opt[0]" name="i-lucide-check" class="w-[15px] h-[15px] text-green-600" />
-                    </button>
-                  </div>
-                </template>
+                  <template #label>
+                    <span class="inline-flex items-center gap-2">
+                      <span :style="stockDotStyle" />{{ stockLabel }}
+                    </span>
+                  </template>
+                  <template #option="{ item }">
+                    <span class="inline-flex items-center gap-2">
+                      <span :style="stockDot(String(item.meta?.dot))" />{{ item.name }}
+                    </span>
+                  </template>
+                </VertexSelectMenu>
               </div>
             </div>
 

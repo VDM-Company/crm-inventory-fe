@@ -123,15 +123,6 @@ watch(
 )
 
 // ── shared inline-style helpers (ported from the design) ──
-function ddTrigger(open: boolean) {
-  return `width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;border:1px solid ${open ? '#00c16a' : '#e2e8f0'};border-radius:8px;padding:9px 12px;height:40px;font-size:14px;background:#fff;cursor:pointer;color:#0f172a;${open ? 'box-shadow:0 0 0 3px rgba(0,193,106,0.15);' : ''}`
-}
-function ddChevron(open: boolean) {
-  return `display:inline-flex;align-items:center;color:#64748b;flex-shrink:0;transition:transform 150ms ease;transform:rotate(${open ? '180deg' : '0deg'});`
-}
-function ddOption(selected: boolean) {
-  return `width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;border:none;border-radius:6px;background:${selected ? '#ecfdf5' : 'transparent'};padding:8px 10px;font-size:14px;color:${selected ? '#047857' : '#334155'};font-weight:${selected ? 600 : 400};cursor:pointer;`
-}
 
 function toggleDropdown(key: string) {
   openDropdown.value = openDropdown.value === key ? null : key
@@ -197,7 +188,7 @@ const categoryFlat = computed(() =>
     const selected = o.id === form.categoryId
     // parent rows read bolder than leaves, but every row stays selectable
     const style = `width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;border:none;border-radius:6px;background:${selected ? '#ecfdf5' : 'transparent'};padding:8px 10px;padding-left:${o.depth ? (10 + o.depth * 16) : 10}px;font-size:14px;color:${selected ? '#047857' : '#0f172a'};font-weight:${selected ? 600 : (o.header ? 600 : 400)};cursor:pointer;`
-    return { id: o.id, name: o.name, selected, style }
+    return { value: o.id, name: o.name, selected, style }
   })
 )
 function pickCategory(id: string) {
@@ -217,6 +208,7 @@ const assignedPlatformChips = computed(() =>
 const availablePlatforms = computed(() =>
   platforms.value.filter(p => form.platformIds.indexOf(p.id) === -1)
 )
+const platformItems = computed(() => availablePlatforms.value.map(p => ({ value: p.id, name: p.name })))
 const platformAllAssigned = computed(() => platforms.value.length > 0 && availablePlatforms.value.length === 0)
 const platformAddLabel = computed(() => assignedPlatformChips.value.length ? 'Add another platform' : 'Add platform')
 function addPlatform(id: string) {
@@ -231,10 +223,10 @@ const stockLabel = computed(() => form.stock === 'out_stock' ? 'Out of Stock' : 
 function stockDot(colour: string) {
   return `width:8px;height:8px;border-radius:999px;flex-shrink:0;background:${colour};`
 }
-const stockItems: [string, string, string][] = [
-  ['in_stock', 'In Stock', '#00c16a'],
-  ['out_stock', 'Out of Stock', '#dc2626']
-]
+const stockMenuItems = computed(() => ([
+  { value: 'in_stock', name: 'In Stock', dot: '#00c16a' },
+  { value: 'out_stock', name: 'Out of Stock', dot: '#dc2626' }
+]).map(o => ({ value: o.value, name: o.name, selected: form.stock === o.value, meta: { dot: o.dot } })))
 function pickStock(value: string) {
   form.stock = value
   closeDropdown()
@@ -719,25 +711,14 @@ function onConfirmDiscard() {
             <div>
               <label class="field-label">Product Type</label>
               <div class="relative">
-                <button type="button" :style="ddTrigger(openDropdown === 'type')" @click="toggleDropdown('type')">
-                  <span class="whitespace-nowrap overflow-hidden text-ellipsis">{{ productTypeLabel }}</span>
-                  <span :style="ddChevron(openDropdown === 'type')"><UIcon name="i-lucide-chevron-down" class="w-4 h-4" /></span>
-                </button>
-                <template v-if="openDropdown === 'type'">
-                  <div class="fixed inset-0 z-40" @click="closeDropdown" />
-                  <div class="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.14)] p-1">
-                    <button
-                      v-for="opt in productTypeItems"
-                      :key="opt.value"
-                      type="button"
-                      :style="ddOption(opt.selected)"
-                      @click="setType(opt.value)"
-                    >
-                      <span>{{ opt.name }}</span>
-                      <UIcon v-if="opt.selected" name="i-lucide-check" class="w-[15px] h-[15px] text-green-600" />
-                    </button>
-                  </div>
-                </template>
+                <VertexSelectMenu
+                  :open="openDropdown === 'type'"
+                  :label="productTypeLabel"
+                  :items="productTypeItems"
+                  @toggle="toggleDropdown('type')"
+                  @close="closeDropdown"
+                  @select="setType($event as ProductType)"
+                />
               </div>
             </div>
           </div>
@@ -824,28 +805,16 @@ function onConfirmDiscard() {
             :ui="FORM_FIELD_COMPACT"
           >
             <div class="relative flex-1 min-w-0">
-              <button type="button" :style="ddTrigger(openDropdown === 'category')" @click="toggleDropdown('category')">
-                <span
-                  class="whitespace-nowrap overflow-hidden text-ellipsis"
-                  :class="form.categoryId || form.category ? 'text-slate-900' : 'text-slate-400'"
-                >{{ categoryDisplay }}</span>
-                <span :style="ddChevron(openDropdown === 'category')"><UIcon name="i-lucide-chevron-down" class="w-4 h-4" /></span>
-              </button>
-              <template v-if="openDropdown === 'category'">
-                <div class="fixed inset-0 z-40" @click="closeDropdown" />
-                <div class="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.14)] max-h-[280px] overflow-y-auto p-1">
-                  <button
-                    v-for="opt in categoryFlat"
-                    :key="opt.id"
-                    type="button"
-                    :style="opt.style"
-                    @click="pickCategory(opt.id)"
-                  >
-                    <span>{{ opt.name }}</span>
-                    <UIcon v-if="opt.selected" name="i-lucide-check" class="w-[15px] h-[15px] text-green-600" />
-                  </button>
-                </div>
-              </template>
+              <VertexSelectMenu
+                :open="openDropdown === 'category'"
+                :label="categoryDisplay"
+                :placeholder="!(form.categoryId || form.category)"
+                :items="categoryFlat"
+                max-height="280px"
+                @toggle="toggleDropdown('category')"
+                @close="closeDropdown"
+                @select="pickCategory"
+              />
             </div>
           </UFormField>
 
@@ -872,27 +841,24 @@ function onConfirmDiscard() {
               </span>
             </div>
             <div class="relative">
-              <button type="button" :style="ddTrigger(openDropdown === 'platform')" @click="toggleDropdown('platform')">
-                <span class="text-slate-500 whitespace-nowrap overflow-hidden text-ellipsis">{{ platformAddLabel }}</span>
-                <span :style="ddChevron(openDropdown === 'platform')"><UIcon name="i-lucide-chevron-down" class="w-4 h-4" /></span>
-              </button>
-              <template v-if="openDropdown === 'platform'">
-                <div class="fixed inset-0 z-40" @click="closeDropdown" />
-                <div class="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.14)] p-1 max-h-[220px] overflow-y-auto">
-                  <button
-                    v-for="opt in availablePlatforms"
-                    :key="opt.id"
-                    type="button"
-                    :style="ddOption(false)"
-                    @click="addPlatform(opt.id)"
-                  >
-                    <span>{{ opt.name }}</span>
-                  </button>
+              <VertexSelectMenu
+                :open="openDropdown === 'platform'"
+                :label="platformAddLabel"
+                :items="platformItems"
+                max-height="220px"
+                @toggle="toggleDropdown('platform')"
+                @close="closeDropdown"
+                @select="addPlatform"
+              >
+                <template #label>
+                  <span class="text-slate-500">{{ platformAddLabel }}</span>
+                </template>
+                <template #empty>
                   <div v-if="platformAllAssigned" class="p-2.5 text-[13px] text-slate-400 text-center">
                     All platforms assigned
                   </div>
-                </div>
-              </template>
+                </template>
+              </VertexSelectMenu>
             </div>
           </div>
 
@@ -900,27 +866,25 @@ function onConfirmDiscard() {
           <div class="mb-5">
             <label class="field-label">Stock</label>
             <div class="relative">
-              <button type="button" :style="ddTrigger(openDropdown === 'stock')" @click="toggleDropdown('stock')">
-                <span class="inline-flex items-center gap-2">
-                  <span :style="stockDot(form.stock === 'out_stock' ? '#dc2626' : '#00c16a')" />{{ stockLabel }}
-                </span>
-                <span :style="ddChevron(openDropdown === 'stock')"><UIcon name="i-lucide-chevron-down" class="w-4 h-4" /></span>
-              </button>
-              <template v-if="openDropdown === 'stock'">
-                <div class="fixed inset-0 z-40" @click="closeDropdown" />
-                <div class="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.14)] p-1">
-                  <button
-                    v-for="opt in stockItems"
-                    :key="opt[0]"
-                    type="button"
-                    :style="ddOption(form.stock === opt[0])"
-                    @click="pickStock(opt[0])"
-                  >
-                    <span class="inline-flex items-center gap-2"><span :style="stockDot(opt[2])" />{{ opt[1] }}</span>
-                    <UIcon v-if="form.stock === opt[0]" name="i-lucide-check" class="w-[15px] h-[15px] text-green-600" />
-                  </button>
-                </div>
-              </template>
+              <VertexSelectMenu
+                :open="openDropdown === 'stock'"
+                :label="stockLabel"
+                :items="stockMenuItems"
+                @toggle="toggleDropdown('stock')"
+                @close="closeDropdown"
+                @select="pickStock"
+              >
+                <template #label>
+                  <span class="inline-flex items-center gap-2">
+                    <span :style="stockDot(form.stock === 'out_stock' ? '#dc2626' : '#00c16a')" />{{ stockLabel }}
+                  </span>
+                </template>
+                <template #option="{ item }">
+                  <span class="inline-flex items-center gap-2">
+                    <span :style="stockDot(String(item.meta?.dot))" />{{ item.name }}
+                  </span>
+                </template>
+              </VertexSelectMenu>
             </div>
           </div>
 
