@@ -269,13 +269,10 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
             </div>
             <div>
               <label class="field-label">Description <span class="text-slate-400 font-normal">(optional)</span></label>
-              <input
-                class="field-input"
-                type="text"
-                :value="modal.desc"
+              <UInput
+                v-model="modal.desc"
                 placeholder="Short note about this fee"
-                @input="modal.desc = ($event.target as HTMLInputElement).value"
-              >
+              />
             </div>
           </div>
           <div class="flex justify-end gap-2.5 px-6 py-4 border-t border-slate-100">

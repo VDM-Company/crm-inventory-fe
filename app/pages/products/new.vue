@@ -707,11 +707,29 @@ function onConfirmDiscard() {
           </p>
 
           <div class="grid gap-4 mb-4 grid-cols-[repeat(auto-fit,minmax(min(180px,100%),1fr))]">
-            <UFormField name="name" label="Product Name" required>
-              <UInput v-model="form.name" placeholder="e.g. Premium Cotton T-Shirt" />
+            <UFormField
+              name="name"
+              label="Product Name"
+              required
+              :ui="FORM_FIELD_COMPACT"
+            >
+              <UInput
+                v-model="form.name"
+                placeholder="e.g. Premium Cotton T-Shirt"
+                :ui="fieldCompact()"
+              />
             </UFormField>
-            <UFormField name="sku" label="SKU" required>
-              <UInput v-model="form.sku" placeholder="e.g. TSH-001" />
+            <UFormField
+              name="sku"
+              label="SKU"
+              required
+              :ui="FORM_FIELD_COMPACT"
+            >
+              <UInput
+                v-model="form.sku"
+                placeholder="e.g. TSH-001"
+                :ui="fieldCompact()"
+              />
             </UFormField>
             <div>
               <label class="field-label">Product Type</label>
@@ -742,20 +760,20 @@ function onConfirmDiscard() {
           <div class="grid grid-cols-2 gap-4 mb-4 max-[560px]:grid-cols-1">
             <div>
               <label class="field-label">Notes</label>
-              <textarea
+              <UTextarea
                 v-model="form.notes"
-                class="field-input resize-y"
-                rows="3"
+                :rows="3"
                 placeholder="Internal notes about this product..."
+                :ui="fieldCompact('resize-y')"
               />
             </div>
             <div>
               <label class="field-label">Product Description</label>
-              <textarea
+              <UTextarea
                 v-model="form.description"
-                class="field-input resize-y"
-                rows="3"
+                :rows="3"
                 placeholder="Customer-facing product description..."
+                :ui="fieldCompact('resize-y')"
               />
             </div>
           </div>
@@ -818,6 +836,7 @@ function onConfirmDiscard() {
             label="Category"
             required
             class="mb-4"
+            :ui="FORM_FIELD_COMPACT"
           >
             <div class="relative flex-1 min-w-0">
               <button type="button" :style="ddTrigger(openDropdown === 'category')" @click="toggleDropdown('category')">
@@ -1139,13 +1158,12 @@ function onConfirmDiscard() {
                     class="grid grid-cols-[minmax(160px,1.6fr)_150px_90px_40px] gap-2 items-center px-4 py-2 border-b border-slate-100"
                   >
                     <span class="text-sm font-semibold text-slate-900">{{ v.name }}</span>
-                    <input
-                      class="field-input px-2.5 py-[7px] text-[13px]"
-                      type="text"
-                      :value="v.sku"
+                    <UInput
+                      :model-value="v.sku"
                       placeholder="SKU"
-                      @input="updateVariant(v.key, 'sku', ($event.target as HTMLInputElement).value)"
-                    >
+                      :ui="fieldCompactSm()"
+                      @update:model-value="updateVariant(v.key, 'sku', String($event))"
+                    />
                     <div class="text-center">
                       <button type="button" :style="trackStyle(v.active)" @click="toggleVariantActive(v.key)">
                         <span :style="knobStyle(v.active)" />
@@ -1306,14 +1324,17 @@ function onConfirmDiscard() {
                     <div class="flex-1">
                       <label class="field-label">Monthly Fee</label>
                       <div class="relative">
-                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">¥</span>
-                        <input
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 z-10 text-sm text-slate-400">¥</span>
+                        <!-- `focus` is not a UInput emit, and its template binds
+                             `@focus` after `v-bind="$attrs"`, so a `@focus` here is
+                             dropped. `focusin` bubbles and passes straight through. -->
+                        <UInput
                           v-model="form.priceMonthly"
-                          class="field-input pl-[26px]"
                           type="number"
                           placeholder="0.00"
-                          @focus="onPricingFocus"
-                        >
+                          :ui="fieldCompact('pl-[26px]')"
+                          @focusin="onPricingFocus"
+                        />
                       </div>
                     </div>
                     <div v-if="pricingEditing" class="flex gap-1.5 flex-shrink-0">
@@ -1389,14 +1410,14 @@ function onConfirmDiscard() {
                           </div>
                         </div>
                         <div class="relative w-[150px] flex-shrink-0">
-                          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">¥</span>
-                          <input
-                            class="field-input pl-[26px]"
+                          <span class="absolute left-3 top-1/2 -translate-y-1/2 z-10 text-sm text-slate-400">¥</span>
+                          <UInput
+                            :model-value="String(c.amount)"
                             type="number"
-                            :value="c.amount"
                             placeholder="0"
-                            @input="setComponentAmount(c.index, ($event.target as HTMLInputElement).value)"
-                          >
+                            :ui="fieldCompact('pl-[26px]')"
+                            @update:model-value="setComponentAmount(c.index, String($event))"
+                          />
                         </div>
                         <div class="w-24 flex-shrink-0 flex justify-center">
                           <button
@@ -1486,12 +1507,11 @@ function onConfirmDiscard() {
         <div class="p-6">
           <div class="mb-5">
             <label class="field-label">Component Name</label>
-            <input
+            <UInput
               v-model="componentModal.name"
-              class="field-input"
-              type="text"
               placeholder="Input here"
-            >
+              :ui="fieldCompact()"
+            />
           </div>
           <div class="text-[13px] font-bold text-slate-900 mb-2.5">
             Add Product

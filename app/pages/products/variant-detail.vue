@@ -318,11 +318,11 @@ function removeComponent(feeId: string) {
     pricing: { ...d.pricing, components: d.pricing.components.filter(c => c.feeId !== feeId) }
   }
 }
-function onStockChange(e: Event) {
-  update('stock', (e.target as HTMLInputElement).value)
+function onStockChange(val: string | number) {
+  update('stock', String(val ?? ''))
 }
-function onDescriptionChange(e: Event) {
-  update('description', (e.target as HTMLTextAreaElement).value)
+function onDescriptionChange(val: string | number) {
+  update('description', String(val ?? ''))
 }
 
 // ── image ──
@@ -593,13 +593,13 @@ function onSaveEdit() {
             <div v-if="isViewMode" class="static-value whitespace-pre-wrap">
               {{ descriptionDisplay }}
             </div>
-            <textarea
+            <UTextarea
               v-else
-              class="field-input resize-y"
-              rows="3"
-              :value="descriptionValue"
+              :model-value="descriptionValue"
+              :rows="3"
               placeholder="Notes specific to this variant..."
-              @input="onDescriptionChange"
+              :ui="fieldUi('resize-y')"
+              @update:model-value="onDescriptionChange"
             />
           </div>
 
@@ -740,14 +740,13 @@ function onSaveEdit() {
             <div v-if="isViewMode" class="static-value">
               {{ stockLabel }}
             </div>
-            <input
+            <UInput
               v-else
-              class="field-input"
+              :model-value="String(stockValue)"
               type="number"
-              :value="stockValue"
               placeholder="0"
-              @input="onStockChange"
-            >
+              @update:model-value="onStockChange"
+            />
           </div>
 
           <div class="flex items-center justify-between gap-3 py-3.5 border-t border-slate-100">
@@ -843,14 +842,14 @@ function onSaveEdit() {
               {{ monthlyLabel }}
             </div>
             <div v-else class="relative">
-              <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-slate-400">¥</span>
-              <input
-                class="field-input pl-6 py-1.5"
+              <span class="absolute left-2.5 top-1/2 -translate-y-1/2 z-10 text-sm text-slate-400">¥</span>
+              <UInput
+                :model-value="String(monthlyValue)"
                 type="number"
-                :value="monthlyValue"
                 placeholder="0"
-                @input="setMonthly(($event.target as HTMLInputElement).value)"
-              >
+                :ui="fieldUi('py-1.5 pl-6')"
+                @update:model-value="setMonthly(String($event))"
+              />
             </div>
           </div>
           <div class="grow shrink basis-[140px] min-w-0 border border-slate-200 rounded-[10px] px-4 py-3.5">
@@ -873,14 +872,14 @@ function onSaveEdit() {
             <span class="text-sm font-semibold">{{ c.name }}</span>
             <span v-if="isViewMode" class="text-sm">{{ c.amountLabel }}</span>
             <div v-else class="relative">
-              <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-[13px] text-slate-400">¥</span>
-              <input
-                class="field-input px-2 py-1.5 pl-[22px] text-[13px]"
+              <span class="absolute left-2.5 top-1/2 -translate-y-1/2 z-10 text-[13px] text-slate-400">¥</span>
+              <UInput
+                :model-value="String(c.amount)"
                 type="number"
-                :value="c.amount"
                 placeholder="0"
-                @input="setComponentAmount(c.feeId, ($event.target as HTMLInputElement).value)"
-              >
+                :ui="fieldUi('px-2 py-1.5 pl-[22px] text-[13px] md:text-[13px]')"
+                @update:model-value="setComponentAmount(c.feeId, String($event))"
+              />
             </div>
             <span>
               <span v-if="isViewMode" :style="c.publishedStyle">{{ c.publishedLabel }}</span>

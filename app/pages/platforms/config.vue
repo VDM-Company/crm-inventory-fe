@@ -129,13 +129,11 @@ const crumbLast = computed(() => platform.value ? platform.value.name : 'Platfor
           required
           class="mb-[18px]"
         >
-          <input
-            :value="identity.name"
-            type="text"
-            class="field-input"
+          <UInput
+            :model-value="identity.name"
             placeholder="e.g. SIM Point"
-            @input="setIdentity('name', ($event.target as HTMLInputElement).value)"
-          >
+            @update:model-value="setIdentity('name', String($event))"
+          />
         </UFormField>
 
         <UFormField
@@ -145,23 +143,20 @@ const crumbLast = computed(() => platform.value ? platform.value.name : 'Platfor
           help="Locked — the code can't change after creation."
           class="mb-[18px]"
         >
-          <input
-            :value="identity.code"
-            type="text"
+          <UInput
+            :model-value="identity.code"
             disabled
-            class="field-input font-mono"
             placeholder="e.g. sim_point"
-          >
+            :ui="fieldUi('font-mono')"
+          />
         </UFormField>
 
         <UFormField name="url" label="URL / Path" required>
-          <input
-            :value="identity.url"
-            type="text"
-            class="field-input"
+          <UInput
+            :model-value="identity.url"
             placeholder="e.g. vdm.com/sp-sim"
-            @input="setIdentity('url', ($event.target as HTMLInputElement).value)"
-          >
+            @update:model-value="setIdentity('url', String($event))"
+          />
         </UFormField>
       </UCard>
 

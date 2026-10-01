@@ -139,25 +139,23 @@ const groups = computed(() => CONFIG_GROUPS.map(def => ({
             />
           </UButton>
 
-          <textarea
+          <UTextarea
             v-else-if="f.isTextarea"
-            :value="f.value"
-            rows="3"
-            class="field-input resize-y"
+            :model-value="f.value"
+            :rows="3"
             :disabled="f.locked"
             :placeholder="f.placeholder"
+            :ui="fieldUi('resize-y')"
             @change="setCfg(f.key, ($event.target as HTMLTextAreaElement).value)"
           />
 
-          <input
+          <UInput
             v-else
-            :value="f.value"
-            type="text"
-            class="field-input"
+            :model-value="f.value"
             :disabled="f.locked"
             :placeholder="f.placeholder"
             @change="setCfg(f.key, ($event.target as HTMLInputElement).value)"
-          >
+          />
 
           <div v-if="f.hint" class="text-[12.5px] text-slate-400 mt-1.5 flex items-center gap-[5px]">
             <UIcon name="i-lucide-info" class="w-3 h-3 flex-shrink-0" />{{ f.hint }}

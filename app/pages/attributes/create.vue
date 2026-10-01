@@ -204,7 +204,7 @@ function onSubmit(event: FormSubmitEvent<Schema>) {
                   Require at least one value to save.
                 </div>
               </div>
-              <button :style="requiredTrackStyle" @click="toggleRequired">
+              <button type="button" :style="requiredTrackStyle" @click="toggleRequired">
                 <span :style="requiredKnobStyle" />
               </button>
             </div>
@@ -215,6 +215,7 @@ function onSubmit(event: FormSubmitEvent<Schema>) {
                 <div v-for="o in optionRows" :key="o.index" class="flex items-center gap-2">
                   <div class="flex flex-col gap-0.5 flex-shrink-0">
                     <button
+                      type="button"
                       :disabled="o.isFirst"
                       title="Move up"
                       class="hover:bg-slate-100"
@@ -224,6 +225,7 @@ function onSubmit(event: FormSubmitEvent<Schema>) {
                       <UIcon name="i-lucide-chevron-up" class="w-[13px] h-[13px]" />
                     </button>
                     <button
+                      type="button"
                       :disabled="o.isLast"
                       title="Move down"
                       class="hover:bg-slate-100"
@@ -233,13 +235,12 @@ function onSubmit(event: FormSubmitEvent<Schema>) {
                       <UIcon name="i-lucide-chevron-down" class="w-[13px] h-[13px]" />
                     </button>
                   </div>
-                  <input
-                    class="field-input flex-1"
-                    type="text"
-                    :value="o.value"
+                  <UInput
+                    :model-value="o.value"
                     placeholder="Option value"
-                    @input="setOption(o.index, ($event.target as HTMLInputElement).value)"
-                  >
+                    class="flex-1"
+                    @update:model-value="setOption(o.index, String($event))"
+                  />
                   <UButton
                     variant="ghost"
 
@@ -303,20 +304,17 @@ function onSubmit(event: FormSubmitEvent<Schema>) {
           </div>
           <label class="field-label">{{ previewLabel }}</label>
 
-          <input
+          <UInput
             v-if="type === 'Text'"
-            class="field-input"
-            type="text"
             :placeholder="previewPlaceholder"
             disabled
-          >
-          <input
+          />
+          <UInput
             v-else-if="type === 'Numeric'"
-            class="field-input"
             type="number"
             placeholder="0"
             disabled
-          >
+          />
           <select v-else-if="type === 'Select'" class="field-input" disabled>
             <option v-for="o in previewOptions" :key="o">
               {{ o }}

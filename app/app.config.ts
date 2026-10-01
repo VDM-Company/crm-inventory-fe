@@ -58,7 +58,7 @@ export default defineAppConfig({
     input: {
       slots: {
         root: 'w-full',
-        base: 'w-full border border-slate-200 rounded-lg text-slate-900 outline-none transition-[border-color,box-shadow] duration-150 focus:border-green-500 focus:ring-[3px] focus:ring-green-500/15 placeholder:text-slate-400 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed'
+        base: 'w-full border border-slate-200 rounded-lg text-slate-900 outline-none transition-[border-color,box-shadow] duration-150 focus:border-green-500 focus:ring-[3px] focus:ring-green-500/15 placeholder:text-slate-400 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed disabled:opacity-100'
       },
       variants: {
         variant: {
@@ -80,7 +80,7 @@ export default defineAppConfig({
     textarea: {
       slots: {
         root: 'w-full',
-        base: 'w-full border border-slate-200 rounded-lg text-slate-900 outline-none transition-[border-color,box-shadow] duration-150 focus:border-green-500 focus:ring-[3px] focus:ring-green-500/15 placeholder:text-slate-400 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed'
+        base: 'w-full border border-slate-200 rounded-lg text-slate-900 outline-none transition-[border-color,box-shadow] duration-150 focus:border-green-500 focus:ring-[3px] focus:ring-green-500/15 placeholder:text-slate-400 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed disabled:opacity-100'
       },
       variants: {
         variant: {

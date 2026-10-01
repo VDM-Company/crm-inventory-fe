@@ -974,10 +974,11 @@ function onConfirmDelete() {
                   <label class="field-label mb-1.5">Product Name</label>
                   <span v-if="isPlatformScope" :style="nameHasOverride ? BADGE_OVERRIDE : BADGE_INHERIT">{{ nameHasOverride ? 'Overridden' : 'Inherited' }}</span>
                 </div>
-                <UFormField name="name">
+                <UFormField name="name" :ui="FORM_FIELD_COMPACT">
                   <UInput
                     :model-value="nameFieldValue"
                     placeholder="e.g. Tourist SIM 15GB"
+                    :ui="fieldCompact()"
                     @update:model-value="onNameChange"
                   />
                 </UFormField>
@@ -1004,13 +1005,12 @@ function onConfirmDelete() {
               </template>
               <template v-else>
                 <label class="field-label">SKU</label>
-                <input
-                  class="field-input"
-                  type="text"
-                  :value="draft.sku"
+                <UInput
+                  :model-value="draft.sku"
                   disabled
                   title="SKU cannot be changed after creation"
-                >
+                  :ui="fieldCompact()"
+                />
                 <div class="text-xs text-slate-400 mt-[5px] flex items-center gap-1">
                   <UIcon name="i-lucide-lock" class="w-[11px] h-[11px]" /> SKU cannot be changed after creation
                 </div>
@@ -1027,13 +1027,12 @@ function onConfirmDelete() {
               </template>
               <template v-else>
                 <label class="field-label">Product Type</label>
-                <input
-                  class="field-input"
-                  type="text"
-                  :value="productTypeLabel"
+                <UInput
+                  :model-value="productTypeLabel"
                   disabled
                   title="Product type cannot be changed after creation"
-                >
+                  :ui="fieldCompact()"
+                />
                 <div class="text-xs text-slate-400 mt-[5px] flex items-center gap-1">
                   <UIcon name="i-lucide-lock" class="w-[11px] h-[11px]" /> Product type cannot be changed after creation
                 </div>
@@ -1051,12 +1050,12 @@ function onConfirmDelete() {
             </template>
             <template v-else>
               <label class="field-label">Notes</label>
-              <textarea
-                class="field-input resize-y"
-                rows="3"
-                :value="draft.notes"
+              <UTextarea
+                :model-value="draft.notes"
+                :rows="3"
                 placeholder="Internal notes about this product..."
-                @input="draft.notes = ($event.target as HTMLTextAreaElement).value"
+                :ui="fieldCompact('resize-y')"
+                @update:model-value="draft.notes = String($event)"
               />
             </template>
           </div>
@@ -1409,13 +1408,12 @@ function onConfirmDelete() {
                       class="grid grid-cols-[minmax(140px,1.4fr)_130px_80px_40px] gap-2 items-center px-4 py-2 border-b border-slate-100"
                     >
                       <span class="text-sm font-semibold text-slate-900">{{ ev.name }}</span>
-                      <input
-                        class="field-input px-2.5 py-[7px] text-[13px]"
-                        type="text"
-                        :value="ev.sku"
+                      <UInput
+                        :model-value="ev.sku"
                         placeholder="SKU"
-                        @input="updateEditVariant(ev.name, 'sku', ($event.target as HTMLInputElement).value)"
-                      >
+                        :ui="fieldCompactSm()"
+                        @update:model-value="updateEditVariant(ev.name, 'sku', String($event))"
+                      />
                       <div class="text-center">
                         <button type="button" :style="trackStyle(!!ev.active)" @click="updateEditVariant(ev.name, 'active', !ev.active)">
                           <span :style="knobStyle(!!ev.active)" />
@@ -1631,13 +1629,14 @@ function onConfirmDelete() {
               <div v-if="editIsSubscription" class="mb-5 max-w-[320px]">
                 <label class="field-label">Monthly Fee</label>
                 <div class="relative">
-                  <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">¥</span>
-                  <input
-                    v-model="editMonthly"
-                    class="field-input pl-[26px]"
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 z-10 text-sm text-slate-400">¥</span>
+                  <UInput
+                    :model-value="String(editMonthly)"
                     type="number"
                     placeholder="0.00"
-                  >
+                    :ui="fieldCompact('pl-[26px]')"
+                    @update:model-value="editMonthly = String($event)"
+                  />
                 </div>
               </div>
 
@@ -1692,14 +1691,14 @@ function onConfirmDelete() {
                     </div>
 
                     <div class="relative w-[150px] flex-shrink-0">
-                      <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">¥</span>
-                      <input
-                        class="field-input pl-[26px]"
+                      <span class="absolute left-3 top-1/2 -translate-y-1/2 z-10 text-sm text-slate-400">¥</span>
+                      <UInput
+                        :model-value="String(c.amount)"
                         type="number"
-                        :value="c.amount"
                         placeholder="0"
+                        :ui="fieldCompact('pl-[26px]')"
                         @change="setComponentAmount(c.index, ($event.target as HTMLInputElement).value)"
-                      >
+                      />
                     </div>
 
                     <div class="w-24 flex-shrink-0 flex justify-center">

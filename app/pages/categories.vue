@@ -684,13 +684,11 @@ function onReset() {
               :error="nameError ? 'Category name is required.' : ''"
               class="mb-[18px]"
             >
-              <input
-                class="field-input"
-                type="text"
-                :value="draftName"
+              <UInput
+                :model-value="draftName"
                 placeholder="e.g. Tourist SIM"
-                @input="draftName = ($event.target as HTMLInputElement).value; nameError = false"
-              >
+                @update:model-value="draftName = String($event); nameError = false"
+              />
             </VertexField>
 
             <div class="flex items-center justify-between gap-3 pt-4 border-t border-slate-100">
@@ -924,7 +922,7 @@ function onReset() {
                 </div>
               </div>
               <div class="flex items-center gap-[9px] flex-shrink-0">
-                <button :style="trackStyle(addModal.enabled)" @click="addModal.enabled = !addModal.enabled">
+                <button type="button" :style="trackStyle(addModal.enabled)" @click="addModal.enabled = !addModal.enabled">
                   <span :style="knobStyle(addModal.enabled)" />
                 </button>
                 <span class="text-[13.5px] font-semibold text-slate-700 w-[26px]">{{ addModal.enabled ? 'Yes' : 'No' }}</span>
@@ -941,7 +939,7 @@ function onReset() {
                 </div>
               </div>
               <div class="flex items-center gap-[9px] flex-shrink-0">
-                <button :style="trackStyle(addModal.inMenu)" @click="addModal.inMenu = !addModal.inMenu">
+                <button type="button" :style="trackStyle(addModal.inMenu)" @click="addModal.inMenu = !addModal.inMenu">
                   <span :style="knobStyle(addModal.inMenu)" />
                 </button>
                 <span class="text-[13.5px] font-semibold text-slate-700 w-[26px]">{{ addModal.inMenu ? 'Yes' : 'No' }}</span>

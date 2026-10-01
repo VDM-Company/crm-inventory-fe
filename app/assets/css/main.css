@@ -26,6 +26,9 @@
      Ported from the design's per-screen <style> blocks. These were duplicated
      verbatim across 8-11 pages; they live here so a screen only declares what
      is genuinely its own.
+     `.field-input` now dresses the native <select>s only — every <input> and
+     <textarea> is a UInput / UTextarea, themed in `app.config.ts` and sized by
+     the presets in `app/utils/field.ts`.
      `.form-compact` is the tighter variant used by the two large product forms
      (Create New Product / Product Detail). */
 
@@ -52,11 +55,6 @@
   .field-input::placeholder {
     color: #94a3b8;
   }
-  .field-input.err,
-  .field-input.has-error {
-    border-color: #dc2626;
-  }
-
   .field-label {
     font-size: 14px;
     font-weight: 600;
