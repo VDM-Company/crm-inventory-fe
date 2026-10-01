@@ -37,9 +37,11 @@ const modal = ref<ModalState | null>(null)
 const { message: toast, show: showToast } = usePageToast()
 const products = ref<StoredProduct[]>([])
 
+const productsApi = useApiProducts()
+
 onMounted(async () => {
   try {
-    ;[fees.value, products.value] = await Promise.all([loadFees(), loadProducts()])
+    ;[fees.value, products.value] = await Promise.all([loadFees(), productsApi.list()])
   } catch (err) {
     loadError.value = apiErrorMessage(err, 'Could not load pricing components.')
   } finally {

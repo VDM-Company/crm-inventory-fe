@@ -11,9 +11,11 @@ const loadError = ref('')
 const { message: toast, show: showToast } = usePageToast(3000)
 const products = ref<StoredProduct[]>([])
 
+const productsApi = useApiProducts()
+
 onMounted(async () => {
   try {
-    ;[platforms.value, products.value] = await Promise.all([loadPlatforms(), loadProducts()])
+    ;[platforms.value, products.value] = await Promise.all([loadPlatforms(), productsApi.list()])
   } catch (err) {
     loadError.value = apiErrorMessage(err, 'Could not load platforms.')
   } finally {

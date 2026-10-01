@@ -33,7 +33,7 @@ export function feeById(list: Fee[], id: string): Fee | null {
 // our array-shaped `pricing`, so this is effectively 0 in practice) then a
 // legacy top-level `initialComponents`.
 // How many products reference this fee (delete-protection).
-// Pure: pass a list loaded with `loadProducts()` so it can drive a computed.
+// Pure: pass a list loaded with `useApiProducts().list()` so it can drive a computed.
 export function feeUsageCount(products: StoredProduct[], id: string): number {
   return products.filter(p => (p.pricing || []).some(v => (v?.components || []).some(c => c?.feeId === id))).length
 }

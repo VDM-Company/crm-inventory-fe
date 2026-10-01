@@ -163,7 +163,7 @@ async function loadRecordById(rawId: unknown): Promise<DetailProduct | null> {
   const id = Array.isArray(rawId) ? rawId[0] : rawId
   if (!id) return null
   try {
-    return await loadProduct(id) as DetailProduct
+    return await productsApi.get<DetailProduct>(id)
   } catch (err) {
     // Only an unknown id falls back to the demo record. Any other failure has
     // to surface: showing demo data for a real id would let someone edit it
@@ -173,6 +173,8 @@ async function loadRecordById(rawId: unknown): Promise<DetailProduct | null> {
     throw err
   }
 }
+
+const productsApi = useApiProducts()
 
 onMounted(async () => {
   try {
@@ -760,7 +762,7 @@ function onConfirmDiscard() {
 
 async function persist(merged: DetailProduct) {
   if (!isStored.value || !merged.id) return
-  await apiUpdate<DetailProduct>('products', merged.id, merged)
+  await productsApi.update<DetailProduct>(merged.id, merged)
 }
 async function onSaveClick(_event: FormSubmitEvent<ProductSchema>) {
   const d = draft.value
@@ -826,7 +828,7 @@ function onCancelDelete() {
 async function onConfirmDelete() {
   if (isStored.value && product.value.id) {
     try {
-      await apiRemove('products', product.value.id)
+      await productsApi.remove(product.value.id)
     } catch (err) {
       deleteConfirmOpen.value = false
       saveError.value = apiErrorMessage(err, 'Could not delete the product.')

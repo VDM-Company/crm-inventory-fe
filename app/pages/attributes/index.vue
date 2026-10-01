@@ -20,9 +20,11 @@ const columns: TableColumn<AttributeDef>[] = [
   { id: 'action', header: 'Action', meta: { class: { th: 'px-5 text-right w-[130px]', td: TABLE_EDGE.td } } }
 ]
 
+const productsApi = useApiProducts()
+
 onMounted(async () => {
   try {
-    ;[attrs.value, products.value] = await Promise.all([loadAttributeDefs(), loadProducts()])
+    ;[attrs.value, products.value] = await Promise.all([loadAttributeDefs(), productsApi.list()])
   } catch (err) {
     loadError.value = apiErrorMessage(err, 'Could not load attributes.')
   } finally {

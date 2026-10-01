@@ -15,7 +15,7 @@ export async function loadAttributeDefs(): Promise<AttributeDef[]> {
 
 // How many stored products reference this attribute name (delete-protection).
 // How many products use this attribute (delete-protection).
-// Pure: pass a list loaded with `loadProducts()` so it can drive a computed.
+// Pure: pass a list loaded with `useApiProducts().list()` so it can drive a computed.
 export function attributeUsageCount(products: StoredProduct[], name: string): number {
   const needle = (name || '').toLowerCase()
   return products.filter(p => (p.attributes || []).some(a => String(a?.name || '').toLowerCase() === needle)).length

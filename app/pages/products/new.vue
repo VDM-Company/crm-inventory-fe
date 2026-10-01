@@ -92,13 +92,15 @@ let toastTimer: number | null = null
 const hasVariants = computed(() => productType.value === 'variant')
 const isBundle = computed(() => productType.value === 'bundle')
 
+const productsApi = useApiProducts()
+
 onMounted(async () => {
   try {
     ;[categories.value, platforms.value, attributeDefs.value, fees.value, existingSkus.value] = await Promise.all([
       loadCategories(), loadPlatforms(), loadAttributeDefs(), loadFees(),
       // the duplicate-SKU rule runs inside a zod refine, which cannot await —
       // so the list it checks against is fetched once here
-      loadProducts().then((list) => {
+      productsApi.list().then((list) => {
         catalogProducts.value = list
         return productSkus(list)
       })
@@ -591,7 +593,7 @@ async function commitSave() {
   if (saving.value) return
   saving.value = true
   try {
-    await apiCreate<StoredProduct>('products', rec)
+    await productsApi.create(rec)
   } catch (err) {
     saving.value = false
     saveConfirmOpen.value = false

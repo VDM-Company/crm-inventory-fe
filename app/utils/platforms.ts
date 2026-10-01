@@ -29,7 +29,7 @@ export function platformSlug(name: string): string {
 }
 
 // How many products are assigned to this platform (delete-protection).
-// Pure: pass a list loaded with `loadProducts()` so it can drive a computed.
+// Pure: pass a list loaded with `useApiProducts().list()` so it can drive a computed.
 export function platformAssignedCount(products: StoredProduct[], platformId: string): number {
   return products.filter(p => Array.isArray(p.platformIds) && p.platformIds.indexOf(platformId) !== -1).length
 }

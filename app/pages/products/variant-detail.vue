@@ -78,6 +78,8 @@ const platforms = ref<Platform[]>([])
 const fees = ref<Fee[]>([])
 const imageInput = ref<HTMLInputElement | null>(null)
 
+const productsApi = useApiProducts()
+
 onMounted(async () => {
   try {
     try {
@@ -87,7 +89,7 @@ onMounted(async () => {
     }
     if (productKey && productKey !== 'demo') {
       try {
-        const rec = await loadProduct(productKey) as ParentProduct
+        const rec = await productsApi.get<ParentProduct>(productKey)
         if (rec) {
           product.value = rec
           isStored.value = !!rec.id
@@ -407,7 +409,7 @@ async function onSaveEdit() {
   }
   if (isStored.value && merged.id) {
     try {
-      await apiUpdate<ParentProduct>('products', merged.id, merged)
+      await productsApi.update<ParentProduct>(merged.id, merged)
     } catch (err) {
       saveError.value = apiErrorMessage(err, 'Could not save the variant.')
       return

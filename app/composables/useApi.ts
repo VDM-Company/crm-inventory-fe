@@ -1,8 +1,9 @@
 /**
  * Typed client for `server/api`.
  *
- * The screens call the `app/utils/*` stores for reads (`loadProducts()`,
- * `loadCategories()`, …) and the mutation helpers here for writes. Both go
+ * Products go through `useApiProducts()` (see `useApiResource.ts`). The other
+ * resources still call the `app/utils/*` stores for reads (`loadCategories()`,
+ * `loadPlatforms()`, …) and the mutation helpers here for writes. Both go
  * through `/api`; no page touches localStorage any more.
  *
  * Reads happen in `onMounted` via `$fetch`, which keeps the existing

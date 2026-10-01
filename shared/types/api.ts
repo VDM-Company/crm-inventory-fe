@@ -42,5 +42,16 @@ export interface ApiErrorBody {
   fieldErrors?: FieldErrors
 }
 
+/**
+ * A record that came back from the API: the server has assigned it an id.
+ *
+ * The domain types leave `id` optional because the same shape describes a
+ * record still being filled in by a form. Anything the API hands back has one.
+ */
+export type Persisted<T> = T & { id: string }
+
+/** A record on its way to the API for the first time — no id until it replies. */
+export type Draft<T> = Omit<T, 'id'> & { id?: string }
+
 /** Which backend served the request — surfaced by `/api/_health`. */
 export type ApiMode = 'mock' | 'proxy'
