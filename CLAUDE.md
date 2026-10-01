@@ -31,5 +31,7 @@ Nuxt 4 `app/` directory layout. Auto-imports are on — do not manually import V
 
 - Theme colors set in [app/app.config.ts](app/app.config.ts) (`primary: green`, `neutral: zinc`); the green palette is redefined as CSS vars in [app/assets/css/main.css](app/assets/css/main.css). Change brand color in both.
 - Icons: `i-lucide-*` (Lucide) and `i-simple-icons-*` (brands), resolved by Iconify at build.
-- Forms/validation: **zod v4** + Nuxt UI `UForm`.
+- Forms/validation: **zod v4** + Nuxt UI `UForm` / `UFormField`. Every `<input>` and `<textarea>` is a `UInput` / `UTextarea`, themed in [app/app.config.ts](app/app.config.ts) and sized by the presets in [app/utils/field.ts](app/utils/field.ts) (`fieldCompact` / `fieldCompactSm` on the two product forms, `fieldUi` elsewhere). `.field-input` in `main.css` now dresses the native `<select>`s only — don't reach for it on new fields.
+- Two UInput traps: `@focus` is dropped (not an emit, and overridden internally) — use `@focusin`; and an absolutely-positioned prefix like the `¥` span needs `z-10`, because UInput's root is positioned and paints over it.
+- A native `<button>` inside a `UForm` needs `type="button"` — it defaults to submit.
 - ESLint stylistic rules are enforced: **no comma dangle**, 1tbs brace style, max 3 attributes per line on single-line templates. Run `pnpm lint` before finishing.
