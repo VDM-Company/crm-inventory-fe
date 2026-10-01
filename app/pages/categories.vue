@@ -552,7 +552,7 @@ function onReset() {
 
             title="Show categories"
 
-            :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-green-600 w-[34px] h-[34px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
+            :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-green-600 w-[34px] h-[34px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
             @click="treeCollapsed = false"
           >
             <UIcon name="i-lucide-panel-left-open" class="w-[17px] h-[17px]" />
@@ -581,7 +581,7 @@ function onReset() {
 
               title="Hide categories"
 
-              :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-slate-500 w-[30px] h-[30px] rounded-lg cursor-pointer inline-flex items-center justify-center flex-shrink-0' }"
+              :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-slate-500 w-[30px] h-[30px] rounded-lg cursor-pointer inline-flex items-center justify-center flex-shrink-0' }"
               @click="treeCollapsed = true"
             >
               <UIcon name="i-lucide-panel-left-close" class="w-4 h-4" />
@@ -671,7 +671,7 @@ function onReset() {
               <UButton
                 variant="ghost"
 
-                :ui="{ base: 'btn-icon-hover flex-shrink-0 inline-flex items-center gap-1.5 border border-slate-200 bg-white text-red-600 text-[13.5px] font-semibold px-3.5 py-2 rounded-lg cursor-pointer' }"
+                :ui="{ base: 'hover:bg-slate-100 flex-shrink-0 inline-flex items-center gap-1.5 border border-slate-200 bg-white text-red-600 text-[13.5px] font-semibold px-3.5 py-2 rounded-lg cursor-pointer' }"
                 @click="deleteOpen = true"
               >
                 <UIcon name="i-lucide-trash-2" class="w-3.5 h-3.5" /> Delete
@@ -884,7 +884,7 @@ function onReset() {
             <UButton
               variant="ghost"
 
-              :ui="{ base: 'btn-icon-hover border-none bg-transparent text-slate-500 w-8 h-8 rounded-lg cursor-pointer flex items-center justify-center' }"
+              :ui="{ base: 'hover:bg-slate-100 border-none bg-transparent text-slate-500 w-8 h-8 rounded-lg cursor-pointer flex items-center justify-center' }"
               @click="addModal = null"
             >
               <UIcon name="i-lucide-x" class="w-[18px] h-[18px]" />

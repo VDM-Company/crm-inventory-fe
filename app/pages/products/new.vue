@@ -1083,7 +1083,7 @@ function onConfirmDiscard() {
 
                     title="Remove attribute"
 
-                    :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-500 w-9 h-9 rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0 mt-5' }"
+                    :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-red-500 w-9 h-9 rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0 mt-5' }"
                     @click="removeAttribute(attr.id)"
                   >
                     <UIcon name="i-lucide-trash-2" class="w-4 h-4" />
@@ -1156,7 +1156,7 @@ function onConfirmDiscard() {
 
                       title="Delete variant"
 
-                      :ui="{ base: 'btn-icon-hover border-none bg-transparent text-slate-400 w-8 h-8 rounded-lg cursor-pointer inline-flex items-center justify-center' }"
+                      :ui="{ base: 'hover:bg-slate-100 border-none bg-transparent text-slate-400 w-8 h-8 rounded-lg cursor-pointer inline-flex items-center justify-center' }"
                       @click="removeVariant(v.key)"
                     >
                       <UIcon name="i-lucide-trash-2" class="w-[15px] h-[15px]" />
@@ -1214,7 +1214,7 @@ function onConfirmDiscard() {
 
                       title="Edit component"
 
-                      :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-slate-500 w-8 h-8 rounded-lg cursor-pointer inline-flex items-center justify-center' }"
+                      :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-slate-500 w-8 h-8 rounded-lg cursor-pointer inline-flex items-center justify-center' }"
                       @click="openEditComponent(comp.id)"
                     >
                       <UIcon name="i-lucide-pencil" class="w-3.5 h-3.5" />
@@ -1224,7 +1224,7 @@ function onConfirmDiscard() {
 
                       title="Delete component"
 
-                      :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-500 w-8 h-8 rounded-lg cursor-pointer inline-flex items-center justify-center' }"
+                      :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-red-500 w-8 h-8 rounded-lg cursor-pointer inline-flex items-center justify-center' }"
                       @click="removeComponent(comp.id)"
                     >
                       <UIcon name="i-lucide-trash-2" class="w-3.5 h-3.5" />
@@ -1322,7 +1322,7 @@ function onConfirmDiscard() {
 
                         title="Cancel"
 
-                        :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-slate-500 w-[38px] h-[38px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
+                        :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-slate-500 w-[38px] h-[38px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
                         @click="onPricingCancel"
                       >
                         <UIcon name="i-lucide-x" class="w-[17px] h-[17px]" />
@@ -1405,7 +1405,7 @@ function onConfirmDiscard() {
                             variant="ghost"
                             title="Remove component"
 
-                            :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-500 w-[38px] h-[38px] rounded-lg cursor-pointer flex items-center justify-center' }"
+                            :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-red-500 w-[38px] h-[38px] rounded-lg cursor-pointer flex items-center justify-center' }"
                             @click="removeInitialComponent(c.index)"
                           >
                             <UIcon name="i-lucide-trash-2" class="w-4 h-4" />
@@ -1466,7 +1466,7 @@ function onConfirmDiscard() {
           <UButton
             variant="ghost"
 
-            :ui="{ base: 'btn-icon-hover border-none bg-transparent text-slate-500 w-8 h-8 rounded-lg cursor-pointer flex items-center justify-center' }"
+            :ui="{ base: 'hover:bg-slate-100 border-none bg-transparent text-slate-500 w-8 h-8 rounded-lg cursor-pointer flex items-center justify-center' }"
             @click="closeComponentModal"
           >
             <UIcon name="i-lucide-x" class="w-[18px] h-[18px]" />
@@ -1507,7 +1507,7 @@ function onConfirmDiscard() {
                 variant="ghost"
                 title="Remove product"
 
-                :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-500 w-[38px] h-[38px] rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0' }"
+                :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-red-500 w-[38px] h-[38px] rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0' }"
                 @click="removeModalRow(row.id)"
               >
                 <UIcon name="i-lucide-trash-2" class="w-4 h-4" />

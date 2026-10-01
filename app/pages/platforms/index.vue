@@ -130,7 +130,7 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
             <div class="flex items-center justify-end gap-2">
               <NuxtLink
                 :to="editHref(row.original.id)"
-                class="btn-icon-hover inline-flex items-center gap-1.5 border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-3.5 py-[7px] rounded-lg no-underline"
+                class="hover:bg-slate-100 inline-flex items-center gap-1.5 border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-3.5 py-[7px] rounded-lg no-underline"
               >
                 <UIcon name="i-lucide-pencil" class="w-3.5 h-3.5" /> Edit
               </NuxtLink>
@@ -139,7 +139,7 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
 
                 title="Delete platform"
 
-                :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-600 w-[34px] h-[34px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
+                :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-red-600 w-[34px] h-[34px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
                 @click="deleteTarget = row.original"
               >
                 <UIcon name="i-lucide-trash-2" class="w-[15px] h-[15px]" />

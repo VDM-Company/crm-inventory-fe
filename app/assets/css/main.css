@@ -81,12 +81,6 @@
     width: 100%;
   }
 
-  .btn-icon-hover:hover {
-    background: #f1f5f9;
-  }
-  .row-hover:hover {
-    background: #f8fafc;
-  }
 
   /* Table header cell identity. Size, alignment, padding and width stay on the
      individual <th> — those are per-table layout, not shared styling. */

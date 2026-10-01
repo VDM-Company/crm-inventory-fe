@@ -193,7 +193,7 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
             <div class="flex items-center justify-end gap-2">
               <button
                 :disabled="row.original.system"
-                class="btn-icon-hover"
+                class="hover:bg-slate-100"
                 :style="editStyleOf(row.original.system)"
                 @click="onEdit(row.original)"
               >
@@ -205,7 +205,7 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
                 variant="ghost"
                 title="Delete component"
 
-                :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-600 w-[34px] h-[34px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
+                :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-red-600 w-[34px] h-[34px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
                 @click="deleteTarget = row.original"
               >
                 <UIcon name="i-lucide-trash-2" class="w-[15px] h-[15px]" />
@@ -236,7 +236,7 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
           <UButton
             variant="ghost"
 
-            :ui="{ base: 'btn-icon-hover border-none bg-transparent text-slate-500 w-8 h-8 rounded-lg cursor-pointer flex items-center justify-center' }"
+            :ui="{ base: 'hover:bg-slate-100 border-none bg-transparent text-slate-500 w-8 h-8 rounded-lg cursor-pointer flex items-center justify-center' }"
             @click="modal = null"
           >
             <UIcon name="i-lucide-x" class="w-[18px] h-[18px]" />

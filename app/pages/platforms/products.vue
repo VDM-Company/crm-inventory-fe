@@ -120,7 +120,7 @@ const emptyHint = computed(() => search.value.trim()
     <div class="flex items-start gap-3.5 mb-6">
       <NuxtLink
         to="/platforms"
-        class="btn-icon-hover w-[38px] h-[38px] border border-slate-200 bg-white rounded-lg inline-flex items-center justify-center text-slate-700 flex-shrink-0 mt-0.5"
+        class="hover:bg-slate-100 w-[38px] h-[38px] border border-slate-200 bg-white rounded-lg inline-flex items-center justify-center text-slate-700 flex-shrink-0 mt-0.5"
       >
         <UIcon name="i-lucide-arrow-left" class="w-[18px] h-[18px]" />
       </NuxtLink>
@@ -197,7 +197,7 @@ const emptyHint = computed(() => search.value.trim()
             <div class="text-right">
               <NuxtLink
                 :to="row.original.detailHref"
-                class="btn-icon-hover inline-flex items-center gap-1.5 border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-3.5 py-[7px] rounded-lg no-underline"
+                class="hover:bg-slate-100 inline-flex items-center gap-1.5 border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-3.5 py-[7px] rounded-lg no-underline"
               >
                 <UIcon name="i-lucide-eye" class="w-3.5 h-3.5" /> View Detail
               </NuxtLink>

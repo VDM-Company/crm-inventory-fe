@@ -150,7 +150,7 @@ function onSubmit(event: FormSubmitEvent<Schema>) {
     <div class="flex items-center gap-3 mb-6">
       <NuxtLink
         to="/attributes"
-        class="btn-icon-hover w-[38px] h-[38px] border border-slate-200 bg-white rounded-lg inline-flex items-center justify-center text-slate-700 flex-shrink-0"
+        class="hover:bg-slate-100 w-[38px] h-[38px] border border-slate-200 bg-white rounded-lg inline-flex items-center justify-center text-slate-700 flex-shrink-0"
       >
         <UIcon name="i-lucide-arrow-left" class="w-[18px] h-[18px]" />
       </NuxtLink>
@@ -217,7 +217,7 @@ function onSubmit(event: FormSubmitEvent<Schema>) {
                     <button
                       :disabled="o.isFirst"
                       title="Move up"
-                      class="btn-icon-hover"
+                      class="hover:bg-slate-100"
                       :style="o.upStyle"
                       @click="moveOption(o.index, -1)"
                     >
@@ -226,7 +226,7 @@ function onSubmit(event: FormSubmitEvent<Schema>) {
                     <button
                       :disabled="o.isLast"
                       title="Move down"
-                      class="btn-icon-hover"
+                      class="hover:bg-slate-100"
                       :style="o.downStyle"
                       @click="moveOption(o.index, 1)"
                     >
@@ -245,7 +245,7 @@ function onSubmit(event: FormSubmitEvent<Schema>) {
 
                     title="Delete option"
 
-                    :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-600 w-10 h-10 rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0' }"
+                    :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-red-600 w-10 h-10 rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0' }"
                     @click="removeOption(o.index)"
                   >
                     <UIcon name="i-lucide-trash-2" class="w-[15px] h-[15px]" />

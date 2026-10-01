@@ -18,7 +18,10 @@ export function tableUi(extraBase = '') {
     // always emits for an expanded row when no `#expanded` slot is supplied —
     // this codebase renders sub-rows as real rows via `getSubRows` instead.
     tbody: 'divide-y-0 [&>tr]:border-b [&>tr]:border-slate-100 [&>tr]:hover:bg-slate-50 [&>tr:has(>td:only-child)]:hidden',
-    th: 'th text-left text-sm px-3 py-[13px]',
+    // `font-bold text-slate-500` are spelled out rather than left to `.th`:
+    // UTable's own `font-semibold text-highlighted` are utilities, and `.th`
+    // lives in the components layer, so it would lose the cascade.
+    th: 'th font-bold text-slate-500 text-left text-sm px-3 py-[13px]',
     td: 'px-3 py-3.5'
   }
 }

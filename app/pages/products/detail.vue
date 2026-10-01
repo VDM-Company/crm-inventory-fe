@@ -1333,7 +1333,7 @@ function onConfirmDelete() {
 
                       title="Remove attribute"
 
-                      :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-500 w-9 h-9 rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0 mt-5' }"
+                      :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-red-500 w-9 h-9 rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0 mt-5' }"
                       @click="removeEditAttr(attr.id)"
                     >
                       <UIcon name="i-lucide-trash-2" class="w-4 h-4" />
@@ -1403,7 +1403,7 @@ function onConfirmDelete() {
 
                         title="Delete variant"
 
-                        :ui="{ base: 'btn-icon-hover border-none bg-transparent text-slate-400 w-8 h-8 rounded-lg cursor-pointer inline-flex items-center justify-center' }"
+                        :ui="{ base: 'hover:bg-slate-100 border-none bg-transparent text-slate-400 w-8 h-8 rounded-lg cursor-pointer inline-flex items-center justify-center' }"
                         @click="removeEditVariant(ev.name)"
                       >
                         <UIcon name="i-lucide-trash-2" class="w-[15px] h-[15px]" />
@@ -1465,7 +1465,7 @@ function onConfirmDelete() {
                       <div class="text-right">
                         <NuxtLink
                           :to="row.original.detailTo"
-                          class="btn-icon-hover inline-flex items-center gap-1.5 border border-slate-200 bg-white text-slate-700 text-[13px] font-semibold px-3 py-1.5 rounded-lg no-underline"
+                          class="hover:bg-slate-100 inline-flex items-center gap-1.5 border border-slate-200 bg-white text-slate-700 text-[13px] font-semibold px-3 py-1.5 rounded-lg no-underline"
                         >
                           <UIcon name="i-lucide-eye" class="w-3.5 h-3.5" /> View Detail
                         </NuxtLink>
@@ -1698,7 +1698,7 @@ function onConfirmDelete() {
                         variant="ghost"
                         title="Remove component"
 
-                        :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-500 w-[38px] h-[38px] rounded-lg cursor-pointer flex items-center justify-center' }"
+                        :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-red-500 w-[38px] h-[38px] rounded-lg cursor-pointer flex items-center justify-center' }"
                         @click="removeComponent(c.index)"
                       >
                         <UIcon name="i-lucide-trash-2" class="w-4 h-4" />
@@ -1787,7 +1787,7 @@ function onConfirmDelete() {
           <UButton
             variant="ghost"
 
-            :ui="{ base: 'btn-icon-hover border-none bg-transparent text-slate-500 w-[30px] h-[30px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
+            :ui="{ base: 'hover:bg-slate-100 border-none bg-transparent text-slate-500 w-[30px] h-[30px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
             @click="historyOpen = false"
           >
             <UIcon name="i-lucide-x" class="w-[17px] h-[17px]" />

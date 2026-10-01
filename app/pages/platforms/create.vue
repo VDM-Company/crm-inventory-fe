@@ -117,7 +117,7 @@ function onConfirmDiscard() {
       <UButton
         variant="ghost"
 
-        :ui="{ base: 'btn-icon-hover w-[38px] h-[38px] border border-slate-200 bg-white rounded-lg inline-flex items-center justify-center text-slate-700 flex-shrink-0 cursor-pointer' }"
+        :ui="{ base: 'hover:bg-slate-100 w-[38px] h-[38px] border border-slate-200 bg-white rounded-lg inline-flex items-center justify-center text-slate-700 flex-shrink-0 cursor-pointer' }"
         @click="onLeave"
       >
         <UIcon name="i-lucide-arrow-left" class="w-[18px] h-[18px]" />
