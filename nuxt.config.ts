@@ -20,6 +20,14 @@ export default defineNuxtConfig({
     colorMode: false
   },
 
+  // Private by default — only reachable from `server/`. Override at deploy
+  // time with NUXT_API_BASE_URL / NUXT_API_TOKEN. While `apiBaseUrl` is empty
+  // the `server/api` layer answers from its in-memory mock.
+  runtimeConfig: {
+    apiBaseUrl: '',
+    apiToken: ''
+  },
+
   routeRules: {
     '/': {
       redirect: '/dashboard'

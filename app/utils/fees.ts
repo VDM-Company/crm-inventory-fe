@@ -1,22 +1,16 @@
 import type { Fee } from '~/types'
+import { FEE_SEED, FEE_BASE_ID } from '#shared/seeds'
 
 // Port of the design's `window.VertexFees` (fee-store.js).
 // Reusable Initial-Fee line-item components persisted in localStorage.
 // "Base Price" (fee_base) is a locked system component that always exists.
 
 const KEY = 'vertex_fees_v1'
-export const FEE_BASE_ID = 'fee_base'
 
 // Deterministic seed — exported so callers can initialise refs with the exact
 // same value on server and client (avoids a hydration mismatch when the
 // Pricing card pre-selects fee components before `onMounted` reads storage).
-export const FEE_SEED: Fee[] = [
-  { id: FEE_BASE_ID, name: 'Base Price', description: 'Core product price', system: true },
-  { id: 'fee_tax', name: 'Tax', description: 'Applicable taxes', system: false },
-  { id: 'fee_shipping', name: 'Shipping', description: 'Delivery cost', system: false },
-  { id: 'fee_handling', name: 'Handling', description: 'Handling / processing fee', system: false },
-  { id: 'fee_insurance', name: 'Insurance', description: 'Optional coverage', system: false }
-]
+export { FEE_SEED, FEE_BASE_ID } from '#shared/seeds'
 
 function clone(f: Fee): Fee {
   return { id: f.id, name: f.name, icon: f.icon, description: f.description || '', system: !!f.system }
