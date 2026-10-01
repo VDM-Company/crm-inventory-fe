@@ -9,6 +9,8 @@ const attrs = ref<AttributeDef[]>([])
 const deleteTarget = ref<AttributeDef | null>(null)
 const toast = ref<string | null>(null)
 const products = ref<StoredProduct[]>([])
+const loading = ref(true)
+const loadError = ref('')
 
 let toastTimer: number | null = null
 
@@ -25,7 +27,9 @@ onMounted(async () => {
   try {
     ;[attrs.value, products.value] = await Promise.all([loadAttributeDefs(), loadProducts()])
   } catch (err) {
-    showToast(apiErrorMessage(err, 'Could not load attributes.'))
+    loadError.value = apiErrorMessage(err, 'Could not load attributes.')
+  } finally {
+    loading.value = false
   }
 })
 onBeforeUnmount(() => {
@@ -110,7 +114,11 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
     </div>
 
     <UCard class="overflow-hidden">
-      <div v-if="attrs.length" class="overflow-x-auto">
+      <VertexTableSkeleton v-if="loading" :columns="['25%', '15%', '45%', '12%']" />
+
+      <VertexErrorBanner v-else-if="loadError" :message="loadError" class="m-5" />
+
+      <div v-else-if="attrs.length" class="overflow-x-auto">
         <UTable
           :data="attrs"
           :columns="columns"

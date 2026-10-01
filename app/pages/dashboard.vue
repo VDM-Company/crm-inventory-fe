@@ -8,11 +8,6 @@ import type {
   StoredProduct
 } from '~/types'
 
-// Renders on the server and on the first client paint, then `onMounted`
-// replaces it with the API's list. The API's mock is seeded from the same
-// rows, so the swap is invisible while it is the backend.
-import { PRODUCT_SEED as SEED_PRODUCTS } from '#shared/seeds'
-
 useHead({ title: 'Dashboard — Vertex' })
 
 const router = useRouter()
@@ -33,7 +28,8 @@ const categories = ref<Category[]>([])
 const platforms = ref<Platform[]>([])
 // Seeded so SSR and the first client render agree; replaced with the real
 // store on mount.
-const storedProducts = ref<StoredProduct[]>(SEED_PRODUCTS)
+const storedProducts = ref<StoredProduct[]>([])
+const loading = ref(true)
 const nowTs = ref(0)
 const loadError = ref('')
 
@@ -49,6 +45,8 @@ onMounted(async () => {
     ])
   } catch (err) {
     loadError.value = apiErrorMessage(err, 'Could not load the dashboard.')
+  } finally {
+    loading.value = false
   }
 
   try {
@@ -454,7 +452,9 @@ function onNewProduct() {
       </div>
 
       <!-- table -->
-      <div class="overflow-x-auto">
+      <VertexTableSkeleton v-if="loading" :rows="6" :columns="['26%', '14%', '18%', '16%', '12%', '8%']" />
+
+      <div v-else class="overflow-x-auto">
         <UTable
           :data="(pagedRows as DashRow[])"
           :columns="columns"

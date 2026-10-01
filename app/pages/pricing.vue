@@ -30,7 +30,9 @@ const ICON_CHOICES = [
 ]
 
 // ── state (mirrors the design's DCLogic state) ──
-const fees = ref<Fee[]>([...FEE_SEED])
+const fees = ref<Fee[]>([])
+const loading = ref(true)
+const loadError = ref('')
 const modal = ref<ModalState | null>(null)
 const deleteTarget = ref<Fee | null>(null)
 const toast = ref<string | null>(null)
@@ -42,7 +44,9 @@ onMounted(async () => {
   try {
     ;[fees.value, products.value] = await Promise.all([loadFees(), loadProducts()])
   } catch (err) {
-    showToast(apiErrorMessage(err, 'Could not load pricing components.'))
+    loadError.value = apiErrorMessage(err, 'Could not load pricing components.')
+  } finally {
+    loading.value = false
   }
 })
 onBeforeUnmount(() => {
@@ -182,7 +186,11 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
     </div>
 
     <UCard class="overflow-hidden">
-      <div class="overflow-x-auto">
+      <VertexTableSkeleton v-if="loading" :columns="['35%', '45%', '12%']" />
+
+      <VertexErrorBanner v-else-if="loadError" :message="loadError" class="m-5" />
+
+      <div v-else class="overflow-x-auto">
         <UTable
           :data="fees"
           :columns="columns"

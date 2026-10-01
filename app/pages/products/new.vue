@@ -75,13 +75,12 @@ const formDirty = ref(false)
 // regenerate when the user clicks Apply (design no longer auto-regenerates).
 const appliedKey = ref('')
 
-// masters — fees seeded deterministically so the pre-selected Pricing rows
-// render identically on server + first client paint; the rest follow the
-// Fetched on mount, like the Dashboard.
+// masters — all fetched on mount. They start empty rather than seeded: a
+// seeded list renders names the real API may not agree with.
 const categories = ref<Category[]>([])
 const platforms = ref<Platform[]>([])
 const attributeDefs = ref<AttributeDef[]>([])
-const fees = ref<Fee[]>([...FEE_SEED])
+const fees = ref<Fee[]>([])
 const existingSkus = ref<string[]>([])
 const catalogProducts = ref<StoredProduct[]>([])
 const saveError = ref('')

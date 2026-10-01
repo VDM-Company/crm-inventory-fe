@@ -9,7 +9,8 @@ const route = useRoute()
 const router = useRouter()
 
 // ── platform + identity ──
-const platforms = ref<Platform[]>(PLATFORM_SEED)
+const platforms = ref<Platform[]>([])
+const loading = ref(true)
 
 const platform = computed<Platform | null>(() => {
   const id = typeof route.query.id === 'string' ? route.query.id : ''
@@ -46,6 +47,8 @@ onMounted(async () => {
     cfg.value = p ? await loadPlatformConfig(p.id) : { ...GENERIC_CONFIG_SEED }
   } catch (err) {
     saveError.value = apiErrorMessage(err, 'Could not load this platform.')
+  } finally {
+    loading.value = false
   }
   dirty.value = false
 })
@@ -130,7 +133,14 @@ const crumbLast = computed(() => platform.value ? platform.value.name : 'Platfor
     </p>
 
     <!-- IDENTITY -->
-    <UForm :schema="schema" :state="identity" @submit="onSubmit">
+    <VertexLoadingPanel v-if="loading" label="Loading platform…" />
+
+    <UForm
+      v-else
+      :schema="schema"
+      :state="identity"
+      @submit="onSubmit"
+    >
       <UCard class="mb-4 p-6">
         <h2 class="text-base font-bold text-slate-900 mt-0 mb-1">
           Platform Information

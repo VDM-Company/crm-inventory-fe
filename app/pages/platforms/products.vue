@@ -11,7 +11,8 @@ const route = useRoute()
 
 const platformId = computed(() => typeof route.query.id === 'string' ? route.query.id : '')
 
-const platforms = ref<Platform[]>(PLATFORM_SEED)
+const platforms = ref<Platform[]>([])
+const loading = ref(true)
 const categories = ref<Category[]>([])
 const storedProducts = ref<StoredProduct[]>([])
 const search = ref('')
@@ -25,6 +26,8 @@ onMounted(async () => {
     ])
   } catch (err) {
     loadError.value = apiErrorMessage(err, 'Could not load this platform.')
+  } finally {
+    loading.value = false
   }
 })
 
@@ -153,7 +156,11 @@ const emptyHint = computed(() => search.value.trim()
     </div>
 
     <UCard class="overflow-hidden">
-      <div v-if="hasRows" class="overflow-x-auto">
+      <VertexTableSkeleton v-if="loading" :columns="['28%', '16%', '20%', '18%', '10%']" />
+
+      <VertexErrorBanner v-else-if="loadError" :message="loadError" class="m-5" />
+
+      <div v-else-if="hasRows" class="overflow-x-auto">
         <UTable
           :data="rows"
           :columns="columns"

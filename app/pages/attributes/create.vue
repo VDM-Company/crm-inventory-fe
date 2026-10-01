@@ -27,6 +27,9 @@ const required = ref(true)
 const options = ref<string[]>([''])
 const optionsError = ref('')
 const saveError = ref('')
+// true from the first render when editing, so the server does not ship a
+// blank Create form that the fetch then overwrites
+const loading = ref(!!editId.value)
 
 const pageTitle = computed(() => editId.value ? 'Edit Attribute' : 'Create Attribute')
 useHead({ title: () => pageTitle.value + ' — Vertex' })
@@ -38,6 +41,8 @@ onMounted(async () => {
   } catch (err) {
     saveError.value = apiErrorMessage(err, 'Could not load attributes.')
     return
+  } finally {
+    loading.value = false
   }
   if (!editId.value) return
   const existing = attrs.value.find(a => a.id === editId.value)
@@ -158,7 +163,11 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
       </h1>
     </div>
 
+    <VertexLoadingPanel v-if="loading" label="Loading attribute…" />
+
     <UForm
+
+      v-else
       :schema="schema"
       :state="state"
       class="flex gap-6 items-start flex-wrap"

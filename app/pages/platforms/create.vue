@@ -3,13 +3,19 @@ import * as z from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type { ConfigValues, Platform } from '~/types'
 
-useHead({ title: 'Create Platform — Vertex' })
-
 const route = useRoute()
 const router = useRouter()
 
 // ── state (mirrors the design's DCLogic state) ──
 const editId = ref<string | null>(null)
+// derived from the route so the title is right before the record arrives
+const routeEditId = computed(() => {
+  const raw = route.query.id
+  return (Array.isArray(raw) ? raw[0] : raw) || null
+})
+// true from the first render when editing, so the server does not ship a
+// blank Create form that the fetch then overwrites
+const loading = ref(!!routeEditId.value)
 const form = reactive({ name: '', code: '', url: '' })
 const codeTouched = ref(false)
 const dirty = ref(false)
@@ -27,6 +33,8 @@ onMounted(async () => {
     allPlatforms.value = await loadPlatforms()
   } catch {
     // leave the list empty; the duplicate-code check simply cannot run
+  } finally {
+    loading.value = false
   }
   const rawId = route.query.id
   const id = Array.isArray(rawId) ? rawId[0] : rawId
@@ -42,7 +50,8 @@ onMounted(async () => {
   }
 })
 
-const pageTitle = computed(() => editId.value ? 'Edit Platform' : 'Create Platform')
+const pageTitle = computed(() => routeEditId.value ? 'Edit Platform' : 'Create Platform')
+useHead({ title: () => pageTitle.value + ' — Vertex' })
 const codeLocked = computed(() => !!editId.value)
 
 // keeps the dirty flag the inline setCfg used to set
@@ -144,7 +153,14 @@ function onConfirmDiscard() {
       </h1>
     </div>
 
-    <UForm :schema="schema" :state="form" @submit="onSubmit">
+    <VertexLoadingPanel v-if="loading" label="Loading platform…" />
+
+    <UForm
+      v-else
+      :schema="schema"
+      :state="form"
+      @submit="onSubmit"
+    >
       <UCard class="p-6">
         <h2 class="text-[17px] font-bold text-slate-900 mt-0 mb-1">
           Platform Information

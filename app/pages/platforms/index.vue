@@ -5,7 +5,9 @@ import type { Platform, StoredProduct } from '~/types'
 useHead({ title: 'Platforms — Vertex' })
 
 // ── state (mirrors the design's DCLogic state) ──
-const platforms = ref<Platform[]>([...PLATFORM_SEED])
+const platforms = ref<Platform[]>([])
+const loading = ref(true)
+const loadError = ref('')
 const deleteTarget = ref<Platform | null>(null)
 const toast = ref<string | null>(null)
 const products = ref<StoredProduct[]>([])
@@ -16,7 +18,9 @@ onMounted(async () => {
   try {
     ;[platforms.value, products.value] = await Promise.all([loadPlatforms(), loadProducts()])
   } catch (err) {
-    showToast(apiErrorMessage(err, 'Could not load platforms.'))
+    loadError.value = apiErrorMessage(err, 'Could not load platforms.')
+  } finally {
+    loading.value = false
   }
   // cross-page success toast set by the Create Platform screen
   try {
@@ -113,7 +117,11 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
     </div>
 
     <UCard class="overflow-hidden">
-      <div v-if="platforms.length" class="overflow-x-auto">
+      <VertexTableSkeleton v-if="loading" :columns="['30%', '15%', '35%', '12%']" />
+
+      <VertexErrorBanner v-else-if="loadError" :message="loadError" class="m-5" />
+
+      <div v-else-if="platforms.length" class="overflow-x-auto">
         <UTable
           :data="platforms"
           :columns="columns"

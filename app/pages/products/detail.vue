@@ -118,7 +118,7 @@ const scope = ref('default')
 const draftOverrides = ref<Overrides>({})
 
 // ── pricing (re-added in Master v3 for non-variant products) ──
-const fees = ref<Fee[]>(FEE_SEED)
+const fees = ref<Fee[]>([])
 const editIsSubscription = ref(true)
 const editMonthly = ref<string | number>('')
 const editInitialComponents = ref<PricingComponent[]>([])
@@ -129,6 +129,7 @@ const cancelConfirmOpen = ref(false)
 const deleteConfirmOpen = ref(false)
 const toastMessage = ref<string | null>(null)
 const saveError = ref('')
+const loading = ref(true)
 const historyOpen = ref(false)
 const historyExpanded = ref<Record<string, boolean>>({})
 const historyEntries = ref<HistoryEntry[]>([])
@@ -183,16 +184,17 @@ onMounted(async () => {
     saveError.value = apiErrorMessage(err, 'Could not load the form data.')
   }
   historyEntries.value = seedHistory()
-  let rec: DetailProduct | null = null
   try {
-    rec = await loadRecordById(route.query.id)
+    const rec = await loadRecordById(route.query.id)
+    const norm = normalizeProduct(rec)
+    product.value = norm.product
+    draft.value = { ...norm.product }
+    isStored.value = norm.stored
   } catch {
-    return // the error is already on screen; don't present the demo record
+    // the error is already on screen; don't present the demo record
+  } finally {
+    loading.value = false
   }
-  const norm = normalizeProduct(rec)
-  product.value = norm.product
-  draft.value = { ...norm.product }
-  isStored.value = norm.stored
 })
 
 onBeforeUnmount(() => {
@@ -851,1018 +853,1015 @@ async function onConfirmDelete() {
 
 <template>
   <div class="form-compact mx-auto max-w-[1280px] px-8 pt-8 pb-20">
-    <!-- header -->
-    <div class="flex items-start justify-between mb-6 gap-4 flex-wrap">
-      <div>
-        <VertexBreadcrumb
-          dense
-          :items="[
-            { label: 'Inventory', to: '/dashboard' },
-            { label: 'Product', to: '/dashboard' },
-            { label: product.name }
-          ]"
-        />
-        <div class="flex items-center gap-2.5">
-          <h1 class="text-2xl font-bold text-slate-900 m-0">
-            {{ product.name }}
-          </h1>
-          <VertexStatusBadge :active="product.status === 'Active'" :label="product.status" />
+    <VertexErrorBanner :message="saveError" class="mb-4" />
+    <VertexLoadingPanel v-if="loading" label="Loading product…" />
+
+    <template v-else>
+      <!-- header -->
+      <div class="flex items-start justify-between mb-6 gap-4 flex-wrap">
+        <div>
+          <VertexBreadcrumb
+            dense
+            :items="[
+              { label: 'Inventory', to: '/dashboard' },
+              { label: 'Product', to: '/dashboard' },
+              { label: product.name }
+            ]"
+          />
+          <div class="flex items-center gap-2.5">
+            <h1 class="text-2xl font-bold text-slate-900 m-0">
+              {{ product.name }}
+            </h1>
+            <VertexStatusBadge :active="product.status === 'Active'" :label="product.status" />
+          </div>
         </div>
-      </div>
 
-      <div v-if="isViewMode" class="flex gap-2.5">
-        <UButton
-          variant="ghost"
+        <div v-if="isViewMode" class="flex gap-2.5">
+          <UButton
+            variant="ghost"
 
-          title="Version History"
+            title="Version History"
 
-          :ui="{ base: 'border border-slate-200 bg-white text-slate-700 w-10 h-10 rounded-lg cursor-pointer inline-flex items-center justify-center hover:bg-slate-50 transition-colors' }"
-          @click="historyOpen = true"
-        >
-          <UIcon name="i-lucide-history" class="w-[17px] h-[17px]" />
-        </UButton>
-        <UButton
-          variant="ghost"
-
-          :ui="{ base: 'border border-red-200 bg-white text-red-600 text-sm font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer inline-flex items-center gap-1.5 hover:bg-red-50 transition-colors' }"
-          @click="onDeleteClick"
-        >
-          <UIcon name="i-lucide-trash-2" class="w-3.5 h-3.5" /> Delete
-        </UButton>
-        <UButton
-          variant="ghost"
-
-          :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer inline-flex items-center gap-1.5 hover:bg-slate-50 transition-colors' }"
-          @click="onEditClick"
-        >
-          <UIcon name="i-lucide-pencil" class="w-3.5 h-3.5" /> Edit
-        </UButton>
-      </div>
-
-      <div v-if="isEditMode" class="flex gap-2.5">
-        <UButton
-          variant="ghost"
-
-          :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer hover:bg-slate-50 transition-colors' }"
-          @click="onCancelClick"
-        >
-          Cancel
-        </UButton>
-        <UButton
-          type="submit"
-          form="product-detail"
-          variant="ghost"
-
-          :ui="{ base: 'border-none bg-green-500 text-white text-sm font-bold px-5 py-[9px] rounded-lg cursor-pointer shadow-sm hover:bg-green-600 transition-colors' }"
-        >
-          Save Changes
-        </UButton>
-      </div>
-    </div>
-
-    <UForm
-      id="product-detail"
-      :schema="productSchema"
-      :state="formState"
-      class="flex flex-col gap-6"
-      @submit="onSaveClick"
-    >
-      <div
-        v-if="saveError"
-        class="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3.5 py-3 text-[13px] text-red-700"
-      >
-        <UIcon name="i-lucide-circle-alert" class="w-[15px] h-[15px] flex-shrink-0" />
-        <span>{{ saveError }}</span>
-      </div>
-
-      <!-- scope card -->
-      <UCard v-if="showScopeCard" class="px-5 py-4">
-        <div class="flex items-center gap-3.5 flex-wrap">
-          <div class="flex items-center gap-2 flex-shrink-0">
-            <UIcon name="i-lucide-layers" class="w-4 h-4 text-green-600" />
-            <span class="text-sm font-bold text-slate-900">{{ isEditMode ? 'Editing for' : 'Viewing for' }}</span>
-          </div>
-          <div class="relative min-w-[260px]">
-            <button type="button" :style="ddTrigger(openDropdown === 'scope')" @click="toggleDropdown('scope')">
-              <span class="whitespace-nowrap overflow-hidden text-ellipsis">{{ scopeLabel }}</span>
-              <span :style="ddChevron(openDropdown === 'scope')"><UIcon name="i-lucide-chevron-down" class="w-4 h-4" /></span>
-            </button>
-            <template v-if="openDropdown === 'scope'">
-              <div class="fixed inset-0 z-40" @click="closeDropdown" />
-              <div class="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.14)] p-1 max-h-[260px] overflow-y-auto">
-                <button
-                  v-for="opt in scopeItems"
-                  :key="opt.id"
-                  type="button"
-                  :style="ddOption(opt.selected)"
-                  @click="setScope(opt.id)"
-                >
-                  <span>{{ opt.name }}</span>
-                  <UIcon v-if="opt.selected" name="i-lucide-check" class="w-[15px] h-[15px] text-green-600" />
-                </button>
-              </div>
-            </template>
-          </div>
-          <span v-if="isPlatformScope" class="text-[12.5px] text-slate-500">Only <strong class="text-slate-700">Name</strong> and <strong class="text-slate-700">Price</strong> can be overridden here — other fields are global.</span>
-          <span v-if="isViewPlatformScope" class="text-[12.5px] text-slate-500">Showing effective values for this platform. Click <strong class="text-slate-700">Edit</strong> to override them.</span>
-        </div>
-      </UCard>
-
-      <!-- ROW 1: Core identification + Settings -->
-      <div class="flex flex-wrap gap-6 items-stretch">
-        <!-- Core identification -->
-        <UCard class="h-full min-w-0 grow-[999] shrink basis-[380px] p-6">
-          <h2 class="text-base font-bold text-slate-900 mt-0 mb-1">
-            Core Identification
-          </h2>
-          <p class="text-[13px] text-slate-500 mt-0 mb-5">
-            Basic details that identify this product.
-          </p>
-
-          <div class="grid gap-4 mb-4 grid-cols-[repeat(auto-fit,minmax(min(180px,100%),1fr))]">
-            <!-- name -->
-            <div>
-              <template v-if="isViewMode">
-                <span class="static-label">Product Name</span>
-                <div class="static-value">
-                  {{ product.name }}
-                </div>
-              </template>
-              <template v-else>
-                <div class="flex items-center justify-between gap-2">
-                  <label class="field-label mb-1.5">Product Name</label>
-                  <span v-if="isPlatformScope" :style="nameHasOverride ? BADGE_OVERRIDE : BADGE_INHERIT">{{ nameHasOverride ? 'Overridden' : 'Inherited' }}</span>
-                </div>
-                <UFormField name="name" :ui="FORM_FIELD_COMPACT">
-                  <UInput
-                    :model-value="nameFieldValue"
-                    placeholder="e.g. Tourist SIM 15GB"
-                    :ui="fieldCompact()"
-                    @update:model-value="onNameChange"
-                  />
-                </UFormField>
-                <UButton
-                  v-if="nameHasOverride"
-
-                  variant="ghost"
-
-                  :ui="{ base: 'mt-[5px] border-none bg-transparent text-green-600 text-xs font-semibold cursor-pointer p-0 inline-flex items-center gap-1' }"
-                  @click="onNameReset"
-                >
-                  <UIcon name="i-lucide-rotate-ccw" class="w-[11px] h-[11px]" /> Reset to default
-                </UButton>
-              </template>
-            </div>
-
-            <!-- sku -->
-            <div>
-              <template v-if="isViewMode">
-                <span class="static-label">SKU</span>
-                <div class="static-value">
-                  {{ product.sku }}
-                </div>
-              </template>
-              <template v-else>
-                <label class="field-label">SKU</label>
-                <UInput
-                  :model-value="draft.sku"
-                  disabled
-                  title="SKU cannot be changed after creation"
-                  :ui="fieldCompact()"
-                />
-                <div class="text-xs text-slate-400 mt-[5px] flex items-center gap-1">
-                  <UIcon name="i-lucide-lock" class="w-[11px] h-[11px]" /> SKU cannot be changed after creation
-                </div>
-              </template>
-            </div>
-
-            <!-- product type -->
-            <div>
-              <template v-if="isViewMode">
-                <span class="static-label">Product Type</span>
-                <div class="static-value capitalize">
-                  {{ product.productType }}
-                </div>
-              </template>
-              <template v-else>
-                <label class="field-label">Product Type</label>
-                <UInput
-                  :model-value="productTypeLabel"
-                  disabled
-                  title="Product type cannot be changed after creation"
-                  :ui="fieldCompact()"
-                />
-                <div class="text-xs text-slate-400 mt-[5px] flex items-center gap-1">
-                  <UIcon name="i-lucide-lock" class="w-[11px] h-[11px]" /> Product type cannot be changed after creation
-                </div>
-              </template>
-            </div>
-          </div>
-
-          <!-- notes -->
-          <div class="mb-4">
-            <template v-if="isViewMode">
-              <span class="static-label">Notes</span>
-              <div class="static-value font-normal text-slate-700 leading-normal">
-                {{ notesDisplay }}
-              </div>
-            </template>
-            <template v-else>
-              <label class="field-label">Notes</label>
-              <UTextarea
-                :model-value="draft.notes"
-                :rows="3"
-                placeholder="Internal notes about this product..."
-                :ui="fieldCompact('resize-y')"
-                @update:model-value="draft.notes = String($event)"
-              />
-            </template>
-          </div>
-
-          <!-- image -->
-          <div>
-            <span class="static-label">Product Image</span>
-            <img
-              v-if="product.image"
-              :src="product.image"
-              class="w-[120px] h-[120px] rounded-[10px] object-cover border border-slate-200 block"
-            >
-            <div
-              v-else
-              class="w-24 h-24 rounded-[10px] bg-slate-100 flex items-center justify-center text-slate-300 border border-slate-100"
-            >
-              <UIcon name="i-lucide-image" class="w-[26px] h-[26px]" />
-            </div>
-          </div>
-        </UCard>
-
-        <!-- Settings -->
-        <UCard class="h-full min-w-0 grow shrink basis-[320px] p-6">
-          <h2 class="text-base font-bold text-slate-900 mt-0 mb-5">
-            Settings
-          </h2>
-
-          <!-- category -->
-          <div class="mb-4">
-            <template v-if="isViewMode">
-              <span class="static-label">Category</span>
-              <div class="static-value">
-                {{ categoryPathLabel }}
-              </div>
-            </template>
-            <template v-else>
-              <label class="field-label">Category</label>
-              <div class="relative">
-                <button type="button" :style="ddTrigger(openDropdown === 'category')" @click="toggleDropdown('category')">
-                  <span
-                    class="whitespace-nowrap overflow-hidden text-ellipsis"
-                    :class="hasCat ? 'text-slate-900' : 'text-slate-400'"
-                  >{{ catDisplay }}</span>
-                  <span :style="ddChevron(openDropdown === 'category')"><UIcon name="i-lucide-chevron-down" class="w-4 h-4" /></span>
-                </button>
-                <template v-if="openDropdown === 'category'">
-                  <div class="fixed inset-0 z-40" @click="closeDropdown" />
-                  <div class="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.14)] max-h-[280px] overflow-y-auto p-1">
-                    <button
-                      v-for="opt in catFlat"
-                      :key="opt.id"
-                      type="button"
-                      :style="opt.style"
-                      @click="pickCategory(opt.id)"
-                    >
-                      <span>{{ opt.name }}</span>
-                      <UIcon v-if="opt.selected" name="i-lucide-check" class="w-[15px] h-[15px] text-green-600" />
-                    </button>
-                  </div>
-                </template>
-              </div>
-            </template>
-          </div>
-
-          <!-- platforms -->
-          <div class="mb-5">
-            <template v-if="isViewMode">
-              <span class="static-label">Platforms</span>
-              <div v-if="viewPlatformNames.length" class="flex flex-wrap gap-1.5 mt-[5px]">
-                <span
-                  v-for="pl in viewPlatformNames"
-                  :key="pl"
-                  class="inline-flex items-center gap-1.5 text-[13px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 rounded-full px-[11px] py-[3px]"
-                >
-                  <UIcon name="i-lucide-globe" class="w-3 h-3 text-slate-400" />{{ pl }}
-                </span>
-              </div>
-              <div v-else class="static-value text-slate-400">
-                — No platform
-              </div>
-            </template>
-            <template v-else>
-              <label class="field-label">Platforms</label>
-              <div v-if="editPlatformChips.length" class="flex flex-wrap gap-1.5 mb-2">
-                <span
-                  v-for="chip in editPlatformChips"
-                  :key="chip.id"
-                  class="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full py-1 pr-2 pl-3 text-[13px] font-semibold"
-                >
-                  {{ chip.name }}
-                  <UButton
-                    variant="ghost"
-
-                    title="Remove"
-
-                    :ui="{ base: 'border-none bg-transparent cursor-pointer text-emerald-700 flex items-center p-0.5 rounded-full' }"
-                    @click="removeDraftPlatform(chip.id)"
-                  >
-                    <UIcon name="i-lucide-x" class="w-3 h-3" />
-                  </UButton>
-                </span>
-              </div>
-              <div class="relative">
-                <button type="button" :style="ddTrigger(openDropdown === 'platform')" @click="toggleDropdown('platform')">
-                  <span class="text-slate-500 whitespace-nowrap overflow-hidden text-ellipsis">{{ platformAddLabel }}</span>
-                  <span :style="ddChevron(openDropdown === 'platform')"><UIcon name="i-lucide-chevron-down" class="w-4 h-4" /></span>
-                </button>
-                <template v-if="openDropdown === 'platform'">
-                  <div class="fixed inset-0 z-40" @click="closeDropdown" />
-                  <div class="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.14)] p-1 max-h-[220px] overflow-y-auto">
-                    <button
-                      v-for="opt in availablePlatforms"
-                      :key="opt.id"
-                      type="button"
-                      :style="ddOption(false)"
-                      @click="addDraftPlatform(opt.id)"
-                    >
-                      <span>{{ opt.name }}</span>
-                    </button>
-                    <div v-if="platformAllAssigned" class="p-2.5 text-[13px] text-slate-400 text-center">
-                      All platforms assigned
-                    </div>
-                  </div>
-                </template>
-              </div>
-            </template>
-          </div>
-
-          <!-- stock -->
-          <div v-if="isViewMode" class="mb-4">
-            <span class="static-label">Stock</span>
-            <div class="static-value inline-flex items-center gap-2">
-              <span :style="stockDotStyle" />{{ stockLabel }}
-            </div>
-          </div>
-          <div
-            v-else
-            class="mb-5"
-            :style="stockLocked ? 'opacity:0.6;pointer-events:none;' : ''"
+            :ui="{ base: 'border border-slate-200 bg-white text-slate-700 w-10 h-10 rounded-lg cursor-pointer inline-flex items-center justify-center hover:bg-slate-50 transition-colors' }"
+            @click="historyOpen = true"
           >
-            <label class="field-label">Stock</label>
-            <div class="relative">
-              <button
-                type="button"
-                :disabled="stockLocked"
-                :style="ddTrigger(openDropdown === 'stock') + (stockLocked ? 'cursor:not-allowed;' : '')"
-                @click="onToggleStockDropdown"
-              >
-                <span class="inline-flex items-center gap-2">
-                  <span :style="stockDotStyle" />{{ stockLabel }}
-                </span>
-                <span :style="ddChevron(openDropdown === 'stock')"><UIcon name="i-lucide-chevron-down" class="w-4 h-4" /></span>
+            <UIcon name="i-lucide-history" class="w-[17px] h-[17px]" />
+          </UButton>
+          <UButton
+            variant="ghost"
+
+            :ui="{ base: 'border border-red-200 bg-white text-red-600 text-sm font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer inline-flex items-center gap-1.5 hover:bg-red-50 transition-colors' }"
+            @click="onDeleteClick"
+          >
+            <UIcon name="i-lucide-trash-2" class="w-3.5 h-3.5" /> Delete
+          </UButton>
+          <UButton
+            variant="ghost"
+
+            :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer inline-flex items-center gap-1.5 hover:bg-slate-50 transition-colors' }"
+            @click="onEditClick"
+          >
+            <UIcon name="i-lucide-pencil" class="w-3.5 h-3.5" /> Edit
+          </UButton>
+        </div>
+
+        <div v-if="isEditMode" class="flex gap-2.5">
+          <UButton
+            variant="ghost"
+
+            :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer hover:bg-slate-50 transition-colors' }"
+            @click="onCancelClick"
+          >
+            Cancel
+          </UButton>
+          <UButton
+            type="submit"
+            form="product-detail"
+            variant="ghost"
+
+            :ui="{ base: 'border-none bg-green-500 text-white text-sm font-bold px-5 py-[9px] rounded-lg cursor-pointer shadow-sm hover:bg-green-600 transition-colors' }"
+          >
+            Save Changes
+          </UButton>
+        </div>
+      </div>
+
+      <UForm
+        id="product-detail"
+        :schema="productSchema"
+        :state="formState"
+        class="flex flex-col gap-6"
+        @submit="onSaveClick"
+      >
+        <!-- scope card -->
+        <UCard v-if="showScopeCard" class="px-5 py-4">
+          <div class="flex items-center gap-3.5 flex-wrap">
+            <div class="flex items-center gap-2 flex-shrink-0">
+              <UIcon name="i-lucide-layers" class="w-4 h-4 text-green-600" />
+              <span class="text-sm font-bold text-slate-900">{{ isEditMode ? 'Editing for' : 'Viewing for' }}</span>
+            </div>
+            <div class="relative min-w-[260px]">
+              <button type="button" :style="ddTrigger(openDropdown === 'scope')" @click="toggleDropdown('scope')">
+                <span class="whitespace-nowrap overflow-hidden text-ellipsis">{{ scopeLabel }}</span>
+                <span :style="ddChevron(openDropdown === 'scope')"><UIcon name="i-lucide-chevron-down" class="w-4 h-4" /></span>
               </button>
-              <template v-if="openDropdown === 'stock'">
+              <template v-if="openDropdown === 'scope'">
                 <div class="fixed inset-0 z-40" @click="closeDropdown" />
-                <div class="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.14)] p-1">
+                <div class="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.14)] p-1 max-h-[260px] overflow-y-auto">
                   <button
-                    v-for="opt in stockItems"
-                    :key="opt[0]"
+                    v-for="opt in scopeItems"
+                    :key="opt.id"
                     type="button"
-                    :style="ddOption(stockValue === opt[0])"
-                    @click="pickStock(opt[0])"
+                    :style="ddOption(opt.selected)"
+                    @click="setScope(opt.id)"
                   >
-                    <span class="inline-flex items-center gap-2"><span :style="stockDot(opt[2])" />{{ opt[1] }}</span>
-                    <UIcon v-if="stockValue === opt[0]" name="i-lucide-check" class="w-[15px] h-[15px] text-green-600" />
+                    <span>{{ opt.name }}</span>
+                    <UIcon v-if="opt.selected" name="i-lucide-check" class="w-[15px] h-[15px] text-green-600" />
                   </button>
                 </div>
               </template>
             </div>
-          </div>
-
-          <!-- status -->
-          <div class="flex items-center justify-between pt-4 border-t border-slate-100">
-            <div>
-              <div class="text-sm font-semibold text-slate-900">
-                Status
-              </div>
-              <div class="text-[13px] text-slate-500 mt-0.5">
-                {{ statusHelper }}
-              </div>
-            </div>
-            <VertexStatusBadge v-if="isViewMode" :active="product.status === 'Active'" :label="product.status" />
-            <USwitch
-              v-else
-              :model-value="draftActive"
-              class="shrink-0"
-              @update:model-value="toggleStatus"
-            />
-          </div>
-
-          <!-- not for sale -->
-          <div class="flex items-center justify-between pt-4 mt-4 border-t border-slate-100">
-            <div>
-              <div class="text-sm font-semibold text-slate-900">
-                Mark as gift
-              </div>
-              <div class="text-[13px] text-slate-500 mt-0.5">
-                {{ notForSaleHelper }}
-              </div>
-            </div>
-            <span v-if="isViewMode && product.notForSale" :style="notForSaleBadgeStyle">{{ notForSaleBadge }}</span>
-            <span v-else-if="isViewMode" />
-            <USwitch
-              v-else
-              :model-value="!!draft.notForSale"
-              class="shrink-0"
-              @update:model-value="toggleNotForSale"
-            />
+            <span v-if="isPlatformScope" class="text-[12.5px] text-slate-500">Only <strong class="text-slate-700">Name</strong> and <strong class="text-slate-700">Price</strong> can be overridden here — other fields are global.</span>
+            <span v-if="isViewPlatformScope" class="text-[12.5px] text-slate-500">Showing effective values for this platform. Click <strong class="text-slate-700">Edit</strong> to override them.</span>
           </div>
         </UCard>
-      </div>
 
-      <!-- ROW 2: variants / bundle -->
-      <div class="flex flex-wrap gap-6">
-        <div class="grow-[999] shrink basis-[420px] min-w-0 flex flex-col gap-6">
-          <!-- VARIANTS -->
-          <UCard v-if="isVariantProduct" class="p-6">
+        <!-- ROW 1: Core identification + Settings -->
+        <div class="flex flex-wrap gap-6 items-stretch">
+          <!-- Core identification -->
+          <UCard class="h-full min-w-0 grow-[999] shrink basis-[380px] p-6">
             <h2 class="text-base font-bold text-slate-900 mt-0 mb-1">
-              Variants
+              Core Identification
             </h2>
             <p class="text-[13px] text-slate-500 mt-0 mb-5">
-              Define attributes, then generate variant combinations.
+              Basic details that identify this product.
             </p>
 
-            <!-- EDIT MODE -->
-            <div v-if="isEditMode">
-              <div class="flex items-center gap-2 mb-3.5">
-                <span class="w-[22px] h-[22px] rounded-full bg-green-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">1</span>
-                <span class="text-sm font-bold text-slate-900">Define Attributes</span>
-              </div>
-
-              <div class="flex flex-col gap-3 mb-3">
-                <div
-                  v-for="attr in editAttrRows"
-                  :key="attr.id"
-                  class="border border-slate-200 rounded-[10px] px-4 py-3.5 bg-slate-50"
-                >
-                  <div class="flex flex-wrap gap-3 items-start">
-                    <div class="basis-[150px] grow shrink min-w-[120px] max-w-[240px]">
-                      <label class="field-label text-xs">Attribute Name</label>
-                      <div class="select-wrap">
-                        <USelect
-                          :model-value="attr.name || undefined"
-                          :items="attributeTypeOptions"
-                          placeholder="Select attribute..."
-                          :ui="fieldCompact()"
-                          @update:model-value="onAttrNameChange(attr.id, String($event))"
-                        />
-                      </div>
-                    </div>
-                    <div class="basis-[170px] grow shrink min-w-0">
-                      <label class="field-label text-xs">Values</label>
-                      <div class="flex flex-wrap gap-1.5 items-center">
-                        <span
-                          v-for="chip in attr.valueChips"
-                          :key="chip"
-                          class="inline-flex basis-auto grow-0 shrink-0 items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full py-[3px] pr-1.5 pl-2.5 text-[13px] font-medium"
-                        >
-                          {{ chip }}
-                          <UButton
-                            variant="ghost"
-
-                            :ui="{ base: 'border-none bg-transparent cursor-pointer text-emerald-700 flex items-center p-0.5 rounded-full' }"
-                            @click="removeAttrValue(attr.id, chip)"
-                          >
-                            <UIcon name="i-lucide-x" class="w-3 h-3" />
-                          </UButton>
-                        </span>
-                        <div v-if="attr.canAddValue" class="select-wrap basis-[130px] grow shrink min-w-[120px]">
-                          <USelect
-                            :model-value="NO_VALUE"
-                            :items="attr.valueOptions"
-                            placeholder="+ Add value"
-                            :ui="SELECT_ADD_VALUE"
-                            @update:model-value="addAttrValue(attr.id, String($event))"
-                          />
-                        </div>
-                        <span v-if="attr.noValueOptions" class="text-xs text-slate-400 p-1">{{ attr.valuesEmptyHint }}</span>
-                      </div>
-                    </div>
-                    <UButton
-                      variant="ghost"
-
-                      title="Remove attribute"
-
-                      :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-red-500 w-9 h-9 rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0 mt-5' }"
-                      @click="removeEditAttr(attr.id)"
-                    >
-                      <UIcon name="i-lucide-trash-2" class="w-4 h-4" />
-                    </UButton>
+            <div class="grid gap-4 mb-4 grid-cols-[repeat(auto-fit,minmax(min(180px,100%),1fr))]">
+              <!-- name -->
+              <div>
+                <template v-if="isViewMode">
+                  <span class="static-label">Product Name</span>
+                  <div class="static-value">
+                    {{ product.name }}
                   </div>
-                </div>
-              </div>
-
-              <UButton
-                variant="ghost"
-
-                :ui="{ base: 'inline-flex items-center gap-1.5 border border-dashed border-green-500 bg-emerald-50 text-green-600 text-[13px] font-semibold px-4 py-[9px] rounded-lg cursor-pointer mb-7 mr-2.5' }"
-                @click="addEditAttribute"
-              >
-                <UIcon name="i-lucide-plus" class="w-3.5 h-3.5" />
-                Add Attribute
-              </UButton>
-              <UButton
-                variant="ghost"
-
-                :disabled="editApplyDisabled"
-
-                :ui="{ base: ['inline-flex items-center gap-1.5 border-none text-[13px] font-bold px-[18px] py-[9px] rounded-lg mb-7 transition-colors', editApplyDisabled ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-green-500 text-white cursor-pointer shadow-sm hover:bg-green-600'] }"
-                @click="applyEditVariants"
-              >
-                <UIcon name="i-lucide-check" class="w-3.5 h-3.5" />
-                Apply
-              </UButton>
-
-              <div class="flex items-center justify-between mb-3.5">
-                <div class="flex items-center gap-2">
-                  <span class="w-[22px] h-[22px] rounded-full bg-green-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">2</span>
-                  <span class="text-sm font-bold text-slate-900">Variant Combinations</span>
-                  <span class="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{{ variantCountLabel }}</span>
-                </div>
-              </div>
-
-              <div class="border border-slate-200 rounded-[10px] overflow-hidden">
-                <div class="overflow-x-auto">
-                  <div class="min-w-[420px]">
-                    <div class="grid grid-cols-[minmax(140px,1.4fr)_130px_80px_40px] gap-2 items-center px-4 py-2.5 bg-slate-50 border-b border-slate-200">
-                      <span class="th text-xs">Variant</span>
-                      <span class="th text-xs">SKU</span>
-                      <span class="th text-xs text-center">Status</span>
-                      <span />
-                    </div>
-                    <div
-                      v-for="ev in editVariants"
-                      :key="ev.name"
-                      class="grid grid-cols-[minmax(140px,1.4fr)_130px_80px_40px] gap-2 items-center px-4 py-2 border-b border-slate-100"
-                    >
-                      <span class="text-sm font-semibold text-slate-900">{{ ev.name }}</span>
-                      <UInput
-                        :model-value="ev.sku"
-                        placeholder="SKU"
-                        :ui="fieldCompactSm()"
-                        @update:model-value="updateEditVariant(ev.name, 'sku', String($event))"
-                      />
-                      <div class="text-center">
-                        <USwitch
-                          :model-value="!!ev.active"
-                          class="inline-flex"
-                          @update:model-value="updateEditVariant(ev.name, 'active', $event)"
-                        />
-                      </div>
-                      <UButton
-                        variant="ghost"
-
-                        title="Delete variant"
-
-                        :ui="{ base: 'hover:bg-slate-100 border-none bg-transparent text-slate-400 w-8 h-8 rounded-lg cursor-pointer inline-flex items-center justify-center' }"
-                        @click="removeEditVariant(ev.name)"
-                      >
-                        <UIcon name="i-lucide-trash-2" class="w-[15px] h-[15px]" />
-                      </UButton>
-                    </div>
+                </template>
+                <template v-else>
+                  <div class="flex items-center justify-between gap-2">
+                    <label class="field-label mb-1.5">Product Name</label>
+                    <span v-if="isPlatformScope" :style="nameHasOverride ? BADGE_OVERRIDE : BADGE_INHERIT">{{ nameHasOverride ? 'Overridden' : 'Inherited' }}</span>
                   </div>
-                </div>
+                  <UFormField name="name" :ui="FORM_FIELD_COMPACT">
+                    <UInput
+                      :model-value="nameFieldValue"
+                      placeholder="e.g. Tourist SIM 15GB"
+                      :ui="fieldCompact()"
+                      @update:model-value="onNameChange"
+                    />
+                  </UFormField>
+                  <UButton
+                    v-if="nameHasOverride"
+
+                    variant="ghost"
+
+                    :ui="{ base: 'mt-[5px] border-none bg-transparent text-green-600 text-xs font-semibold cursor-pointer p-0 inline-flex items-center gap-1' }"
+                    @click="onNameReset"
+                  >
+                    <UIcon name="i-lucide-rotate-ccw" class="w-[11px] h-[11px]" /> Reset to default
+                  </UButton>
+                </template>
+              </div>
+
+              <!-- sku -->
+              <div>
+                <template v-if="isViewMode">
+                  <span class="static-label">SKU</span>
+                  <div class="static-value">
+                    {{ product.sku }}
+                  </div>
+                </template>
+                <template v-else>
+                  <label class="field-label">SKU</label>
+                  <UInput
+                    :model-value="draft.sku"
+                    disabled
+                    title="SKU cannot be changed after creation"
+                    :ui="fieldCompact()"
+                  />
+                  <div class="text-xs text-slate-400 mt-[5px] flex items-center gap-1">
+                    <UIcon name="i-lucide-lock" class="w-[11px] h-[11px]" /> SKU cannot be changed after creation
+                  </div>
+                </template>
+              </div>
+
+              <!-- product type -->
+              <div>
+                <template v-if="isViewMode">
+                  <span class="static-label">Product Type</span>
+                  <div class="static-value capitalize">
+                    {{ product.productType }}
+                  </div>
+                </template>
+                <template v-else>
+                  <label class="field-label">Product Type</label>
+                  <UInput
+                    :model-value="productTypeLabel"
+                    disabled
+                    title="Product type cannot be changed after creation"
+                    :ui="fieldCompact()"
+                  />
+                  <div class="text-xs text-slate-400 mt-[5px] flex items-center gap-1">
+                    <UIcon name="i-lucide-lock" class="w-[11px] h-[11px]" /> Product type cannot be changed after creation
+                  </div>
+                </template>
               </div>
             </div>
 
-            <!-- VIEW MODE -->
-            <div v-else>
-              <div class="flex items-center gap-2 mb-3.5">
-                <span class="text-sm font-bold text-slate-900">Variant Combinations</span>
-                <span class="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{{ variantCountLabel }}</span>
-              </div>
-              <div class="border border-slate-200 rounded-[10px] overflow-hidden">
-                <div class="overflow-x-auto">
-                  <UTable
-                    :data="viewVariantRows"
-                    :columns="viewVariantColumns"
-                    :ui="{
-                      ...tableUi('min-w-[640px]'),
-                      th: 'th text-left text-xs px-3 py-[11px]',
-                      td: 'px-3 py-[11px]'
-                    }"
-                  >
-                    <template #name-cell="{ row }">
-                      <span class="text-sm font-semibold text-slate-900">{{ row.original.name }}</span>
-                    </template>
-
-                    <template #skuLabel-cell="{ row }">
-                      <span class="text-[13px] text-slate-500">{{ row.original.skuLabel }}</span>
-                    </template>
-
-                    <template #attrChips-cell="{ row }">
-                      <div class="flex flex-wrap gap-[5px]">
-                        <span
-                          v-for="ac in row.original.attrChips"
-                          :key="ac"
-                          class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200"
-                        >{{ ac }}</span>
-                      </div>
-                    </template>
-
-                    <template #priceLabel-cell="{ row }">
-                      <span class="text-sm text-slate-700">{{ row.original.priceLabel }}</span>
-                    </template>
-
-                    <template #stockLabel-cell="{ row }">
-                      <span class="text-sm text-slate-700">{{ row.original.stockLabel }}</span>
-                    </template>
-
-                    <template #statusLabel-cell="{ row }">
-                      <VertexStatusBadge :active="row.original.statusLabel === 'Active'" :label="row.original.statusLabel" />
-                    </template>
-
-                    <template #action-cell="{ row }">
-                      <div class="text-right">
-                        <NuxtLink
-                          :to="row.original.detailTo"
-                          class="hover:bg-slate-100 inline-flex items-center gap-1.5 border border-slate-200 bg-white text-slate-700 text-[13px] font-semibold px-3 py-1.5 rounded-lg no-underline"
-                        >
-                          <UIcon name="i-lucide-eye" class="w-3.5 h-3.5" /> View Detail
-                        </NuxtLink>
-                      </div>
-                    </template>
-                  </UTable>
+            <!-- notes -->
+            <div class="mb-4">
+              <template v-if="isViewMode">
+                <span class="static-label">Notes</span>
+                <div class="static-value font-normal text-slate-700 leading-normal">
+                  {{ notesDisplay }}
                 </div>
+              </template>
+              <template v-else>
+                <label class="field-label">Notes</label>
+                <UTextarea
+                  :model-value="draft.notes"
+                  :rows="3"
+                  placeholder="Internal notes about this product..."
+                  :ui="fieldCompact('resize-y')"
+                  @update:model-value="draft.notes = String($event)"
+                />
+              </template>
+            </div>
+
+            <!-- image -->
+            <div>
+              <span class="static-label">Product Image</span>
+              <img
+                v-if="product.image"
+                :src="product.image"
+                class="w-[120px] h-[120px] rounded-[10px] object-cover border border-slate-200 block"
+              >
+              <div
+                v-else
+                class="w-24 h-24 rounded-[10px] bg-slate-100 flex items-center justify-center text-slate-300 border border-slate-100"
+              >
+                <UIcon name="i-lucide-image" class="w-[26px] h-[26px]" />
               </div>
             </div>
           </UCard>
 
-          <!-- BUNDLE -->
-          <UCard v-if="isBundleProduct" class="p-6">
-            <h2 class="text-base font-bold text-slate-900 mt-0 mb-1">
-              Bundle
+          <!-- Settings -->
+          <UCard class="h-full min-w-0 grow shrink basis-[320px] p-6">
+            <h2 class="text-base font-bold text-slate-900 mt-0 mb-5">
+              Settings
             </h2>
-            <p class="text-[13px] text-slate-500 mt-0 mb-4">
-              Components and their products in this bundle.
-            </p>
-            <div v-if="bundleComponentRows.length" class="flex flex-col gap-4">
-              <div
-                v-for="(comp, ci) in bundleComponentRows"
-                :key="ci"
-                class="border border-slate-200 rounded-[10px] p-4 bg-slate-50"
-              >
-                <div class="text-sm font-bold text-slate-900 mb-3">
-                  {{ comp.title }}
+
+            <!-- category -->
+            <div class="mb-4">
+              <template v-if="isViewMode">
+                <span class="static-label">Category</span>
+                <div class="static-value">
+                  {{ categoryPathLabel }}
                 </div>
-                <div class="grid gap-2.5 grid-cols-[repeat(auto-fill,minmax(min(220px,100%),1fr))]">
-                  <div
-                    v-for="(prod, pi) in comp.products"
-                    :key="pi"
-                    class="border border-slate-200 rounded-lg bg-white px-3.5 py-3 flex items-center gap-2.5"
+              </template>
+              <template v-else>
+                <label class="field-label">Category</label>
+                <div class="relative">
+                  <button type="button" :style="ddTrigger(openDropdown === 'category')" @click="toggleDropdown('category')">
+                    <span
+                      class="whitespace-nowrap overflow-hidden text-ellipsis"
+                      :class="hasCat ? 'text-slate-900' : 'text-slate-400'"
+                    >{{ catDisplay }}</span>
+                    <span :style="ddChevron(openDropdown === 'category')"><UIcon name="i-lucide-chevron-down" class="w-4 h-4" /></span>
+                  </button>
+                  <template v-if="openDropdown === 'category'">
+                    <div class="fixed inset-0 z-40" @click="closeDropdown" />
+                    <div class="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.14)] max-h-[280px] overflow-y-auto p-1">
+                      <button
+                        v-for="opt in catFlat"
+                        :key="opt.id"
+                        type="button"
+                        :style="opt.style"
+                        @click="pickCategory(opt.id)"
+                      >
+                        <span>{{ opt.name }}</span>
+                        <UIcon v-if="opt.selected" name="i-lucide-check" class="w-[15px] h-[15px] text-green-600" />
+                      </button>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+
+            <!-- platforms -->
+            <div class="mb-5">
+              <template v-if="isViewMode">
+                <span class="static-label">Platforms</span>
+                <div v-if="viewPlatformNames.length" class="flex flex-wrap gap-1.5 mt-[5px]">
+                  <span
+                    v-for="pl in viewPlatformNames"
+                    :key="pl"
+                    class="inline-flex items-center gap-1.5 text-[13px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 rounded-full px-[11px] py-[3px]"
                   >
-                    <div class="w-[34px] h-[34px] rounded-lg bg-emerald-50 text-green-600 flex items-center justify-center flex-shrink-0">
-                      <UIcon name="i-lucide-package" class="w-[17px] h-[17px]" />
-                    </div>
-                    <div class="min-w-0">
-                      <div class="text-[13.5px] font-semibold text-slate-900 overflow-hidden text-ellipsis whitespace-nowrap">
-                        {{ prod.name }}
-                      </div>
-                      <div class="text-xs text-slate-500">
-                        {{ prod.sku }}
-                      </div>
-                    </div>
-                  </div>
+                    <UIcon name="i-lucide-globe" class="w-3 h-3 text-slate-400" />{{ pl }}
+                  </span>
                 </div>
+                <div v-else class="static-value text-slate-400">
+                  — No platform
+                </div>
+              </template>
+              <template v-else>
+                <label class="field-label">Platforms</label>
+                <div v-if="editPlatformChips.length" class="flex flex-wrap gap-1.5 mb-2">
+                  <span
+                    v-for="chip in editPlatformChips"
+                    :key="chip.id"
+                    class="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full py-1 pr-2 pl-3 text-[13px] font-semibold"
+                  >
+                    {{ chip.name }}
+                    <UButton
+                      variant="ghost"
+
+                      title="Remove"
+
+                      :ui="{ base: 'border-none bg-transparent cursor-pointer text-emerald-700 flex items-center p-0.5 rounded-full' }"
+                      @click="removeDraftPlatform(chip.id)"
+                    >
+                      <UIcon name="i-lucide-x" class="w-3 h-3" />
+                    </UButton>
+                  </span>
+                </div>
+                <div class="relative">
+                  <button type="button" :style="ddTrigger(openDropdown === 'platform')" @click="toggleDropdown('platform')">
+                    <span class="text-slate-500 whitespace-nowrap overflow-hidden text-ellipsis">{{ platformAddLabel }}</span>
+                    <span :style="ddChevron(openDropdown === 'platform')"><UIcon name="i-lucide-chevron-down" class="w-4 h-4" /></span>
+                  </button>
+                  <template v-if="openDropdown === 'platform'">
+                    <div class="fixed inset-0 z-40" @click="closeDropdown" />
+                    <div class="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.14)] p-1 max-h-[220px] overflow-y-auto">
+                      <button
+                        v-for="opt in availablePlatforms"
+                        :key="opt.id"
+                        type="button"
+                        :style="ddOption(false)"
+                        @click="addDraftPlatform(opt.id)"
+                      >
+                        <span>{{ opt.name }}</span>
+                      </button>
+                      <div v-if="platformAllAssigned" class="p-2.5 text-[13px] text-slate-400 text-center">
+                        All platforms assigned
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+
+            <!-- stock -->
+            <div v-if="isViewMode" class="mb-4">
+              <span class="static-label">Stock</span>
+              <div class="static-value inline-flex items-center gap-2">
+                <span :style="stockDotStyle" />{{ stockLabel }}
               </div>
             </div>
             <div
               v-else
-              class="border-[1.5px] border-dashed border-slate-200 rounded-[10px] px-6 py-10 text-center"
+              class="mb-5"
+              :style="stockLocked ? 'opacity:0.6;pointer-events:none;' : ''"
             >
-              <div class="text-sm text-slate-400">
-                No components in this bundle.
+              <label class="field-label">Stock</label>
+              <div class="relative">
+                <button
+                  type="button"
+                  :disabled="stockLocked"
+                  :style="ddTrigger(openDropdown === 'stock') + (stockLocked ? 'cursor:not-allowed;' : '')"
+                  @click="onToggleStockDropdown"
+                >
+                  <span class="inline-flex items-center gap-2">
+                    <span :style="stockDotStyle" />{{ stockLabel }}
+                  </span>
+                  <span :style="ddChevron(openDropdown === 'stock')"><UIcon name="i-lucide-chevron-down" class="w-4 h-4" /></span>
+                </button>
+                <template v-if="openDropdown === 'stock'">
+                  <div class="fixed inset-0 z-40" @click="closeDropdown" />
+                  <div class="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.14)] p-1">
+                    <button
+                      v-for="opt in stockItems"
+                      :key="opt[0]"
+                      type="button"
+                      :style="ddOption(stockValue === opt[0])"
+                      @click="pickStock(opt[0])"
+                    >
+                      <span class="inline-flex items-center gap-2"><span :style="stockDot(opt[2])" />{{ opt[1] }}</span>
+                      <UIcon v-if="stockValue === opt[0]" name="i-lucide-check" class="w-[15px] h-[15px] text-green-600" />
+                    </button>
+                  </div>
+                </template>
               </div>
             </div>
+
+            <!-- status -->
+            <div class="flex items-center justify-between pt-4 border-t border-slate-100">
+              <div>
+                <div class="text-sm font-semibold text-slate-900">
+                  Status
+                </div>
+                <div class="text-[13px] text-slate-500 mt-0.5">
+                  {{ statusHelper }}
+                </div>
+              </div>
+              <VertexStatusBadge v-if="isViewMode" :active="product.status === 'Active'" :label="product.status" />
+              <USwitch
+                v-else
+                :model-value="draftActive"
+                class="shrink-0"
+                @update:model-value="toggleStatus"
+              />
+            </div>
+
+            <!-- not for sale -->
+            <div class="flex items-center justify-between pt-4 mt-4 border-t border-slate-100">
+              <div>
+                <div class="text-sm font-semibold text-slate-900">
+                  Mark as gift
+                </div>
+                <div class="text-[13px] text-slate-500 mt-0.5">
+                  {{ notForSaleHelper }}
+                </div>
+              </div>
+              <span v-if="isViewMode && product.notForSale" :style="notForSaleBadgeStyle">{{ notForSaleBadge }}</span>
+              <span v-else-if="isViewMode" />
+              <USwitch
+                v-else
+                :model-value="!!draft.notForSale"
+                class="shrink-0"
+                @update:model-value="toggleNotForSale"
+              />
+            </div>
           </UCard>
+        </div>
 
-          <!-- PRICING (single / bundle) -->
-          <UCard v-if="isSinglePricing" class="p-6">
-            <h2 class="text-base font-bold text-slate-900 mt-0 mb-1">
-              Pricing
-            </h2>
-            <p class="text-[13px] text-slate-500 mt-0 mb-5">
-              Subscription, monthly fee and initial fee components.
-            </p>
+        <!-- ROW 2: variants / bundle -->
+        <div class="flex flex-wrap gap-6">
+          <div class="grow-[999] shrink basis-[420px] min-w-0 flex flex-col gap-6">
+            <!-- VARIANTS -->
+            <UCard v-if="isVariantProduct" class="p-6">
+              <h2 class="text-base font-bold text-slate-900 mt-0 mb-1">
+                Variants
+              </h2>
+              <p class="text-[13px] text-slate-500 mt-0 mb-5">
+                Define attributes, then generate variant combinations.
+              </p>
 
-            <!-- view mode -->
-            <template v-if="isViewMode">
-              <div class="flex flex-wrap gap-3 mb-5">
-                <div class="basis-[180px] grow shrink min-w-0 border border-slate-200 rounded-[10px] px-4 py-3.5">
-                  <div class="th text-xs mb-1.5">
-                    Subscription
-                  </div>
-                  <div class="text-sm text-slate-900">
-                    {{ viewSubscriptionLabel }}
+              <!-- EDIT MODE -->
+              <div v-if="isEditMode">
+                <div class="flex items-center gap-2 mb-3.5">
+                  <span class="w-[22px] h-[22px] rounded-full bg-green-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">1</span>
+                  <span class="text-sm font-bold text-slate-900">Define Attributes</span>
+                </div>
+
+                <div class="flex flex-col gap-3 mb-3">
+                  <div
+                    v-for="attr in editAttrRows"
+                    :key="attr.id"
+                    class="border border-slate-200 rounded-[10px] px-4 py-3.5 bg-slate-50"
+                  >
+                    <div class="flex flex-wrap gap-3 items-start">
+                      <div class="basis-[150px] grow shrink min-w-[120px] max-w-[240px]">
+                        <label class="field-label text-xs">Attribute Name</label>
+                        <div class="select-wrap">
+                          <USelect
+                            :model-value="attr.name || undefined"
+                            :items="attributeTypeOptions"
+                            placeholder="Select attribute..."
+                            :ui="fieldCompact()"
+                            @update:model-value="onAttrNameChange(attr.id, String($event))"
+                          />
+                        </div>
+                      </div>
+                      <div class="basis-[170px] grow shrink min-w-0">
+                        <label class="field-label text-xs">Values</label>
+                        <div class="flex flex-wrap gap-1.5 items-center">
+                          <span
+                            v-for="chip in attr.valueChips"
+                            :key="chip"
+                            class="inline-flex basis-auto grow-0 shrink-0 items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full py-[3px] pr-1.5 pl-2.5 text-[13px] font-medium"
+                          >
+                            {{ chip }}
+                            <UButton
+                              variant="ghost"
+
+                              :ui="{ base: 'border-none bg-transparent cursor-pointer text-emerald-700 flex items-center p-0.5 rounded-full' }"
+                              @click="removeAttrValue(attr.id, chip)"
+                            >
+                              <UIcon name="i-lucide-x" class="w-3 h-3" />
+                            </UButton>
+                          </span>
+                          <div v-if="attr.canAddValue" class="select-wrap basis-[130px] grow shrink min-w-[120px]">
+                            <USelect
+                              :model-value="NO_VALUE"
+                              :items="attr.valueOptions"
+                              placeholder="+ Add value"
+                              :ui="SELECT_ADD_VALUE"
+                              @update:model-value="addAttrValue(attr.id, String($event))"
+                            />
+                          </div>
+                          <span v-if="attr.noValueOptions" class="text-xs text-slate-400 p-1">{{ attr.valuesEmptyHint }}</span>
+                        </div>
+                      </div>
+                      <UButton
+                        variant="ghost"
+
+                        title="Remove attribute"
+
+                        :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-red-500 w-9 h-9 rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0 mt-5' }"
+                        @click="removeEditAttr(attr.id)"
+                      >
+                        <UIcon name="i-lucide-trash-2" class="w-4 h-4" />
+                      </UButton>
+                    </div>
                   </div>
                 </div>
-                <div v-if="viewIsSubscription" class="basis-[140px] grow shrink min-w-0 border border-slate-200 rounded-[10px] px-4 py-3.5">
-                  <div class="th text-xs mb-1.5">
-                    Monthly Fee
-                  </div>
-                  <div class="text-sm text-slate-900">
-                    {{ viewMonthlyLabel }}
+
+                <UButton
+                  variant="ghost"
+
+                  :ui="{ base: 'inline-flex items-center gap-1.5 border border-dashed border-green-500 bg-emerald-50 text-green-600 text-[13px] font-semibold px-4 py-[9px] rounded-lg cursor-pointer mb-7 mr-2.5' }"
+                  @click="addEditAttribute"
+                >
+                  <UIcon name="i-lucide-plus" class="w-3.5 h-3.5" />
+                  Add Attribute
+                </UButton>
+                <UButton
+                  variant="ghost"
+
+                  :disabled="editApplyDisabled"
+
+                  :ui="{ base: ['inline-flex items-center gap-1.5 border-none text-[13px] font-bold px-[18px] py-[9px] rounded-lg mb-7 transition-colors', editApplyDisabled ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-green-500 text-white cursor-pointer shadow-sm hover:bg-green-600'] }"
+                  @click="applyEditVariants"
+                >
+                  <UIcon name="i-lucide-check" class="w-3.5 h-3.5" />
+                  Apply
+                </UButton>
+
+                <div class="flex items-center justify-between mb-3.5">
+                  <div class="flex items-center gap-2">
+                    <span class="w-[22px] h-[22px] rounded-full bg-green-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">2</span>
+                    <span class="text-sm font-bold text-slate-900">Variant Combinations</span>
+                    <span class="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{{ variantCountLabel }}</span>
                   </div>
                 </div>
-                <div class="basis-[140px] grow shrink min-w-0 border border-slate-200 rounded-[10px] px-4 py-3.5">
-                  <div class="th text-xs mb-1.5">
-                    Initial Fee
-                  </div>
-                  <div class="text-sm text-slate-900">
-                    {{ initialBreakdownTotal }}
+
+                <div class="border border-slate-200 rounded-[10px] overflow-hidden">
+                  <div class="overflow-x-auto">
+                    <div class="min-w-[420px]">
+                      <div class="grid grid-cols-[minmax(140px,1.4fr)_130px_80px_40px] gap-2 items-center px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+                        <span class="th text-xs">Variant</span>
+                        <span class="th text-xs">SKU</span>
+                        <span class="th text-xs text-center">Status</span>
+                        <span />
+                      </div>
+                      <div
+                        v-for="ev in editVariants"
+                        :key="ev.name"
+                        class="grid grid-cols-[minmax(140px,1.4fr)_130px_80px_40px] gap-2 items-center px-4 py-2 border-b border-slate-100"
+                      >
+                        <span class="text-sm font-semibold text-slate-900">{{ ev.name }}</span>
+                        <UInput
+                          :model-value="ev.sku"
+                          placeholder="SKU"
+                          :ui="fieldCompactSm()"
+                          @update:model-value="updateEditVariant(ev.name, 'sku', String($event))"
+                        />
+                        <div class="text-center">
+                          <USwitch
+                            :model-value="!!ev.active"
+                            class="inline-flex"
+                            @update:model-value="updateEditVariant(ev.name, 'active', $event)"
+                          />
+                        </div>
+                        <UButton
+                          variant="ghost"
+
+                          title="Delete variant"
+
+                          :ui="{ base: 'hover:bg-slate-100 border-none bg-transparent text-slate-400 w-8 h-8 rounded-lg cursor-pointer inline-flex items-center justify-center' }"
+                          @click="removeEditVariant(ev.name)"
+                        >
+                          <UIcon name="i-lucide-trash-2" class="w-[15px] h-[15px]" />
+                        </UButton>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div v-if="hasInitialBreakdown" class="border border-slate-200 rounded-[10px] overflow-hidden">
-                <div class="flex items-center gap-2.5 px-3 py-2.5 bg-slate-50 border-b border-slate-200">
-                  <span class="th flex-1 text-xs">Component</span>
-                  <span class="th w-[150px] text-xs text-right">Amount</span>
+              <!-- VIEW MODE -->
+              <div v-else>
+                <div class="flex items-center gap-2 mb-3.5">
+                  <span class="text-sm font-bold text-slate-900">Variant Combinations</span>
+                  <span class="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{{ variantCountLabel }}</span>
                 </div>
+                <div class="border border-slate-200 rounded-[10px] overflow-hidden">
+                  <div class="overflow-x-auto">
+                    <UTable
+                      :data="viewVariantRows"
+                      :columns="viewVariantColumns"
+                      :ui="{
+                        ...tableUi('min-w-[640px]'),
+                        th: 'th text-left text-xs px-3 py-[11px]',
+                        td: 'px-3 py-[11px]'
+                      }"
+                    >
+                      <template #name-cell="{ row }">
+                        <span class="text-sm font-semibold text-slate-900">{{ row.original.name }}</span>
+                      </template>
+
+                      <template #skuLabel-cell="{ row }">
+                        <span class="text-[13px] text-slate-500">{{ row.original.skuLabel }}</span>
+                      </template>
+
+                      <template #attrChips-cell="{ row }">
+                        <div class="flex flex-wrap gap-[5px]">
+                          <span
+                            v-for="ac in row.original.attrChips"
+                            :key="ac"
+                            class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200"
+                          >{{ ac }}</span>
+                        </div>
+                      </template>
+
+                      <template #priceLabel-cell="{ row }">
+                        <span class="text-sm text-slate-700">{{ row.original.priceLabel }}</span>
+                      </template>
+
+                      <template #stockLabel-cell="{ row }">
+                        <span class="text-sm text-slate-700">{{ row.original.stockLabel }}</span>
+                      </template>
+
+                      <template #statusLabel-cell="{ row }">
+                        <VertexStatusBadge :active="row.original.statusLabel === 'Active'" :label="row.original.statusLabel" />
+                      </template>
+
+                      <template #action-cell="{ row }">
+                        <div class="text-right">
+                          <NuxtLink
+                            :to="row.original.detailTo"
+                            class="hover:bg-slate-100 inline-flex items-center gap-1.5 border border-slate-200 bg-white text-slate-700 text-[13px] font-semibold px-3 py-1.5 rounded-lg no-underline"
+                          >
+                            <UIcon name="i-lucide-eye" class="w-3.5 h-3.5" /> View Detail
+                          </NuxtLink>
+                        </div>
+                      </template>
+                    </UTable>
+                  </div>
+                </div>
+              </div>
+            </UCard>
+
+            <!-- BUNDLE -->
+            <UCard v-if="isBundleProduct" class="p-6">
+              <h2 class="text-base font-bold text-slate-900 mt-0 mb-1">
+                Bundle
+              </h2>
+              <p class="text-[13px] text-slate-500 mt-0 mb-4">
+                Components and their products in this bundle.
+              </p>
+              <div v-if="bundleComponentRows.length" class="flex flex-col gap-4">
                 <div
-                  v-for="b in initialBreakdown"
-                  :key="b.feeId"
-                  class="flex items-center gap-2.5 px-3 py-2.5 border-b border-slate-100"
+                  v-for="(comp, ci) in bundleComponentRows"
+                  :key="ci"
+                  class="border border-slate-200 rounded-[10px] p-4 bg-slate-50"
                 >
-                  <span class="flex-1 text-sm text-slate-900">{{ b.label }}</span>
-                  <span class="w-[150px] text-sm text-slate-700 text-right">{{ b.amountLabel }}</span>
-                </div>
-                <div class="flex items-center justify-between px-3.5 py-3 bg-slate-50">
-                  <span class="text-sm font-bold text-slate-900">Initial Fee (Total)</span>
-                  <span class="text-base font-bold text-slate-900">{{ initialBreakdownTotal }}</span>
+                  <div class="text-sm font-bold text-slate-900 mb-3">
+                    {{ comp.title }}
+                  </div>
+                  <div class="grid gap-2.5 grid-cols-[repeat(auto-fill,minmax(min(220px,100%),1fr))]">
+                    <div
+                      v-for="(prod, pi) in comp.products"
+                      :key="pi"
+                      class="border border-slate-200 rounded-lg bg-white px-3.5 py-3 flex items-center gap-2.5"
+                    >
+                      <div class="w-[34px] h-[34px] rounded-lg bg-emerald-50 text-green-600 flex items-center justify-center flex-shrink-0">
+                        <UIcon name="i-lucide-package" class="w-[17px] h-[17px]" />
+                      </div>
+                      <div class="min-w-0">
+                        <div class="text-[13.5px] font-semibold text-slate-900 overflow-hidden text-ellipsis whitespace-nowrap">
+                          {{ prod.name }}
+                        </div>
+                        <div class="text-xs text-slate-500">
+                          {{ prod.sku }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div
                 v-else
-                class="border-[1.5px] border-dashed border-slate-200 rounded-[10px] px-6 py-7 text-center text-sm text-slate-400"
+                class="border-[1.5px] border-dashed border-slate-200 rounded-[10px] px-6 py-10 text-center"
               >
-                No initial fee components.
+                <div class="text-sm text-slate-400">
+                  No components in this bundle.
+                </div>
               </div>
-            </template>
+            </UCard>
 
-            <!-- edit mode -->
-            <template v-else>
-              <div class="flex items-center justify-between gap-3 px-3.5 py-3 border border-slate-200 rounded-[10px] mb-5 bg-slate-50">
-                <div>
-                  <div class="text-sm font-semibold text-slate-900">
-                    Subscription product
+            <!-- PRICING (single / bundle) -->
+            <UCard v-if="isSinglePricing" class="p-6">
+              <h2 class="text-base font-bold text-slate-900 mt-0 mb-1">
+                Pricing
+              </h2>
+              <p class="text-[13px] text-slate-500 mt-0 mb-5">
+                Subscription, monthly fee and initial fee components.
+              </p>
+
+              <!-- view mode -->
+              <template v-if="isViewMode">
+                <div class="flex flex-wrap gap-3 mb-5">
+                  <div class="basis-[180px] grow shrink min-w-0 border border-slate-200 rounded-[10px] px-4 py-3.5">
+                    <div class="th text-xs mb-1.5">
+                      Subscription
+                    </div>
+                    <div class="text-sm text-slate-900">
+                      {{ viewSubscriptionLabel }}
+                    </div>
                   </div>
-                  <div class="text-[13px] text-slate-500 mt-0.5">
-                    {{ subscriptionHelper }}
+                  <div v-if="viewIsSubscription" class="basis-[140px] grow shrink min-w-0 border border-slate-200 rounded-[10px] px-4 py-3.5">
+                    <div class="th text-xs mb-1.5">
+                      Monthly Fee
+                    </div>
+                    <div class="text-sm text-slate-900">
+                      {{ viewMonthlyLabel }}
+                    </div>
+                  </div>
+                  <div class="basis-[140px] grow shrink min-w-0 border border-slate-200 rounded-[10px] px-4 py-3.5">
+                    <div class="th text-xs mb-1.5">
+                      Initial Fee
+                    </div>
+                    <div class="text-sm text-slate-900">
+                      {{ initialBreakdownTotal }}
+                    </div>
                   </div>
                 </div>
-                <div class="inline-flex items-center gap-1.5 text-[13px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 rounded-full px-3 py-1">
-                  <UIcon name="i-lucide-lock" class="w-3 h-3" />{{ editSubscriptionLabel }}
-                </div>
-              </div>
 
-              <div v-if="editIsSubscription" class="mb-5 max-w-[320px]">
-                <label class="field-label">Monthly Fee</label>
-                <div class="relative">
-                  <span class="absolute left-3 top-1/2 -translate-y-1/2 z-10 text-sm text-slate-400">¥</span>
-                  <UInput
-                    :model-value="String(editMonthly)"
-                    type="number"
-                    placeholder="0.00"
-                    :ui="fieldCompact('pl-[26px]')"
-                    @update:model-value="editMonthly = String($event)"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div class="flex items-baseline gap-2 mb-2">
-                  <label class="field-label mb-0">Initial Fee</label>
-                  <span class="text-xs text-slate-400">sum of published components below.</span>
-                </div>
-
-                <div
-                  v-if="feeComponentsLocked"
-                  class="flex items-center gap-2 mb-2.5 text-[12.5px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2"
-                >
-                  <UIcon name="i-lucide-lock" class="w-[13px] h-[13px] flex-shrink-0" />
-                  <span>Components and publish states are set in Default scope. Here you can override amounts for this platform.</span>
-                </div>
-
-                <div class="border border-slate-200 rounded-[10px] overflow-hidden">
+                <div v-if="hasInitialBreakdown" class="border border-slate-200 rounded-[10px] overflow-hidden">
                   <div class="flex items-center gap-2.5 px-3 py-2.5 bg-slate-50 border-b border-slate-200">
-                    <span class="th flex-1 min-w-0 text-xs">Component</span>
-                    <span class="th w-[150px] flex-shrink-0 text-xs">Amount</span>
-                    <span class="th w-24 flex-shrink-0 text-center text-xs">Published</span>
-                    <span class="w-[38px] flex-shrink-0" />
+                    <span class="th flex-1 text-xs">Component</span>
+                    <span class="th w-[150px] text-xs text-right">Amount</span>
+                  </div>
+                  <div
+                    v-for="b in initialBreakdown"
+                    :key="b.feeId"
+                    class="flex items-center gap-2.5 px-3 py-2.5 border-b border-slate-100"
+                  >
+                    <span class="flex-1 text-sm text-slate-900">{{ b.label }}</span>
+                    <span class="w-[150px] text-sm text-slate-700 text-right">{{ b.amountLabel }}</span>
+                  </div>
+                  <div class="flex items-center justify-between px-3.5 py-3 bg-slate-50">
+                    <span class="text-sm font-bold text-slate-900">Initial Fee (Total)</span>
+                    <span class="text-base font-bold text-slate-900">{{ initialBreakdownTotal }}</span>
+                  </div>
+                </div>
+                <div
+                  v-else
+                  class="border-[1.5px] border-dashed border-slate-200 rounded-[10px] px-6 py-7 text-center text-sm text-slate-400"
+                >
+                  No initial fee components.
+                </div>
+              </template>
+
+              <!-- edit mode -->
+              <template v-else>
+                <div class="flex items-center justify-between gap-3 px-3.5 py-3 border border-slate-200 rounded-[10px] mb-5 bg-slate-50">
+                  <div>
+                    <div class="text-sm font-semibold text-slate-900">
+                      Subscription product
+                    </div>
+                    <div class="text-[13px] text-slate-500 mt-0.5">
+                      {{ subscriptionHelper }}
+                    </div>
+                  </div>
+                  <div class="inline-flex items-center gap-1.5 text-[13px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 rounded-full px-3 py-1">
+                    <UIcon name="i-lucide-lock" class="w-3 h-3" />{{ editSubscriptionLabel }}
+                  </div>
+                </div>
+
+                <div v-if="editIsSubscription" class="mb-5 max-w-[320px]">
+                  <label class="field-label">Monthly Fee</label>
+                  <div class="relative">
+                    <span class="absolute left-3 top-1/2 -translate-y-1/2 z-10 text-sm text-slate-400">¥</span>
+                    <UInput
+                      :model-value="String(editMonthly)"
+                      type="number"
+                      placeholder="0.00"
+                      :ui="fieldCompact('pl-[26px]')"
+                      @update:model-value="editMonthly = String($event)"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div class="flex items-baseline gap-2 mb-2">
+                    <label class="field-label mb-0">Initial Fee</label>
+                    <span class="text-xs text-slate-400">sum of published components below.</span>
                   </div>
 
                   <div
-                    v-for="c in editComponentRows"
-                    :key="c.index"
-                    class="flex items-center gap-2.5 px-3 py-2.5 border-b border-slate-100"
-                    :class="c.dimmed ? 'bg-neutral-50 opacity-70' : ''"
+                    v-if="feeComponentsLocked"
+                    class="flex items-center gap-2 mb-2.5 text-[12.5px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2"
                   >
-                    <div class="flex-1 min-w-0">
-                      <div v-if="c.locked" class="flex items-center gap-2 text-sm font-semibold text-slate-900 py-0.5">
-                        {{ c.name }}
-                        <span class="text-[11px] font-semibold px-2 py-px rounded-full bg-blue-50 text-blue-600 border border-blue-200">Base</span>
+                    <UIcon name="i-lucide-lock" class="w-[13px] h-[13px] flex-shrink-0" />
+                    <span>Components and publish states are set in Default scope. Here you can override amounts for this platform.</span>
+                  </div>
+
+                  <div class="border border-slate-200 rounded-[10px] overflow-hidden">
+                    <div class="flex items-center gap-2.5 px-3 py-2.5 bg-slate-50 border-b border-slate-200">
+                      <span class="th flex-1 min-w-0 text-xs">Component</span>
+                      <span class="th w-[150px] flex-shrink-0 text-xs">Amount</span>
+                      <span class="th w-24 flex-shrink-0 text-center text-xs">Published</span>
+                      <span class="w-[38px] flex-shrink-0" />
+                    </div>
+
+                    <div
+                      v-for="c in editComponentRows"
+                      :key="c.index"
+                      class="flex items-center gap-2.5 px-3 py-2.5 border-b border-slate-100"
+                      :class="c.dimmed ? 'bg-neutral-50 opacity-70' : ''"
+                    >
+                      <div class="flex-1 min-w-0">
+                        <div v-if="c.locked" class="flex items-center gap-2 text-sm font-semibold text-slate-900 py-0.5">
+                          {{ c.name }}
+                          <span class="text-[11px] font-semibold px-2 py-px rounded-full bg-blue-50 text-blue-600 border border-blue-200">Base</span>
+                        </div>
+                        <div v-else class="select-wrap">
+                          <USelect
+                            :model-value="c.feeId || undefined"
+                            :items="c.options"
+                            value-key="id"
+                            label-key="name"
+                            :disabled="c.selectDisabled"
+                            placeholder="Select component..."
+                            :ui="fieldCompact()"
+                            @update:model-value="setComponentFee(c.index, String($event))"
+                          />
+                        </div>
                       </div>
-                      <div v-else class="select-wrap">
-                        <USelect
-                          :model-value="c.feeId || undefined"
-                          :items="c.options"
-                          value-key="id"
-                          label-key="name"
-                          :disabled="c.selectDisabled"
-                          placeholder="Select component..."
-                          :ui="fieldCompact()"
-                          @update:model-value="setComponentFee(c.index, String($event))"
+
+                      <div class="relative w-[150px] flex-shrink-0">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 z-10 text-sm text-slate-400">¥</span>
+                        <UInput
+                          :model-value="String(c.amount)"
+                          type="number"
+                          placeholder="0"
+                          :ui="fieldCompact('pl-[26px]')"
+                          @change="setComponentAmount(c.index, ($event.target as HTMLInputElement).value)"
                         />
                       </div>
+
+                      <div class="w-24 flex-shrink-0 flex justify-center">
+                        <USwitch
+                          :model-value="!!c.published"
+                          :disabled="c.publishLocked"
+                          :title="c.publishTitle"
+                          :ui="{ root: c.publishLocked ? 'opacity-60' : '' }"
+                          @update:model-value="toggleComponentPublish(c.index)"
+                        />
+                      </div>
+
+                      <div class="w-[38px] flex-shrink-0">
+                        <UButton
+                          v-if="c.canRemove"
+
+                          variant="ghost"
+                          title="Remove component"
+
+                          :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-red-500 w-[38px] h-[38px] rounded-lg cursor-pointer flex items-center justify-center' }"
+                          @click="removeComponent(c.index)"
+                        >
+                          <UIcon name="i-lucide-trash-2" class="w-4 h-4" />
+                        </UButton>
+                        <span
+                          v-else-if="c.locked"
+                          class="w-[38px] h-[38px] inline-flex items-center justify-center text-slate-300"
+                        >
+                          <UIcon name="i-lucide-lock" class="w-3.5 h-3.5" />
+                        </span>
+                      </div>
                     </div>
 
-                    <div class="relative w-[150px] flex-shrink-0">
-                      <span class="absolute left-3 top-1/2 -translate-y-1/2 z-10 text-sm text-slate-400">¥</span>
-                      <UInput
-                        :model-value="String(c.amount)"
-                        type="number"
-                        placeholder="0"
-                        :ui="fieldCompact('pl-[26px]')"
-                        @change="setComponentAmount(c.index, ($event.target as HTMLInputElement).value)"
-                      />
-                    </div>
-
-                    <div class="w-24 flex-shrink-0 flex justify-center">
-                      <USwitch
-                        :model-value="!!c.published"
-                        :disabled="c.publishLocked"
-                        :title="c.publishTitle"
-                        :ui="{ root: c.publishLocked ? 'opacity-60' : '' }"
-                        @update:model-value="toggleComponentPublish(c.index)"
-                      />
-                    </div>
-
-                    <div class="w-[38px] flex-shrink-0">
+                    <div v-if="canAddEditComponent" class="px-3 py-2.5 border-b border-slate-100">
                       <UButton
-                        v-if="c.canRemove"
-
                         variant="ghost"
-                        title="Remove component"
 
-                        :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-red-500 w-[38px] h-[38px] rounded-lg cursor-pointer flex items-center justify-center' }"
-                        @click="removeComponent(c.index)"
+                        :ui="{ base: 'inline-flex items-center gap-1.5 border border-dashed border-green-500 bg-emerald-50 text-green-600 text-[13px] font-semibold px-3.5 py-2 rounded-lg cursor-pointer' }"
+                        @click="addEditComponent"
                       >
-                        <UIcon name="i-lucide-trash-2" class="w-4 h-4" />
+                        <UIcon name="i-lucide-plus" class="w-3.5 h-3.5" /> Add component
                       </UButton>
-                      <span
-                        v-else-if="c.locked"
-                        class="w-[38px] h-[38px] inline-flex items-center justify-center text-slate-300"
-                      >
-                        <UIcon name="i-lucide-lock" class="w-3.5 h-3.5" />
-                      </span>
+                    </div>
+
+                    <div class="flex items-center justify-between px-3.5 py-3 bg-slate-50">
+                      <span class="text-sm font-bold text-slate-900">Initial Fee (Total)</span>
+                      <span class="text-base font-bold text-slate-900">{{ editInitialTotalLabel }}</span>
                     </div>
                   </div>
+                </div>
+              </template>
+            </UCard>
+          </div>
+          <div
+            v-if="showLowerSpacer"
+            class="grow shrink basis-[320px]"
+            aria-hidden="true"
+          />
+        </div>
+      </UForm>
 
-                  <div v-if="canAddEditComponent" class="px-3 py-2.5 border-b border-slate-100">
+      <!-- cancel confirm -->
+      <VertexConfirmModal
+        :open="cancelConfirmOpen"
+        compact
+        icon=""
+        title="Discard changes?"
+        message="Your edits will not be saved."
+        cancel-label="Keep Editing"
+        confirm-label="Discard"
+        width-class="w-[420px]"
+        @cancel="onKeepEditing"
+        @confirm="onConfirmDiscard"
+      />
+
+      <!-- delete confirm -->
+      <VertexConfirmModal
+        :open="deleteConfirmOpen"
+        compact
+        icon="triangle-alert"
+        :title="`Delete ${product.name}?`"
+        message="This action cannot be undone."
+        cancel-label="Cancel"
+        confirm-label="Delete"
+        @cancel="onCancelDelete"
+        @confirm="onConfirmDelete"
+      />
+
+      <!-- toast -->
+      <VertexToast :message="toastMessage" variant="dark" />
+
+      <!-- version history drawer -->
+      <template v-if="historyOpen">
+        <div
+          class="fixed inset-0 bg-slate-900/35 backdrop-blur-[2px] z-[120]"
+          @click="historyOpen = false"
+        />
+        <div class="drawer fixed top-0 right-0 bottom-0 w-[340px] max-w-[92vw] bg-white z-[121] shadow-[-8px_0_30px_rgba(0,0,0,0.18)] flex flex-col">
+          <div class="flex items-center justify-between gap-3 px-[18px] py-3.5 border-b border-slate-200 flex-shrink-0">
+            <div class="flex items-center gap-2">
+              <UIcon name="i-lucide-history" class="w-4 h-4 text-green-600" />
+              <h2 class="text-[15px] font-bold text-slate-900 m-0">
+                Version History
+              </h2>
+            </div>
+            <UButton
+              variant="ghost"
+
+              :ui="{ base: 'hover:bg-slate-100 border-none bg-transparent text-slate-500 w-[30px] h-[30px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
+              @click="historyOpen = false"
+            >
+              <UIcon name="i-lucide-x" class="w-[17px] h-[17px]" />
+            </UButton>
+          </div>
+          <div class="flex-1 overflow-y-auto pt-0.5 pb-4">
+            <template v-for="g in historyGroups" :key="g.label">
+              <div class="px-[18px] pt-3 pb-1 text-[10px] font-bold tracking-[0.05em] text-slate-400 uppercase">
+                {{ g.label }}
+              </div>
+              <div v-for="e in g.entries" :key="e.id" :style="e.rowStyle">
+                <div class="flex items-start gap-2.5">
+                  <div :style="e.avatarStyle">
+                    {{ e.initials }}
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span class="text-sm font-semibold text-slate-900">{{ e.actor }}</span>
+                      <span
+                        v-if="e.isCurrent"
+                        class="text-[11px] font-bold text-green-600 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-px"
+                      >Current version</span>
+                    </div>
+                    <div class="text-[11px] text-slate-400 mt-px">
+                      {{ e.timestamp }}
+                    </div>
+                    <div class="mt-1.5 flex flex-col gap-1">
+                      <div v-for="(c, idx) in e.visibleChanges" :key="idx" class="text-[13px] text-slate-700">
+                        <span class="font-semibold">{{ c.field }}:</span>
+                        <span class="text-slate-400 line-through">{{ c.from }}</span>
+                        <UIcon name="i-lucide-arrow-right" class="w-[11px] h-[11px] inline align-middle text-slate-300 mx-0.5" />
+                        <span class="text-slate-900 font-medium">{{ c.to }}</span>
+                      </div>
+                    </div>
                     <UButton
+                      v-if="e.hasMore"
+
                       variant="ghost"
 
-                      :ui="{ base: 'inline-flex items-center gap-1.5 border border-dashed border-green-500 bg-emerald-50 text-green-600 text-[13px] font-semibold px-3.5 py-2 rounded-lg cursor-pointer' }"
-                      @click="addEditComponent"
+                      :ui="{ base: 'border-none bg-transparent text-green-600 text-xs font-semibold cursor-pointer pt-1.5 px-0 pb-0 inline-flex items-center gap-1' }"
+                      @click="toggleHistoryEntry(e.id)"
                     >
-                      <UIcon name="i-lucide-plus" class="w-3.5 h-3.5" /> Add component
+                      {{ e.toggleLabel }}
+                      <UIcon :name="e.toggleIcon" class="w-3 h-3" />
                     </UButton>
-                  </div>
-
-                  <div class="flex items-center justify-between px-3.5 py-3 bg-slate-50">
-                    <span class="text-sm font-bold text-slate-900">Initial Fee (Total)</span>
-                    <span class="text-base font-bold text-slate-900">{{ editInitialTotalLabel }}</span>
                   </div>
                 </div>
               </div>
             </template>
-          </UCard>
-        </div>
-        <div
-          v-if="showLowerSpacer"
-          class="grow shrink basis-[320px]"
-          aria-hidden="true"
-        />
-      </div>
-    </UForm>
-
-    <!-- cancel confirm -->
-    <VertexConfirmModal
-      :open="cancelConfirmOpen"
-      compact
-      icon=""
-      title="Discard changes?"
-      message="Your edits will not be saved."
-      cancel-label="Keep Editing"
-      confirm-label="Discard"
-      width-class="w-[420px]"
-      @cancel="onKeepEditing"
-      @confirm="onConfirmDiscard"
-    />
-
-    <!-- delete confirm -->
-    <VertexConfirmModal
-      :open="deleteConfirmOpen"
-      compact
-      icon="triangle-alert"
-      :title="`Delete ${product.name}?`"
-      message="This action cannot be undone."
-      cancel-label="Cancel"
-      confirm-label="Delete"
-      @cancel="onCancelDelete"
-      @confirm="onConfirmDelete"
-    />
-
-    <!-- toast -->
-    <VertexToast :message="toastMessage" variant="dark" />
-
-    <!-- version history drawer -->
-    <template v-if="historyOpen">
-      <div
-        class="fixed inset-0 bg-slate-900/35 backdrop-blur-[2px] z-[120]"
-        @click="historyOpen = false"
-      />
-      <div class="drawer fixed top-0 right-0 bottom-0 w-[340px] max-w-[92vw] bg-white z-[121] shadow-[-8px_0_30px_rgba(0,0,0,0.18)] flex flex-col">
-        <div class="flex items-center justify-between gap-3 px-[18px] py-3.5 border-b border-slate-200 flex-shrink-0">
-          <div class="flex items-center gap-2">
-            <UIcon name="i-lucide-history" class="w-4 h-4 text-green-600" />
-            <h2 class="text-[15px] font-bold text-slate-900 m-0">
-              Version History
-            </h2>
           </div>
-          <UButton
-            variant="ghost"
-
-            :ui="{ base: 'hover:bg-slate-100 border-none bg-transparent text-slate-500 w-[30px] h-[30px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
-            @click="historyOpen = false"
-          >
-            <UIcon name="i-lucide-x" class="w-[17px] h-[17px]" />
-          </UButton>
         </div>
-        <div class="flex-1 overflow-y-auto pt-0.5 pb-4">
-          <template v-for="g in historyGroups" :key="g.label">
-            <div class="px-[18px] pt-3 pb-1 text-[10px] font-bold tracking-[0.05em] text-slate-400 uppercase">
-              {{ g.label }}
-            </div>
-            <div v-for="e in g.entries" :key="e.id" :style="e.rowStyle">
-              <div class="flex items-start gap-2.5">
-                <div :style="e.avatarStyle">
-                  {{ e.initials }}
-                </div>
-                <div class="flex-1 min-w-0">
-                  <div class="flex items-center gap-2 flex-wrap">
-                    <span class="text-sm font-semibold text-slate-900">{{ e.actor }}</span>
-                    <span
-                      v-if="e.isCurrent"
-                      class="text-[11px] font-bold text-green-600 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-px"
-                    >Current version</span>
-                  </div>
-                  <div class="text-[11px] text-slate-400 mt-px">
-                    {{ e.timestamp }}
-                  </div>
-                  <div class="mt-1.5 flex flex-col gap-1">
-                    <div v-for="(c, idx) in e.visibleChanges" :key="idx" class="text-[13px] text-slate-700">
-                      <span class="font-semibold">{{ c.field }}:</span>
-                      <span class="text-slate-400 line-through">{{ c.from }}</span>
-                      <UIcon name="i-lucide-arrow-right" class="w-[11px] h-[11px] inline align-middle text-slate-300 mx-0.5" />
-                      <span class="text-slate-900 font-medium">{{ c.to }}</span>
-                    </div>
-                  </div>
-                  <UButton
-                    v-if="e.hasMore"
-
-                    variant="ghost"
-
-                    :ui="{ base: 'border-none bg-transparent text-green-600 text-xs font-semibold cursor-pointer pt-1.5 px-0 pb-0 inline-flex items-center gap-1' }"
-                    @click="toggleHistoryEntry(e.id)"
-                  >
-                    {{ e.toggleLabel }}
-                    <UIcon :name="e.toggleIcon" class="w-3 h-3" />
-                  </UButton>
-                </div>
-              </div>
-            </div>
-          </template>
-        </div>
-      </div>
+      </template>
     </template>
   </div>
 </template>
