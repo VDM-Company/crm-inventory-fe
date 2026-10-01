@@ -65,13 +65,16 @@ export default defineAppConfig({
           none: 'bg-white text-slate-900'
         },
         size: {
-          md: { base: 'px-3 py-2.5 text-[15px] md:text-[15px]' }
+          md: { base: 'px-3 py-2.5 text-[15px]/[22.5px] md:text-[15px]/[22.5px]' }
         }
       },
       // Nuxt UI adds `md:text-sm` through a compoundVariant (an iOS zoom guard)
       // that lands after the size variant; re-assert the design 15px there.
+      // Line height is pinned with it: it is otherwise inherited, and
+      // UFormField's root is `text-sm`, so the same field came out 2px shorter
+      // inside one than beside it.
       compoundVariants: [
-        { fixed: false, size: 'md', class: 'md:text-[15px]' }
+        { fixed: false, size: 'md', class: 'md:text-[15px]/[22.5px]' }
       ],
       defaultVariants: {
         variant: 'none'
@@ -87,13 +90,16 @@ export default defineAppConfig({
           none: 'bg-white text-slate-900'
         },
         size: {
-          md: { base: 'px-3 py-2.5 text-[15px] md:text-[15px]' }
+          md: { base: 'px-3 py-2.5 text-[15px]/[22.5px] md:text-[15px]/[22.5px]' }
         }
       },
       // Nuxt UI adds `md:text-sm` through a compoundVariant (an iOS zoom guard)
       // that lands after the size variant; re-assert the design 15px there.
+      // Line height is pinned with it: it is otherwise inherited, and
+      // UFormField's root is `text-sm`, so the same field came out 2px shorter
+      // inside one than beside it.
       compoundVariants: [
-        { fixed: false, size: 'md', class: 'md:text-[15px]' }
+        { fixed: false, size: 'md', class: 'md:text-[15px]/[22.5px]' }
       ],
       defaultVariants: {
         variant: 'none'
@@ -135,7 +141,7 @@ export default defineAppConfig({
           // `pe-[10px]` + a 16px icon puts the chevron's centre 18px from the
           // right edge, which is where the background-image chevron sat.
           md: {
-            base: 'px-3 py-2.5 text-[15px] md:text-[15px]',
+            base: 'px-3 py-2.5 text-[15px]/[22.5px] md:text-[15px]/[22.5px]',
             trailing: 'pe-[10px]',
             trailingIcon: 'size-4',
             // `size.md` also carries the item padding, which beats `slots.item`
@@ -144,7 +150,7 @@ export default defineAppConfig({
         }
       },
       compoundVariants: [
-        { fixed: false, size: 'md', class: 'md:text-[15px]' }
+        { fixed: false, size: 'md', class: 'md:text-[15px]/[22.5px]' }
       ],
       defaultVariants: {
         variant: 'none'
