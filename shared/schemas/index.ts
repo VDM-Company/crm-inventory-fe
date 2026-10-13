@@ -252,3 +252,79 @@ export const vertexAttributeQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
   includeTotal: z.stringbool().optional()
 }).loose()
+
+const categoryBody = z.object({
+  name: localizedText,
+  parentId: z.string().trim().min(1).nullish(),
+  isEnabled: z.boolean().optional(),
+  includeInMenu: z.boolean().optional(),
+  // the API rejects an unknown sort with 422 `in`, but the collection names
+  // only `position`, so this stays open rather than guessing the rest
+  productSort: z.string().trim().optional()
+}).loose()
+
+export const vertexCategoryCreateSchema = categoryBody
+
+export const vertexCategoryUpdateSchema = categoryBody.partial().extend({
+  lockVersion: z.number({ error: 'lockVersion is required on an update.' }).int().min(0)
+})
+
+/** Only `platformId` — this list takes no cursor and returns the whole tree. */
+export const vertexCategoryQuerySchema = z.object({
+  platformId: z.string().trim().min(1).optional()
+}).loose()
+
+const overridableCategoryField = z.enum(['name', 'isEnabled', 'includeInMenu', 'productSort'])
+
+/**
+ * A platform's override of one category.
+ *
+ * The two cross-field rules are the API's own: at least one field or a reset
+ * entry (422 `required_without_all`), and no field both sent and reset
+ * (422 `override_and_reset`). Checking them here turns a round trip into an
+ * immediate, better-worded failure.
+ */
+export const vertexCategoryPlatformContentSchema = z.object({
+  lockVersion: z.number({ error: 'lockVersion is required on an update.' }).int().min(0),
+  name: localizedText.optional(),
+  isEnabled: z.boolean().optional(),
+  includeInMenu: z.boolean().optional(),
+  productSort: z.string().trim().optional(),
+  reset: z.array(overridableCategoryField).optional()
+}).loose().superRefine((val, ctx) => {
+  const sent = overridableCategoryField.options.filter(f => val[f] !== undefined)
+  const reset = val.reset || []
+
+  if (!sent.length && !reset.length) {
+    ctx.addIssue({ code: 'custom', path: ['reset'], message: 'Send a field to override, or one to reset.' })
+  }
+  for (const f of reset) {
+    if (sent.includes(f)) {
+      ctx.addIssue({ code: 'custom', path: ['reset'], message: `\`${f}\` cannot be both overridden and reset.` })
+    }
+  }
+})
+
+export const vertexCategoryProductsQuerySchema = z.object({
+  platformId: z.string().trim().min(1).optional(),
+  q: z.string().trim().optional(),
+  all: z.stringbool().optional(),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  includeTotal: z.stringbool().optional()
+}).loose()
+
+const productIds = z.array(z.string().trim().min(1)).min(1, 'Choose at least one product.')
+
+export const vertexCategoryProductsAddSchema = z.object({ productIds }).loose()
+
+export const vertexCategoryProductsRemoveSchema = z.object({
+  productIds,
+  platformId: z.string().trim().min(1).optional()
+}).loose()
+
+/** `productIds` must be exactly the current members — 422 `members_mismatch`. */
+export const vertexCategoryProductsOrderSchema = z.object({
+  productIds,
+  platformId: z.string().trim().min(1).optional()
+}).loose()

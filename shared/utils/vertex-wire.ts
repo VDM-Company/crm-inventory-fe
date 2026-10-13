@@ -38,13 +38,23 @@ export const fromVertex = <T>(v: unknown): T => mapKeys(v, snakeToCamel) as T
 /** The app's shape -> upstream snake_case. */
 export const toVertex = (v: unknown): unknown => mapKeys(v, camelToSnake)
 
-/** `meta` as the API sends it -> the app's cursor meta. */
+/**
+ * `meta` as the API sends it -> the app's cursor meta.
+ *
+ * Anything beyond the cursors and `total` is carried through case-mapped
+ * rather than dropped: each list adds its own extras — `scope` on a
+ * category's products, `facets` elsewhere — and a reader that silently lost
+ * them would look like the API had stopped sending them.
+ */
 export function toListMeta(meta: unknown): VertexListMeta {
-  const m = (meta || {}) as { next_cursor?: string | null, prev_cursor?: string | null, total?: number }
+  const { next_cursor: next, prev_cursor: prev, total, ...extras }
+    = (meta || {}) as Record<string, unknown>
+
   return {
-    nextCursor: m.next_cursor ?? null,
-    prevCursor: m.prev_cursor ?? null,
-    ...(m.total == null ? {} : { total: Number(m.total) })
+    ...fromVertex<Record<string, unknown>>(extras),
+    nextCursor: (next as string | null) ?? null,
+    prevCursor: (prev as string | null) ?? null,
+    ...(total == null ? {} : { total: Number(total) })
   }
 }
 

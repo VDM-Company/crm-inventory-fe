@@ -30,6 +30,12 @@ export interface VertexListMeta {
   prevCursor: string | null
   /** Only present when the request asked for `include_total`. */
   total?: number
+  /**
+   * List-level extras the API adds per endpoint — `scope` on a category's
+   * products, `facets` elsewhere. Carried through rather than typed here,
+   * because each list defines its own.
+   */
+  [key: string]: unknown
 }
 
 export interface VertexList<T> {
@@ -258,4 +264,126 @@ export interface AttributeQuery extends CursorQuery {
   /** True narrows to the types that can be a variant axis. */
   variantAxis?: boolean
   isFilterable?: boolean
+}
+
+// ── categories ──────────────────────────────────────────────────────────────
+
+/**
+ * How a category orders its products. The API rejects an unknown value with
+ * 422 `in`, but the collection only ever shows `position`, so this stays a
+ * string rather than an enum invented from one example.
+ */
+export type CategoryProductSort = string
+
+/** One field of a category as a platform sees it, and where that value came from. */
+export interface PlatformOverride<T> {
+  value: T
+  source: 'default' | 'platform'
+}
+
+/**
+ * A category's per-platform view, present only when the request passed
+ * `platformId`. Each overridable field reports its value and whether that
+ * value is the platform's own or inherited from Default.
+ */
+export interface CategoryPlatformView {
+  name: PlatformOverride<LocalizedText>
+  isEnabled: PlatformOverride<boolean>
+  includeInMenu: PlatformOverride<boolean>
+  productSort: PlatformOverride<CategoryProductSort>
+  sortOrder: PlatformOverride<number>
+  /** Switched off because an ancestor is, rather than on its own account. */
+  disabledByAncestor: boolean
+  productsCustomOrder: boolean
+  /** Versions the override, separately from the category's own. */
+  lockVersion: number
+}
+
+/**
+ * A node of the category tree.
+ *
+ * Prefixed `Vertex` only because `~/types` still exports the older `Category`
+ * that the screens use. It takes the plain name once they move.
+ *
+ * The API returns the whole tree nested in one response — `GET
+ * /admin/categories` takes no cursor and sends no `meta`. Categories go at
+ * most three levels deep; a move that would exceed that is 422
+ * `category_too_deep`, and moving a category under its own descendant is 422
+ * `category_cycle`.
+ *
+ * `productCount` counts direct assignments only, not those of sub-categories.
+ */
+export interface VertexCategory {
+  id: string
+  parentId: string | null
+  name: LocalizedText
+  /** Ancestors joined for display, e.g. `SIM Cards / Tourist SIM`. */
+  path: string
+  isEnabled: boolean
+  includeInMenu: boolean
+  productSort: CategoryProductSort
+  sortOrder: number
+  productCount: number
+  lockVersion: number
+  /** Null unless the request passed `platformId`. */
+  platform: CategoryPlatformView | null
+  children: VertexCategory[]
+}
+
+export interface VertexCategoryDraft {
+  name: LocalizedText
+  parentId?: string | null
+  isEnabled?: boolean
+  includeInMenu?: boolean
+  productSort?: CategoryProductSort
+}
+
+export interface VertexCategoryPatch {
+  name?: LocalizedText
+  /** Null moves it to the top level, which the API always allows. */
+  parentId?: string | null
+  isEnabled?: boolean
+  includeInMenu?: boolean
+  productSort?: CategoryProductSort
+}
+
+/**
+ * A platform's override of one category.
+ *
+ * Send at least one field or a `reset` entry, else 422 `required_without_all`.
+ * A field both sent and reset is 422 `override_and_reset`. `lockVersion` here
+ * is the override's, from `platform.lockVersion`, not the category's.
+ */
+export interface VertexCategoryPlatformContentPatch {
+  name?: LocalizedText
+  isEnabled?: boolean
+  includeInMenu?: boolean
+  productSort?: CategoryProductSort
+  /** Field names that should follow Default again. */
+  reset?: ('name' | 'isEnabled' | 'includeInMenu' | 'productSort')[]
+}
+
+/**
+ * A product as the category's product list shows it.
+ *
+ * `name` is a plain string here, already resolved — and with `platformId` it
+ * is the name that platform shows, which `nameSource` explains.
+ */
+export interface VertexCategoryProduct {
+  productId: string
+  name: string
+  nameSource: string | null
+  sku: string
+  type: string
+  status: string
+  /** Integer JPY. */
+  priceFrom: number | null
+  monthlyFrom: number | null
+  priceDiffersOnPlatforms: number
+  position: number
+}
+
+export interface VertexCategoryProductsQuery extends CursorQuery {
+  platformId?: string
+  q?: string
 }
