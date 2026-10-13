@@ -115,3 +115,65 @@ export interface FeeItemPatch {
 export interface FeeItemQuery extends CursorQuery {
   kind?: FeeItemKind
 }
+
+// ── platforms ───────────────────────────────────────────────────────────────
+
+/**
+ * A sales channel.
+ *
+ * Prefixed `Vertex` only because `~/types` still exports the older `Platform`
+ * that four screens use. It takes the plain name once they move.
+ *
+ * Note `name` is a plain string here, not a `LocalizedText` — the platform is
+ * the thing that *has* locales, so its own name is not one of them. Fee items,
+ * categories, attributes and products do localize theirs.
+ *
+ * There is no DELETE. A platform is switched off with `deactivate`, which is
+ * why `isActive` exists and why this resource has no `remove`.
+ */
+export interface VertexPlatform {
+  id: string
+  /** Upstream writes these uppercase (`SKSIM`), unlike fee item codes. */
+  code: string
+  name: string
+  domain: string
+  isActive: boolean
+  defaultLocale: string
+  locales: string[]
+  lockVersion: number
+  createdAt: string
+}
+
+/** One group of a platform's settings. Keys are snake_case upstream. */
+export interface VertexPlatformSettings {
+  store: { name?: string, phone?: string, address?: string }
+  mail: { senderName?: string, senderEmail?: string }
+  contact: { enabled?: boolean, recipientEmail?: string }
+  lockVersion: number
+}
+
+/**
+ * POST body. `settings` may ride along; without it the API starts Contact Us
+ * disabled, and reports setting errors under `settings.<group>.<key>`.
+ */
+export interface VertexPlatformDraft {
+  code: string
+  name: string
+  domain: string
+  defaultLocale: string
+  locales: string[]
+  settings?: Omit<VertexPlatformSettings, 'lockVersion'>
+}
+
+/** PATCH body. `code` is not changeable. */
+export interface VertexPlatformPatch {
+  name?: string
+  domain?: string
+  defaultLocale?: string
+  locales?: string[]
+}
+
+export interface VertexPlatformQuery extends CursorQuery {
+  status?: 'active' | 'inactive'
+  q?: string
+}

@@ -149,3 +149,57 @@ export const feeItemQuerySchema = z.object({
   // `?includeTotal=false` would ask upstream for the count it calls costly.
   includeTotal: z.stringbool().optional()
 }).loose()
+
+const localeCode = z.string().trim().regex(/^[a-z]{2}(_[A-Za-z]{2,4})?$/, 'Use a locale code like `en` or `pt_BR`.')
+
+const vertexPlatformSettingsSchema = z.object({
+  store: z.object({
+    name: z.string().trim().optional(),
+    phone: z.string().trim().optional(),
+    address: z.string().trim().optional()
+  }).loose().optional(),
+  mail: z.object({
+    senderName: z.string().trim().optional(),
+    senderEmail: z.email('Enter a valid email address.').optional()
+  }).loose().optional(),
+  contact: z.object({
+    enabled: z.boolean().optional(),
+    recipientEmail: z.email('Enter a valid email address.').optional()
+  }).loose().optional()
+}).loose()
+
+export const vertexPlatformCreateSchema = z.object({
+  code: z.string().trim().min(2, 'Give the platform a code.'),
+  name: z.string().trim().min(1, 'Give the platform a name.'),
+  domain: z.string().trim().min(1, 'Give the platform a domain.'),
+  defaultLocale: localeCode,
+  locales: z.array(localeCode).min(1, 'List at least one locale.'),
+  // the API accepts settings on create; omitted, Contact Us starts disabled
+  settings: vertexPlatformSettingsSchema.optional()
+}).loose()
+
+/** `code` is absent: the API does not accept changes to it. */
+export const vertexPlatformUpdateSchema = z.object({
+  lockVersion: z.number({ error: 'lockVersion is required on an update.' }).int().min(0),
+  name: z.string().trim().min(1).optional(),
+  domain: z.string().trim().min(1).optional(),
+  defaultLocale: localeCode.optional(),
+  locales: z.array(localeCode).min(1).optional()
+}).loose()
+
+/**
+ * PUT /settings is a FULL REPLACE — the API clears anything omitted — so this
+ * does not mark the groups optional the way a patch would.
+ */
+export const vertexPlatformSettingsUpdateSchema = vertexPlatformSettingsSchema.extend({
+  lockVersion: z.number({ error: 'lockVersion is required on an update.' }).int().min(0)
+})
+
+export const vertexPlatformQuerySchema = z.object({
+  status: z.enum(['active', 'inactive']).optional(),
+  q: z.string().trim().optional(),
+  all: z.stringbool().optional(),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  includeTotal: z.stringbool().optional()
+}).loose()
