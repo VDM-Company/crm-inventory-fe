@@ -418,3 +418,126 @@ export const vertexProductQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
   includeTotal: z.stringbool().optional()
 }).loose()
+
+// ── product pricing, variants, bundles, per-platform content ────────────────
+
+const priceLineSchema = z.object({
+  lineType: z.enum(['fee', 'selection']),
+  feeItemId: z.string().trim().min(1).nullish(),
+  bundleSelectionId: z.string().trim().min(1).nullish(),
+  // integer JPY; the API has no minor unit
+  amount: z.number().int(),
+  amountMonthly: z.number().int().nullish(),
+  isPublished: z.boolean().optional()
+}).loose().refine(
+  v => v.lineType === 'fee' ? !!v.feeItemId : !!v.bundleSelectionId,
+  'A fee line needs a feeItemId; a selection line needs a bundleSelectionId.'
+)
+
+/**
+ * `scope` is `default` or a platform id. The API requires exactly one Base
+ * Price line (422 `base_price_required`); that is checked upstream because
+ * only it knows which fee item is the base one.
+ */
+export const vertexPricePlanCreateSchema = z.object({
+  scope: z.string().trim().min(1),
+  /** Null or past means now; later schedules it. */
+  effectiveAt: z.string().trim().nullish(),
+  applyToExisting: z.boolean().optional(),
+  lines: z.array(priceLineSchema).min(1, 'A plan needs at least one line.')
+}).loose()
+
+export const vertexPricePlanQuerySchema = z.object({
+  scope: z.string().trim().min(1).optional()
+}).loose()
+
+const variantAxisSchema = z.object({
+  attributeId: z.string().trim().min(1),
+  optionIds: z.array(z.string().trim().min(1)).min(1, 'Choose at least one option on each axis.')
+}).loose()
+
+const axesSchema = z.array(variantAxisSchema).min(1, 'A variant matrix needs at least one axis.')
+
+export const vertexVariantAxesSchema = z.object({ axes: axesSchema }).loose()
+
+/** `generate` may also name which combinations to create and their SKUs. */
+export const vertexVariantGenerateSchema = z.object({
+  axes: axesSchema,
+  variants: z.array(z.object({
+    combination: z.array(z.string().trim().min(1)).min(1),
+    sku: z.string().trim().min(1).optional()
+  }).loose()).optional()
+}).loose()
+
+/** The Create page's dry run: the product does not exist yet, so it sends its own sku and name. */
+export const vertexVariantSimulateSchema = z.object({
+  sku: z.string().trim().min(1),
+  name: localizedText,
+  axes: axesSchema
+}).loose()
+
+const bundleSelectionSchema = z.object({
+  id: z.string().trim().min(1).optional(),
+  productId: z.string().trim().min(1),
+  isDefault: z.boolean().optional(),
+  maxQty: z.number().int().min(1).optional(),
+  isHidden: z.boolean().optional()
+}).loose()
+
+export const vertexBundleOptionsSchema = z.object({
+  options: z.array(z.object({
+    id: z.string().trim().min(1).optional(),
+    title: localizedText,
+    inputType: z.string().trim().min(1),
+    isRequired: z.boolean().optional(),
+    selections: z.array(bundleSelectionSchema).min(1, 'Every option needs at least one selection.')
+  }).loose()).min(1, 'A bundle needs at least one option.'),
+  lockVersion: z.number().int().min(0).optional()
+}).loose()
+
+export const vertexBundlePriceSchema = z.object({
+  platformId: z.string().trim().min(1).optional(),
+  choices: z.array(z.object({
+    optionId: z.string().trim().min(1),
+    selectionId: z.string().trim().min(1),
+    qty: z.number().int().min(1).optional()
+  }).loose()).min(1, 'Choose at least one selection.')
+}).loose()
+
+const overridableContentField = z.enum(['name', 'notes', 'media', 'categoryIds'])
+
+/**
+ * Same two cross-field rules as the category override: at least one field or
+ * a reset entry, and nothing both sent and reset. `reset` carries field NAMES
+ * as values, so they are translated to the API's spelling after the checks —
+ * running that on the field would make the second rule stop firing for
+ * `categoryIds`.
+ */
+export const vertexProductPlatformContentSchema = z.object({
+  lockVersion: z.number({ error: 'lockVersion is required on an update.' }).int().min(0),
+  name: localizedText.optional(),
+  notes: z.string().nullish(),
+  media: z.array(z.object({
+    id: z.string().trim().min(1).optional(),
+    uploadId: z.string().trim().min(1).optional(),
+    role: z.string().trim().optional(),
+    alt: localizedText.optional()
+  }).loose()).optional(),
+  categoryIds: z.array(z.string().trim().min(1)).optional(),
+  reset: z.array(overridableContentField).optional()
+}).loose().superRefine((val, ctx) => {
+  const sent = overridableContentField.options.filter(f => val[f] !== undefined)
+  const reset = val.reset || []
+
+  if (!sent.length && !reset.length) {
+    ctx.addIssue({ code: 'custom', path: ['reset'], message: 'Send a field to override, or one to reset.' })
+  }
+  for (const f of reset) {
+    if (sent.includes(f)) {
+      ctx.addIssue({ code: 'custom', path: ['reset'], message: `\`${f}\` cannot be both overridden and reset.` })
+    }
+  }
+}).transform(v => ({
+  ...v,
+  ...(v.reset ? { reset: v.reset.map(camelToSnake) } : {})
+}))

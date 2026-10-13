@@ -611,3 +611,203 @@ export interface VertexProductQuery extends CursorQuery {
    */
   sort?: string
 }
+
+// ── product pricing ─────────────────────────────────────────────────────────
+
+/** `fee` is a fee-item line; `selection` prices one choice inside a bundle. */
+export type PriceLineType = 'fee' | 'selection'
+
+/** A plan supersedes the one before it; history is kept. */
+export type PricePlanStatus = 'active' | 'scheduled' | 'superseded' | 'cancelled'
+
+/** One line of a price plan. Amounts are integer JPY. */
+export interface PriceLine {
+  id: string
+  lineType: PriceLineType
+  feeItemId: string | null
+  bundleSelectionId: string | null
+  amount: number
+  amountMonthly: number | null
+  isPublished: boolean
+  sortOrder: number
+  /** Denormalised from the fee item, so a screen need not join. */
+  feeCode: string | null
+  feeName: string | null
+  feeKind: string | null
+}
+
+/**
+ * A set of lines that takes effect at a moment in time.
+ *
+ * `scope` is `default` or a platform id. A plan with `effectiveAt` in the
+ * future is `scheduled` and is activated by a job; one in the past takes
+ * effect now and supersedes whatever was active.
+ */
+export interface PricePlan {
+  id: string
+  productId: string
+  scope: string
+  status: PricePlanStatus
+  effectiveAt: string | null
+  applyToExisting: boolean
+  noticeSentAt: string | null
+  existingEffectiveFrom: string | null
+  lines: PriceLine[]
+}
+
+/** Whether a scope prices the product itself or follows Default. */
+export interface PricingScope {
+  scope: string
+  mode: 'override' | 'inherit' | string
+  source: 'default' | 'platform' | string
+  activePlan: PricePlan | null
+  scheduledPlans?: PricePlan[]
+}
+
+export interface ProductPricing {
+  default: PricingScope
+  platforms: (PricingScope & { platform?: ProductPlatformRef, assigned?: boolean })[]
+}
+
+/** POST body for a new plan. A line set must contain exactly one Base Price. */
+export interface PricePlanDraft {
+  scope: string
+  /** Null or past = now; later = scheduled. */
+  effectiveAt?: string | null
+  applyToExisting?: boolean
+  lines: {
+    lineType: PriceLineType
+    feeItemId?: string | null
+    bundleSelectionId?: string | null
+    amount: number
+    amountMonthly?: number | null
+    isPublished?: boolean
+  }[]
+}
+
+// ── variants ────────────────────────────────────────────────────────────────
+
+/** One axis of a variant matrix: an attribute and the options chosen from it. */
+export interface VariantAxis {
+  attributeId: string
+  optionIds: string[]
+}
+
+/** Whether the suggested SKU can be used as it stands. */
+export type SkuStatus = 'available' | 'taken' | 'existing' | string
+
+export interface VariantCandidate {
+  /** The option ids that define this combination, in axis order. */
+  combination: string[]
+  label: string
+  name: LocalizedText
+  suggestedSku: string
+  skuStatus: SkuStatus
+  /** Set when this combination already exists as a product. */
+  existingProductId: string | null
+}
+
+export interface VariantPreview {
+  candidates: VariantCandidate[]
+  /** Variants that regenerating would remove — they were never ordered. */
+  toDelete?: { productId: string, sku: string, name?: LocalizedText }[]
+  /** Variants that would be switched off instead, because they have orders. */
+  toDisable?: { productId: string, sku: string, name?: LocalizedText }[]
+  /** Present when a simple product would become configurable. */
+  conversion?: Record<string, unknown>
+}
+
+/** `simulate` is the Create page's version: nothing exists yet, nothing is stored. */
+export interface VariantSimulation {
+  parent: { sku: string, skuStatus: SkuStatus }
+  candidates: VariantCandidate[]
+}
+
+/** Large sets run as a job and answer 202 with its id. */
+export interface VariantGenerateResult {
+  jobId?: string
+  statusUrl?: string
+  created?: VertexProduct[]
+}
+
+// ── bundles ─────────────────────────────────────────────────────────────────
+
+export interface BundleSelection {
+  id: string
+  productId: string
+  sku: string
+  name: string
+  isDefault: boolean
+  maxQty: number
+  isHidden: boolean
+  stockStatus: string
+  sortOrder: number
+}
+
+export interface BundleOption {
+  id: string
+  title: LocalizedText
+  inputType: string
+  isRequired: boolean
+  sortOrder: number
+  selections: BundleSelection[]
+}
+
+/**
+ * PUT body. Ids that already belong to the bundle are kept, and keep the
+ * in-bundle prices attached to them; anything else is given a new id.
+ */
+export interface BundleOptionsDraft {
+  options: {
+    id?: string
+    title: LocalizedText
+    inputType: string
+    isRequired?: boolean
+    selections: { id?: string, productId: string, isDefault?: boolean, maxQty?: number, isHidden?: boolean }[]
+  }[]
+  lockVersion?: number
+}
+
+/** What one set of choices costs. Integer JPY throughout. */
+export interface BundleQuote {
+  base: { monthly: number | null, lines: { code: string, name: string, amount: number }[], initialTotal: number }
+  selections: { selectionId: string, name: string, qty: number, unitAmount: number, unitMonthly: number | null, total: number }[]
+  initialTotal: number
+  monthlyTotal: number | null
+}
+
+// ── per-platform product content ────────────────────────────────────────────
+
+/** A product's Default content, which each platform may override field by field. */
+export interface ProductContentDefault {
+  name: LocalizedText
+  notes: string | null
+  media: ProductMedia[]
+  categoryIds: string[]
+}
+
+export interface ProductPlatformContent {
+  platform: ProductPlatformRef
+  /** False for a platform that still overrides a field but is no longer assigned. */
+  assigned: boolean
+  lockVersion: number
+  name: PlatformOverride<LocalizedText>
+  notes?: PlatformOverride<string | null>
+  media?: PlatformOverride<ProductMedia[]>
+  categoryIds?: PlatformOverride<string[]>
+}
+
+export interface ProductContent {
+  productId: string
+  default: ProductContentDefault
+  platforms: ProductPlatformContent[]
+}
+
+/** PATCH body. Send a field to override it, or name it in `reset` to let Default win. */
+export interface ProductPlatformContentPatch {
+  name?: LocalizedText
+  notes?: string | null
+  media?: { id?: string, uploadId?: string, role?: string, alt?: LocalizedText }[]
+  categoryIds?: string[]
+  reset?: ('name' | 'notes' | 'media' | 'categoryIds')[]
+}

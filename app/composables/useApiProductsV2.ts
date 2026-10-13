@@ -1,4 +1,16 @@
 import type {
+  BundleOption,
+  BundleOptionsDraft,
+  BundleQuote,
+  PricePlan,
+  PricePlanDraft,
+  ProductContent,
+  ProductPlatformContentPatch,
+  ProductPricing,
+  VariantAxis,
+  VariantGenerateResult,
+  VariantPreview,
+  VariantSimulation,
   VertexList,
   VertexProduct,
   VertexProductDraft,
@@ -30,9 +42,10 @@ import type {
  * Those two are different types on purpose. See the ASSUMPTION note on
  * `VertexProductRow`; whether the split is intended has not been confirmed.
  *
- * What is NOT here, each being its own endpoint group worth its own slice:
- * pricing and price plans, variant preview/generate/simulate, bundle options
- * and bundle price, and per-platform content.
+ * Beyond the resource itself it carries four endpoint groups the product
+ * screens need: pricing and price plans, variants, bundles, and per-platform
+ * content. They are grouped below rather than flattened, because each is a
+ * different concern with its own rules.
  */
 export function useApiProductsV2() {
   const base = '/api/products-v2'
@@ -75,9 +88,119 @@ export function useApiProductsV2() {
 
     /** Copies everything into a new Draft and returns it. */
     duplicate: (id: string, options?: { name?: Record<string, string>, skuPrefix?: string }) =>
-      $fetch<VertexProduct>(`${base}/${id}/duplicate`, { method: 'POST', body: body(options || {}) })
+      $fetch<VertexProduct>(`${base}/${id}/duplicate`, { method: 'POST', body: body(options || {}) }),
+
+    // ── pricing ─────────────────────────────────────────────────────────────
+
+    /**
+     * How every scope prices this product. Sellable products only: a
+     * configurable parent answers 422 `not_sellable`, because the prices live
+     * on its variants.
+     */
+    pricing: (id: string) => $fetch<ProductPricing>(`${base}/${id}/pricing`),
+
+    /** Every plan for one scope, scheduled and superseded ones included. */
+    pricePlans: (id: string, scope?: string) =>
+      $fetch<{ data: PricePlan[] }>(`${base}/${id}/price-plans`, { query: scope ? { scope } : undefined })
+        .then(r => r.data ?? []),
+
+    /**
+     * A new plan. `effectiveAt` null or in the past takes effect now and
+     * supersedes the active one; a later one is scheduled and switches over
+     * exactly then. Exactly one Base Price line, or 422 `base_price_required`.
+     */
+    createPricePlan: (id: string, draft: PricePlanDraft) =>
+      $fetch<PricePlan>(`${base}/${id}/price-plans`, { method: 'POST', body: body(draft) }),
+
+    /** Start pricing separately on one platform, copying the Default plan. */
+    overridePlatformPrice: (id: string, platformId: string) =>
+      $fetch<ProductPricing>(`${base}/${id}/pricing/platforms/${platformId}/override`, { method: 'POST' }),
+
+    /** Put a platform back on the Default price; history is kept. */
+    resetPlatformPrice: (id: string, platformId: string) =>
+      $fetch<ProductPricing>(`${base}/${id}/pricing/platforms/${platformId}/reset`, { method: 'POST' }),
+
+    // ── variants ────────────────────────────────────────────────────────────
+
+    /** What generating these axes would do, without doing it. */
+    previewVariants: (id: string, axes: VariantAxis[]) =>
+      $fetch<VariantPreview>(`${base}/${id}/variants/preview`, { method: 'POST', body: body({ axes }) }),
+
+    /**
+     * Creates the variants. Prices are not set here — they come afterwards
+     * through `createPricePlan`.
+     *
+     * A large set runs as a job and answers with a `jobId` instead of the
+     * products, so a caller has to check which it got back.
+     */
+    generateVariants: (
+      id: string,
+      axes: VariantAxis[],
+      variants?: { combination: string[], sku?: string }[]
+    ) =>
+      $fetch<VariantGenerateResult>(`${base}/${id}/variants/generate`, {
+        method: 'POST',
+        body: body({ axes, ...(variants ? { variants } : {}) })
+      }),
+
+    // ── bundles ─────────────────────────────────────────────────────────────
+
+    bundleOptions: (id: string) =>
+      $fetch<{ data: BundleOption[] }>(`${base}/${id}/bundle-options`).then(r => r.data ?? []),
+
+    /**
+     * Replaces the contents. Send a selection back WITH its id to keep the
+     * in-bundle price attached to it; without one it is a new selection and
+     * the price does not follow.
+     */
+    saveBundleOptions: (id: string, draft: BundleOptionsDraft) =>
+      $fetch<{ data: BundleOption[] }>(`${base}/${id}/bundle-options`, { method: 'PUT', body: body(draft) })
+        .then(r => r.data ?? []),
+
+    /** What one set of choices costs. */
+    quoteBundle: (
+      id: string,
+      choices: { optionId: string, selectionId: string, qty?: number }[],
+      platformId?: string
+    ) =>
+      $fetch<BundleQuote>(`${base}/${id}/bundle-price`, {
+        method: 'POST',
+        body: body({ choices, ...(platformId ? { platformId } : {}) })
+      }),
+
+    // ── per-platform content ────────────────────────────────────────────────
+
+    /** Default content plus what each platform overrides. */
+    platformContent: (id: string) => $fetch<ProductContent>(`${base}/${id}/platform-content`),
+
+    /**
+     * `lockVersion` is the override's own — from the platform entry in
+     * `platformContent()`, not `product.lockVersion`.
+     */
+    setPlatformContent: (
+      id: string,
+      platformId: string,
+      patch: ProductPlatformContentPatch,
+      lockVersion: number
+    ) =>
+      $fetch<ProductContent>(`${base}/${id}/platform-content/${platformId}`, {
+        method: 'PATCH',
+        body: body({ ...patch, lockVersion })
+      })
   }
 }
+
+/**
+ * The Create page's variant dry run.
+ *
+ * Not on the resource binding because it has no product id: the product does
+ * not exist yet, so the caller supplies the SKU and name it is about to have.
+ */
+export const simulateVariants = (sku: string, name: Record<string, string>, axes: VariantAxis[]) =>
+  $fetch<VariantSimulation>('/api/products-v2/variants/simulate', {
+    method: 'POST',
+    body: { sku, name, axes } as unknown as Record<string, unknown>
+  })
 
 /**
  * Whether this field refuses to change, because the product has left Draft.
