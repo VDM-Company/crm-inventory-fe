@@ -1,18 +1,26 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
-import type { Platform } from '~/types'
+import type { Platform, StoredProduct } from '~/types'
 
 useHead({ title: 'Platforms — Vertex' })
 
 // ── state (mirrors the design's DCLogic state) ──
-const platforms = ref<Platform[]>([...PLATFORM_SEED])
-const deleteTarget = ref<Platform | null>(null)
-const toast = ref<string | null>(null)
+const platforms = ref<Platform[]>([])
+const loading = ref(true)
+const loadError = ref('')
+const { message: toast, show: showToast } = usePageToast(3000)
+const products = ref<StoredProduct[]>([])
 
-let toastTimer: number | null = null
+const productsApi = useApiProducts()
 
-onMounted(() => {
-  platforms.value = loadPlatforms()
+onMounted(async () => {
+  try {
+    ;[platforms.value, products.value] = await Promise.all([loadPlatforms(), productsApi.list()])
+  } catch (err) {
+    loadError.value = apiErrorMessage(err, 'Could not load platforms.')
+  } finally {
+    loading.value = false
+  }
   // cross-page success toast set by the Create Platform screen
   try {
     const t = sessionStorage.getItem('vertex_platform_toast')
@@ -24,17 +32,6 @@ onMounted(() => {
     // ignore
   }
 })
-onBeforeUnmount(() => {
-  if (toastTimer !== null) clearTimeout(toastTimer)
-})
-
-function showToast(msg: string) {
-  toast.value = msg
-  if (toastTimer !== null) clearTimeout(toastTimer)
-  toastTimer = window.setTimeout(() => {
-    toast.value = null
-  }, 3000)
-}
 
 const columns: TableColumn<Platform>[] = [
   { accessorKey: 'name', header: 'Platform Name', meta: { class: { th: 'px-5', td: TABLE_EDGE.td } } },
@@ -48,30 +45,25 @@ function editHref(id: string) {
 }
 
 // ── delete ──
-const deleteAssigned = computed(() => deleteTarget.value ? platformAssignedCount(deleteTarget.value.id) : 0)
-const deleteBlocked = computed(() => deleteAssigned.value > 0)
-function confirmDelete() {
-  const t = deleteTarget.value
-  if (!t || deleteBlocked.value) return
-  const next = platforms.value.filter(p => p.id !== t.id)
-  savePlatforms(next)
-  platforms.value = next
-  deleteTarget.value = null
-  showToast('Platform deleted')
-}
-const deleteIcon = computed(() => deleteBlocked.value ? 'shield-alert' : 'trash-2')
-const deleteTitle = computed(() => {
-  const t = deleteTarget.value
-  if (!t) return ''
-  return deleteBlocked.value ? 'Cannot delete platform' : 'Delete ' + t.name + '?'
+const {
+  target: deleteTarget,
+  blocked: deleteBlocked,
+  icon: deleteIcon,
+  title: deleteTitle,
+  message: deleteMessage,
+  cancelLabel: deleteCancelLabel,
+  confirm: confirmDelete,
+  cancel: cancelDelete
+} = useResourceDelete<Platform>({
+  resource: 'platforms',
+  noun: 'platform',
+  usageCount: t => platformAssignedCount(products.value, t.id),
+  blockedMessage: u => `This platform is assigned to ${u} product${u === 1 ? '' : 's'}. Unassign it first.`,
+  onDeleted: (t) => {
+    platforms.value = platforms.value.filter(x => x.id !== t.id)
+  },
+  notify: showToast
 })
-const deleteMessage = computed(() => {
-  if (!deleteTarget.value) return ''
-  if (!deleteBlocked.value) return 'This action cannot be undone.'
-  const a = deleteAssigned.value
-  return `This platform is assigned to ${a} product${a === 1 ? '' : 's'}. Unassign it first.`
-})
-const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel')
 </script>
 
 <template>
@@ -103,7 +95,11 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
     </div>
 
     <UCard class="overflow-hidden">
-      <div v-if="platforms.length" class="overflow-x-auto">
+      <VertexTableSkeleton v-if="loading" :columns="['30%', '15%', '35%', '12%']" />
+
+      <VertexErrorBanner v-else-if="loadError" :message="loadError" class="m-5" />
+
+      <div v-else-if="platforms.length" class="overflow-x-auto">
         <UTable
           :data="platforms"
           :columns="columns"
@@ -130,7 +126,7 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
             <div class="flex items-center justify-end gap-2">
               <NuxtLink
                 :to="editHref(row.original.id)"
-                class="btn-icon-hover inline-flex items-center gap-1.5 border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-3.5 py-[7px] rounded-lg no-underline"
+                class="hover:bg-slate-100 inline-flex items-center gap-1.5 border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-3.5 py-[7px] rounded-lg no-underline"
               >
                 <UIcon name="i-lucide-pencil" class="w-3.5 h-3.5" /> Edit
               </NuxtLink>
@@ -139,7 +135,7 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
 
                 title="Delete platform"
 
-                :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-600 w-[34px] h-[34px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
+                :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-red-600 w-[34px] h-[34px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
                 @click="deleteTarget = row.original"
               >
                 <UIcon name="i-lucide-trash-2" class="w-[15px] h-[15px]" />
@@ -173,7 +169,7 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
       :tone="deleteBlocked ? 'warning' : 'danger'"
       :cancel-label="deleteCancelLabel"
       :show-confirm="!deleteBlocked"
-      @cancel="deleteTarget = null"
+      @cancel="cancelDelete"
       @confirm="confirmDelete"
     />
 

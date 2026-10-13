@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
-import type { Fee } from '~/types'
+import * as z from 'zod'
+import type { FormSubmitEvent, TableColumn } from '@nuxt/ui'
+import type { Fee, StoredProduct } from '~/types'
 
 useHead({ title: 'Pricing Setting — Vertex' })
 
@@ -29,27 +30,24 @@ const ICON_CHOICES = [
 ]
 
 // ── state (mirrors the design's DCLogic state) ──
-const fees = ref<Fee[]>([...FEE_SEED])
+const fees = ref<Fee[]>([])
+const loading = ref(true)
+const loadError = ref('')
 const modal = ref<ModalState | null>(null)
-const deleteTarget = ref<Fee | null>(null)
-const toast = ref<string | null>(null)
+const { message: toast, show: showToast } = usePageToast()
+const products = ref<StoredProduct[]>([])
 
-let toastTimer: number | null = null
+const productsApi = useApiProducts()
 
-onMounted(() => {
-  fees.value = loadFees()
+onMounted(async () => {
+  try {
+    ;[fees.value, products.value] = await Promise.all([loadFees(), productsApi.list()])
+  } catch (err) {
+    loadError.value = apiErrorMessage(err, 'Could not load pricing components.')
+  } finally {
+    loading.value = false
+  }
 })
-onBeforeUnmount(() => {
-  if (toastTimer !== null) clearTimeout(toastTimer)
-})
-
-function showToast(msg: string) {
-  toast.value = msg
-  if (toastTimer !== null) clearTimeout(toastTimer)
-  toastTimer = window.setTimeout(() => {
-    toast.value = null
-  }, 2800)
-}
 
 const columns: TableColumn<Fee>[] = [
   { accessorKey: 'name', header: 'Component Name', meta: { class: { th: 'px-5', td: TABLE_EDGE.td } } },
@@ -78,53 +76,62 @@ function onEdit(f: Fee) {
   modal.value = { id: f.id, name: f.name, desc: f.description || '', icon: iconOf(f), error: '' }
 }
 const saveDisabled = computed(() => !(modal.value && modal.value.name.trim()))
-function saveModal() {
+// Schema is a computed so the duplicate-name refinement sees the current fee
+// list and the row being edited.
+const modalSchema = computed(() => z.object({
+  name: z.string()
+    .trim()
+    .min(1, 'Component name is required.')
+    .refine(
+      v => !fees.value.some(f => f.name.toLowerCase() === v.toLowerCase() && f.id !== modal.value?.id),
+      'A component with this name already exists.'
+    )
+}))
+type ModalSchema = { name: string }
+
+async function onModalSubmit(event: FormSubmitEvent<ModalSchema>) {
   const m = modal.value
   if (!m) return
-  const name = (m.name || '').trim()
-  if (!name) {
-    modal.value = { ...m, error: 'Component name is required.' }
+  const name = event.data.name
+  try {
+    if (m.id) {
+      const saved = await apiUpdate<Fee>('fees', m.id, { name, description: m.desc, icon: m.icon })
+      fees.value = fees.value.map(f => f.id === m.id ? saved : f)
+    } else {
+      const saved = await apiCreate<Fee>('fees', {
+        name, description: m.desc, icon: m.icon || DEFAULT_ICON, system: false
+      })
+      fees.value = [...fees.value, saved]
+    }
+  } catch (err) {
+    showToast(apiErrorMessage(err, 'Could not save the component.'))
     return
   }
-  const dup = fees.value.some(f => f.name.toLowerCase() === name.toLowerCase() && f.id !== m.id)
-  if (dup) {
-    modal.value = { ...m, error: 'A component with this name already exists.' }
-    return
-  }
-  const next = m.id
-    ? fees.value.map(f => f.id === m.id ? { ...f, name, description: m.desc, icon: m.icon } : f)
-    : [...fees.value, { id: 'fee_' + Date.now(), name, description: m.desc, icon: m.icon || DEFAULT_ICON, system: false }]
-  saveFees(next)
-  fees.value = next
   modal.value = null
   showToast(m.id ? 'Component updated' : 'Component created')
 }
 
 // ── delete ──
-const deleteUsage = computed(() => deleteTarget.value ? feeUsageCount(deleteTarget.value.id) : 0)
-const deleteBlocked = computed(() => deleteUsage.value > 0)
-function confirmDelete() {
-  const t = deleteTarget.value
-  if (!t || t.system || deleteBlocked.value) return
-  const next = fees.value.filter(f => f.id !== t.id)
-  saveFees(next)
-  fees.value = next
-  deleteTarget.value = null
-  showToast('Component deleted')
-}
-const deleteIcon = computed(() => deleteBlocked.value ? 'shield-alert' : 'trash-2')
-const deleteTitle = computed(() => {
-  const t = deleteTarget.value
-  if (!t) return ''
-  return deleteBlocked.value ? 'Cannot delete component' : 'Delete ' + t.name + '?'
+const {
+  target: deleteTarget,
+  blocked: deleteBlocked,
+  icon: deleteIcon,
+  title: deleteTitle,
+  message: deleteMessage,
+  cancelLabel: deleteCancelLabel,
+  confirm: confirmDelete,
+  cancel: cancelDelete
+} = useResourceDelete<Fee>({
+  resource: 'fees',
+  noun: 'component',
+  usageCount: t => feeUsageCount(products.value, t.id),
+  blockedMessage: u => `This component is used by ${u} product${u === 1 ? '' : 's'}. Remove it from them first.`,
+  isLocked: t => t.system,
+  onDeleted: (t) => {
+    fees.value = fees.value.filter(f => f.id !== t.id)
+  },
+  notify: showToast
 })
-const deleteMessage = computed(() => {
-  if (!deleteTarget.value) return ''
-  if (!deleteBlocked.value) return 'This action cannot be undone.'
-  const u = deleteUsage.value
-  return `This component is used by ${u} product${u === 1 ? '' : 's'}. Remove it from them first.`
-})
-const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel')
 </script>
 
 <template>
@@ -158,7 +165,11 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
     </div>
 
     <UCard class="overflow-hidden">
-      <div class="overflow-x-auto">
+      <VertexTableSkeleton v-if="loading" :columns="['35%', '45%', '12%']" />
+
+      <VertexErrorBanner v-else-if="loadError" :message="loadError" class="m-5" />
+
+      <div v-else class="overflow-x-auto">
         <UTable
           :data="fees"
           :columns="columns"
@@ -188,7 +199,7 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
             <div class="flex items-center justify-end gap-2">
               <button
                 :disabled="row.original.system"
-                class="btn-icon-hover"
+                class="hover:bg-slate-100"
                 :style="editStyleOf(row.original.system)"
                 @click="onEdit(row.original)"
               >
@@ -200,7 +211,7 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
                 variant="ghost"
                 title="Delete component"
 
-                :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-600 w-[34px] h-[34px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
+                :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-red-600 w-[34px] h-[34px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
                 @click="deleteTarget = row.original"
               >
                 <UIcon name="i-lucide-trash-2" class="w-[15px] h-[15px]" />
@@ -231,73 +242,64 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
           <UButton
             variant="ghost"
 
-            :ui="{ base: 'btn-icon-hover border-none bg-transparent text-slate-500 w-8 h-8 rounded-lg cursor-pointer flex items-center justify-center' }"
+            :ui="{ base: 'hover:bg-slate-100 border-none bg-transparent text-slate-500 w-8 h-8 rounded-lg cursor-pointer flex items-center justify-center' }"
             @click="modal = null"
           >
             <UIcon name="i-lucide-x" class="w-[18px] h-[18px]" />
           </UButton>
         </div>
-        <div class="p-6">
-          <VertexField
-            label="Component Name"
-            required
-            :error="modal.error"
-            class="mb-[18px]"
-          >
-            <input
-              class="field-input"
-              type="text"
-              :value="modal.name"
-              placeholder="e.g. Handling"
-              @input="modal.name = ($event.target as HTMLInputElement).value; modal.error = ''"
+        <UForm :schema="modalSchema" :state="modal" @submit="onModalSubmit">
+          <div class="p-6">
+            <UFormField
+              name="name"
+              label="Component Name"
+              required
+              class="mb-[18px]"
             >
-          </VertexField>
-          <div class="mb-[18px]">
-            <label class="field-label">Icon</label>
-            <div class="flex flex-wrap gap-2">
-              <button
-                v-for="ic in ICON_CHOICES"
-                :key="ic"
-                type="button"
-                :title="ic"
-                :style="iconChoiceStyle(modal.icon === ic)"
-                @click="pickIcon(ic)"
-              >
-                <UIcon :name="'i-lucide-' + ic" class="w-[18px] h-[18px]" />
-              </button>
+              <UInput v-model="modal.name" placeholder="e.g. Handling" />
+            </UFormField>
+            <div class="mb-[18px]">
+              <label class="field-label">Icon</label>
+              <div class="flex flex-wrap gap-2">
+                <button
+                  v-for="ic in ICON_CHOICES"
+                  :key="ic"
+                  type="button"
+                  :title="ic"
+                  :style="iconChoiceStyle(modal.icon === ic)"
+                  @click="pickIcon(ic)"
+                >
+                  <UIcon :name="'i-lucide-' + ic" class="w-[18px] h-[18px]" />
+                </button>
+              </div>
+            </div>
+            <div>
+              <label class="field-label">Description <span class="text-slate-400 font-normal">(optional)</span></label>
+              <UInput
+                v-model="modal.desc"
+                placeholder="Short note about this fee"
+              />
             </div>
           </div>
-          <div>
-            <label class="field-label">Description <span class="text-slate-400 font-normal">(optional)</span></label>
-            <input
-              class="field-input"
-              type="text"
-              :value="modal.desc"
-              placeholder="Short note about this fee"
-              @input="modal.desc = ($event.target as HTMLInputElement).value"
+          <div class="flex justify-end gap-2.5 px-6 py-4 border-t border-slate-100">
+            <UButton
+              variant="ghost"
+
+              :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-[15px] font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer' }"
+              @click="modal = null"
             >
+              Cancel
+            </UButton>
+            <UButton
+              type="submit"
+              variant="ghost"
+              :disabled="saveDisabled"
+              :ui="{ base: ['border-none text-[15px] font-bold px-5 py-[9px] rounded-lg transition-colors', saveDisabled ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-green-500 text-white cursor-pointer hover:bg-green-600'] }"
+            >
+              Save
+            </UButton>
           </div>
-        </div>
-        <div class="flex justify-end gap-2.5 px-6 py-4 border-t border-slate-100">
-          <UButton
-            variant="ghost"
-
-            :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-[15px] font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer' }"
-            @click="modal = null"
-          >
-            Cancel
-          </UButton>
-          <UButton
-            variant="ghost"
-
-            :disabled="saveDisabled"
-
-            :ui="{ base: ['border-none text-[15px] font-bold px-5 py-[9px] rounded-lg transition-colors', saveDisabled ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-green-500 text-white cursor-pointer hover:bg-green-600'] }"
-            @click="saveModal"
-          >
-            Save
-          </UButton>
-        </div>
+        </UForm>
       </div>
     </div>
 
@@ -310,7 +312,7 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
       :tone="deleteBlocked ? 'warning' : 'danger'"
       :cancel-label="deleteCancelLabel"
       :show-confirm="!deleteBlocked"
-      @cancel="deleteTarget = null"
+      @cancel="cancelDelete"
       @confirm="confirmDelete"
     />
 

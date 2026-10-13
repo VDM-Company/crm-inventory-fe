@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
-import type { AttributeDef } from '~/types'
+import type { AttributeDef, StoredProduct } from '~/types'
 
 useHead({ title: 'Attributes — Vertex' })
 
 // ── state (mirrors the design's DCLogic state) ──
 const attrs = ref<AttributeDef[]>([])
-const deleteTarget = ref<AttributeDef | null>(null)
-const toast = ref<string | null>(null)
-
-let toastTimer: number | null = null
+const { message: toast, show: showToast } = usePageToast(2800)
+const products = ref<StoredProduct[]>([])
+const loading = ref(true)
+const loadError = ref('')
 
 // UTable column defs — per-column padding/width via `meta.class`, matching the
 // design's first/last-column gutters.
@@ -20,20 +20,17 @@ const columns: TableColumn<AttributeDef>[] = [
   { id: 'action', header: 'Action', meta: { class: { th: 'px-5 text-right w-[130px]', td: TABLE_EDGE.td } } }
 ]
 
-onMounted(() => {
-  attrs.value = loadAttributeDefs()
-})
-onBeforeUnmount(() => {
-  if (toastTimer !== null) clearTimeout(toastTimer)
-})
+const productsApi = useApiProducts()
 
-function showToast(msg: string) {
-  toast.value = msg
-  if (toastTimer !== null) clearTimeout(toastTimer)
-  toastTimer = window.setTimeout(() => {
-    toast.value = null
-  }, 2800)
-}
+onMounted(async () => {
+  try {
+    ;[attrs.value, products.value] = await Promise.all([loadAttributeDefs(), productsApi.list()])
+  } catch (err) {
+    loadError.value = apiErrorMessage(err, 'Could not load attributes.')
+  } finally {
+    loading.value = false
+  }
+})
 
 // ── create / edit (a dedicated screen, not an inline modal) ──
 function onCreate() {
@@ -44,30 +41,25 @@ function onEdit(a: AttributeDef) {
 }
 
 // ── delete ──
-const deleteUsage = computed(() => deleteTarget.value ? attributeUsageCount(deleteTarget.value.name) : 0)
-const deleteBlocked = computed(() => deleteUsage.value > 0)
-function confirmDelete() {
-  const t = deleteTarget.value
-  if (!t || deleteBlocked.value) return
-  const next = attrs.value.filter(a => a.id !== t.id)
-  saveAttributeDefs(next)
-  attrs.value = next
-  deleteTarget.value = null
-  showToast('Attribute deleted')
-}
-const deleteIcon = computed(() => deleteBlocked.value ? 'shield-alert' : 'trash-2')
-const deleteTitle = computed(() => {
-  const t = deleteTarget.value
-  if (!t) return ''
-  return deleteBlocked.value ? 'Cannot delete attribute' : 'Delete ' + t.name + '?'
+const {
+  target: deleteTarget,
+  blocked: deleteBlocked,
+  icon: deleteIcon,
+  title: deleteTitle,
+  message: deleteMessage,
+  cancelLabel: deleteCancelLabel,
+  confirm: confirmDelete,
+  cancel: cancelDelete
+} = useResourceDelete<AttributeDef>({
+  resource: 'attributes',
+  noun: 'attribute',
+  usageCount: t => attributeUsageCount(products.value, t.name),
+  blockedMessage: u => `This attribute is used by ${u} product${u === 1 ? '' : 's'}. Remove it from them first.`,
+  onDeleted: (t) => {
+    attrs.value = attrs.value.filter(x => x.id !== t.id)
+  },
+  notify: showToast
 })
-const deleteMessage = computed(() => {
-  if (!deleteTarget.value) return ''
-  if (!deleteBlocked.value) return 'This action cannot be undone.'
-  const u = deleteUsage.value
-  return `This attribute is used by ${u} product${u === 1 ? '' : 's'}. Remove it from them first.`
-})
-const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel')
 </script>
 
 <template>
@@ -100,7 +92,11 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
     </div>
 
     <UCard class="overflow-hidden">
-      <div v-if="attrs.length" class="overflow-x-auto">
+      <VertexTableSkeleton v-if="loading" :columns="['25%', '15%', '45%', '12%']" />
+
+      <VertexErrorBanner v-else-if="loadError" :message="loadError" class="m-5" />
+
+      <div v-else-if="attrs.length" class="overflow-x-auto">
         <UTable
           :data="attrs"
           :columns="columns"
@@ -135,7 +131,7 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
               <UButton
                 variant="ghost"
 
-                :ui="{ base: 'btn-icon-hover inline-flex items-center gap-1.5 border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-3.5 py-[7px] rounded-lg cursor-pointer' }"
+                :ui="{ base: 'hover:bg-slate-100 inline-flex items-center gap-1.5 border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-3.5 py-[7px] rounded-lg cursor-pointer' }"
                 @click="onEdit(row.original)"
               >
                 <UIcon name="i-lucide-pencil" class="w-3.5 h-3.5" /> Edit
@@ -145,7 +141,7 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
 
                 title="Delete attribute"
 
-                :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-600 w-[34px] h-[34px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
+                :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-red-600 w-[34px] h-[34px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
                 @click="deleteTarget = row.original"
               >
                 <UIcon name="i-lucide-trash-2" class="w-[15px] h-[15px]" />
@@ -172,7 +168,7 @@ const deleteCancelLabel = computed(() => deleteBlocked.value ? 'Close' : 'Cancel
       :tone="deleteBlocked ? 'warning' : 'danger'"
       :cancel-label="deleteCancelLabel"
       :show-confirm="!deleteBlocked"
-      @cancel="deleteTarget = null"
+      @cancel="cancelDelete"
       @confirm="confirmDelete"
     />
 

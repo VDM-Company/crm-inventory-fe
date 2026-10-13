@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import * as z from 'zod'
+import type { FormSubmitEvent, TableColumn } from '@nuxt/ui'
 import type { Category, CatEntry, CatScopeEntry, Platform } from '~/types'
 
 useHead({ title: 'Categories — Vertex' })
@@ -40,43 +41,29 @@ const members = ref<string[]>([])
 const positions = ref<Record<string, Record<string, number>>>({ default: {} })
 const scopeOverride = ref<Record<string, boolean>>({})
 const search = ref('')
-const page = ref(1)
 const addModal = ref<AddModalState | null>(null)
 const deleteOpen = ref(false)
-const toast = ref<string | null>(null)
+const { message: toast, show: showToast } = usePageToast(2600)
 
-let toastTimer: number | null = null
-
-onMounted(() => {
-  const list = loadCategories()
+onMounted(async () => {
+  let list: Category[] = []
+  try {
+    ;[list, platforms.value] = await Promise.all([loadCategories(), loadPlatforms()])
+  } catch (err) {
+    showToast(apiErrorMessage(err, 'Could not load categories.'))
+    return
+  }
   cats.value = list
-  platforms.value = loadPlatforms()
   const exp: Record<string, boolean> = {}
   list.forEach((c) => {
     if (!c.parentId) exp[c.id] = true
   })
   expanded.value = exp
   const first = list.find(c => !c.parentId) || list[0] || null
-  if (first) select(first.id)
-})
-
-onBeforeUnmount(() => {
-  if (toastTimer !== null) clearTimeout(toastTimer)
+  if (first) await select(first.id)
 })
 
 // ── style helpers (ported) ──
-function trackStyle(on: boolean) {
-  return `width:40px;height:22px;border-radius:999px;border:none;cursor:pointer;background:${on ? '#00c16a' : '#e2e8f0'};position:relative;padding:2px;display:inline-flex;align-items:center;flex-shrink:0;transition:background 150ms ease;`
-}
-function knobStyle(on: boolean) {
-  return `width:18px;height:18px;border-radius:999px;background:#fff;display:block;box-shadow:0 1px 2px rgba(0,0,0,0.15);transform:translateX(${on ? '18px' : '0'});transition:transform 150ms ease;`
-}
-function ddTrigger(open: boolean) {
-  return `width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;border:1px solid ${open ? '#00c16a' : '#e2e8f0'};border-radius:8px;padding:9px 12px;height:40px;font-size:14px;background:#fff;cursor:pointer;color:#0f172a;${open ? 'box-shadow:0 0 0 3px rgba(0,193,106,0.15);' : ''}`
-}
-function ddChevron(open: boolean) {
-  return `display:inline-flex;align-items:center;color:#64748b;flex-shrink:0;transition:transform 150ms ease;transform:rotate(${open ? '180deg' : '0deg'});`
-}
 
 // ── deterministic catalog (design's hash-based catalogFor) ──
 function hashCode(str: string): number {
@@ -125,10 +112,22 @@ function productCount(catId: string): number {
 }
 
 // ── selection ──
-function select(id: string) {
+// Clicks can outpace responses, so a slow fetch for one node must not land
+// after a later one and overwrite it.
+let selectSeq = 0
+
+async function select(id: string) {
   const cat = categoryById(cats.value, id)
   if (!cat) return
-  const entry = categoryEntry(id)
+  const seq = ++selectSeq
+  let entry: CatEntry
+  try {
+    entry = await categoryEntry(id)
+  } catch (err) {
+    if (seq === selectSeq) showToast(apiErrorMessage(err, 'Could not load this category.'))
+    return
+  }
+  if (seq !== selectSeq) return
   const pos: Record<string, Record<string, number>> = {}
   const ov: Record<string, boolean> = {}
   Object.keys(entry.scopes || {}).forEach((k) => {
@@ -169,35 +168,45 @@ function toggleExpand(id: string) {
   expanded.value = { ...expanded.value, [id]: !expanded.value[id] }
 }
 
-function showToast(msg: string) {
-  toast.value = msg
-  if (toastTimer !== null) clearTimeout(toastTimer)
-  toastTimer = window.setTimeout(() => {
-    toast.value = null
-  }, 2600)
-}
-
 // ── add / delete / save ──
-function confirmAdd() {
+// Uniqueness is scoped to the chosen parent, so the schema is a computed that
+// closes over the modal's current parentId.
+const addSchema = computed(() => z.object({
+  name: z.string()
+    .trim()
+    .min(1, 'Enter a unique category name.')
+    .refine(
+      v => !cats.value.some(c =>
+        c.name.toLowerCase() === v.toLowerCase()
+        && (c.parentId || null) === (addModal.value?.parentId || null)
+      ),
+      'Enter a unique category name.'
+    )
+}))
+type AddSchema = { name: string }
+
+async function onAddSubmit(event: FormSubmitEvent<AddSchema>) {
   const m = addModal.value
   if (!m) return
-  const name = (m.name || '').trim()
+  const name = event.data.name
+  // the parent picker is outside the schema; a forced subcategory needs one
   if (m.forceSub && !m.parentId) {
     addModal.value = { ...m, error: true }
     return
   }
-  const dup = cats.value.some(c => c.name.toLowerCase() === name.toLowerCase() && (c.parentId || null) === (m.parentId || null))
-  if (!name || dup) {
-    addModal.value = { ...m, error: true }
+  let cat: Category
+  try {
+    cat = await apiCreate<Category>('categories', {
+      name, parentId: m.parentId || null, enabled: m.enabled !== false
+    })
+  } catch (err) {
+    showToast(apiErrorMessage(err, 'Could not create the category.'))
     return
   }
-  const cat: Category = { id: 'cat_' + Date.now(), name, parentId: m.parentId || null, enabled: m.enabled !== false }
-  const next = [...cats.value, cat]
-  saveCategories(next)
-  cats.value = next
+  cats.value = [...cats.value, cat]
   if (m.parentId) expanded.value = { ...expanded.value, [m.parentId]: true }
   addModal.value = null
-  select(cat.id)
+  await select(cat.id)
   showToast(m.parentId ? 'Subcategory created' : 'Category created')
 }
 
@@ -206,23 +215,23 @@ const blockedDelete = computed(() => {
   if (!sel) return false
   return categoryChildren(cats.value, sel).length > 0 || members.value.length > 0
 })
-function confirmDelete() {
+async function confirmDelete() {
   const id = selectedId.value
   if (!id) return
   if (categoryChildren(cats.value, id).length || members.value.length) return
+  try {
+    await apiRemove('categories', id)
+  } catch (err) {
+    deleteOpen.value = false
+    showToast(apiErrorMessage(err, 'Could not delete the category.'))
+    return
+  }
   const next = cats.value.filter(c => c.id !== id)
-  saveCategories(next)
   cats.value = next
-  const all = loadCatProducts()
-  const nextAll: Record<string, CatEntry> = {}
-  Object.keys(all).forEach((k) => {
-    if (k !== id) nextAll[k] = all[k]!
-  })
-  saveCatProducts(nextAll)
   const nextSel = next.find(c => !c.parentId) || next[0] || null
   deleteOpen.value = false
   selectedId.value = null
-  if (nextSel) select(nextSel.id)
+  if (nextSel) await select(nextSel.id)
   showToast('Category deleted')
 }
 
@@ -261,14 +270,16 @@ function onToggleUseDefaultOrder(e: Event) {
   }
 }
 
-function save() {
+const saving = ref(false)
+
+async function save() {
   const name = (draftName.value || '').trim()
   if (!name) {
     nameError.value = true
     return
   }
-  const nextCats = cats.value.map(c => c.id === selectedId.value ? { ...c, name, enabled: draftEnabled.value } : c)
-  saveCategories(nextCats)
+  const id = selectedId.value
+  if (!id || saving.value) return
   const scopes: Record<string, CatScopeEntry> = {}
   Object.keys(positions.value).forEach((k) => {
     scopes[k] = { positions: positions.value[k] || {} }
@@ -277,8 +288,17 @@ function save() {
   Object.keys(scopeOverride.value).forEach((k) => {
     if (!scopes[k]) scopes[k] = { positions: {}, override: !!scopeOverride.value[k] }
   })
-  if (selectedId.value) saveCategoryEntry(selectedId.value, { members: members.value, scopes } as CatEntry)
-  cats.value = nextCats
+  saving.value = true
+  try {
+    await apiUpdate<Category>('categories', id, { name, enabled: draftEnabled.value })
+    await saveCategoryEntry(id, { members: members.value, scopes } as CatEntry)
+  } catch (err) {
+    saving.value = false
+    showToast(apiErrorMessage(err, 'Could not save the category.'))
+    return
+  }
+  saving.value = false
+  cats.value = cats.value.map(c => c.id === id ? { ...c, name, enabled: draftEnabled.value } : c)
   nameError.value = false
   showToast('Category saved')
 }
@@ -340,11 +360,12 @@ const selCat = computed(() => selectedId.value ? categoryById(cats.value, select
 const selectedPath = computed(() => selCat.value ? categoryPathById(cats.value, selCat.value.id) : '')
 
 // ── scope ──
-const scopeChoices = computed(() => [{ id: 'default', name: 'Default' }].concat(platforms.value.map(p => ({ id: p.id, name: p.name }))))
-const scopeLabel = computed(() => (scopeChoices.value.find(c => c.id === scope.value) || scopeChoices.value[0])?.name || 'Default')
-function scopeOptStyle(sel: boolean) {
-  return `width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;border:none;border-radius:6px;background:${sel ? '#ecfdf5' : 'transparent'};padding:8px 10px;font-size:14px;color:${sel ? '#047857' : '#334155'};font-weight:${sel ? 600 : 400};cursor:pointer;`
-}
+const scopeChoices = computed(() =>
+  [{ id: 'default', name: 'Default' }]
+    .concat(platforms.value.map(p => ({ id: p.id, name: p.name })))
+    .map(c => ({ value: c.id, name: c.name, selected: c.id === scope.value }))
+)
+const scopeLabel = computed(() => (scopeChoices.value.find(c => c.value === scope.value) || scopeChoices.value[0])?.name || 'Default')
 function pickScope(id: string) {
   scope.value = id
   scopeOpen.value = false
@@ -372,11 +393,8 @@ const filteredList = computed(() => {
   })
   return list
 })
-const pageSize = 8
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredList.value.length / pageSize)))
-const clampedPage = computed(() => Math.min(page.value, totalPages.value))
-const startIdx = computed(() => (clampedPage.value - 1) * pageSize)
-const paged = computed(() => filteredList.value.slice(startIdx.value, startIdx.value + pageSize))
+const { page, totalPages, clampedPage, startIdx, slice: pageSlice } = usePagination(() => filteredList.value.length, 8)
+const paged = computed(() => pageSlice(filteredList.value))
 function goPage(p: number) {
   page.value = Math.min(Math.max(1, p), totalPages.value)
 }
@@ -437,7 +455,7 @@ const deleteCancelLabel = computed(() => blockedDelete.value ? 'Close' : 'Cancel
 
 // ── add modal derived ──
 const addTitle = computed(() => addModal.value ? (addModal.value.forceSub || addModal.value.parentId ? 'Add Subcategory' : 'Add Category') : '')
-const parentOptions = computed(() => [{ id: '', name: 'Select parent…' }].concat(categoryTopLevel(cats.value).map(c => ({ id: c.id, name: c.name }))))
+const parentOptions = computed(() => categoryTopLevel(cats.value).map(c => ({ id: c.id, name: c.name })))
 function onReset() {
   if (selectedId.value) {
     select(selectedId.value)
@@ -495,25 +513,15 @@ function onReset() {
         <span class="text-[15px] font-bold text-slate-900">Select platform</span>
       </div>
       <div class="relative mb-3">
-        <button type="button" :style="ddTrigger(scopeOpen)" @click="scopeOpen = !scopeOpen">
-          <span class="whitespace-nowrap overflow-hidden text-ellipsis">{{ scopeLabel }}</span>
-          <span :style="ddChevron(scopeOpen)"><UIcon name="i-lucide-chevron-down" class="w-4 h-4" /></span>
-        </button>
-        <template v-if="scopeOpen">
-          <div class="fixed inset-0 z-40" @click="scopeOpen = false" />
-          <div class="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.14)] p-1 max-h-[250px] overflow-y-auto">
-            <button
-              v-for="opt in scopeChoices"
-              :key="opt.id"
-              type="button"
-              :style="scopeOptStyle(opt.id === scope)"
-              @click="pickScope(opt.id)"
-            >
-              <span>{{ opt.name }}</span>
-              <UIcon v-if="opt.id === scope" name="i-lucide-check" class="w-[15px] h-[15px] text-green-600" />
-            </button>
-          </div>
-        </template>
+        <VertexSelectMenu
+          :open="scopeOpen"
+          :label="scopeLabel"
+          :items="scopeChoices"
+          max-height="250px"
+          @toggle="scopeOpen = !scopeOpen"
+          @close="scopeOpen = false"
+          @select="pickScope"
+        />
       </div>
       <div v-if="isPlatformScope" class="flex items-center gap-2.5 flex-wrap">
         <span :style="scopeBadgeStyle">{{ scopeBadgeLabel }}</span>
@@ -539,7 +547,7 @@ function onReset() {
 
             title="Show categories"
 
-            :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-green-600 w-[34px] h-[34px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
+            :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-green-600 w-[34px] h-[34px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
             @click="treeCollapsed = false"
           >
             <UIcon name="i-lucide-panel-left-open" class="w-[17px] h-[17px]" />
@@ -568,7 +576,7 @@ function onReset() {
 
               title="Hide categories"
 
-              :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-slate-500 w-[30px] h-[30px] rounded-lg cursor-pointer inline-flex items-center justify-center flex-shrink-0' }"
+              :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-slate-500 w-[30px] h-[30px] rounded-lg cursor-pointer inline-flex items-center justify-center flex-shrink-0' }"
               @click="treeCollapsed = true"
             >
               <UIcon name="i-lucide-panel-left-close" class="w-4 h-4" />
@@ -658,7 +666,7 @@ function onReset() {
               <UButton
                 variant="ghost"
 
-                :ui="{ base: 'btn-icon-hover flex-shrink-0 inline-flex items-center gap-1.5 border border-slate-200 bg-white text-red-600 text-[13.5px] font-semibold px-3.5 py-2 rounded-lg cursor-pointer' }"
+                :ui="{ base: 'hover:bg-slate-100 flex-shrink-0 inline-flex items-center gap-1.5 border border-slate-200 bg-white text-red-600 text-[13.5px] font-semibold px-3.5 py-2 rounded-lg cursor-pointer' }"
                 @click="deleteOpen = true"
               >
                 <UIcon name="i-lucide-trash-2" class="w-3.5 h-3.5" /> Delete
@@ -671,13 +679,11 @@ function onReset() {
               :error="nameError ? 'Category name is required.' : ''"
               class="mb-[18px]"
             >
-              <input
-                class="field-input"
-                type="text"
-                :value="draftName"
+              <UInput
+                :model-value="draftName"
                 placeholder="e.g. Tourist SIM"
-                @input="draftName = ($event.target as HTMLInputElement).value; nameError = false"
-              >
+                @update:model-value="draftName = String($event); nameError = false"
+              />
             </VertexField>
 
             <div class="flex items-center justify-between gap-3 pt-4 border-t border-slate-100">
@@ -689,9 +695,7 @@ function onReset() {
                   {{ draftEnabled ? 'Visible on the storefront' : 'Hidden from the storefront' }}
                 </div>
               </div>
-              <button :style="trackStyle(draftEnabled)" @click="draftEnabled = !draftEnabled">
-                <span :style="knobStyle(draftEnabled)" />
-              </button>
+              <USwitch v-model="draftEnabled" class="shrink-0" />
             </div>
           </UCard>
 
@@ -863,102 +867,91 @@ function onReset() {
       class="fixed inset-0 bg-slate-900/45 backdrop-blur-[2px] flex items-center justify-center z-[210] p-5"
     >
       <div class="bg-white rounded-[14px] w-[460px] max-w-[92vw] shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
-        <div class="flex items-center justify-between px-6 py-5 border-b border-slate-100">
-          <h3 class="text-[17px] font-bold text-slate-900 m-0">
-            {{ addTitle }}
-          </h3>
-          <UButton
-            variant="ghost"
+        <UForm :schema="addSchema" :state="addModal" @submit="onAddSubmit">
+          <div class="flex items-center justify-between px-6 py-5 border-b border-slate-100">
+            <h3 class="text-[17px] font-bold text-slate-900 m-0">
+              {{ addTitle }}
+            </h3>
+            <UButton
+              variant="ghost"
 
-            :ui="{ base: 'btn-icon-hover border-none bg-transparent text-slate-500 w-8 h-8 rounded-lg cursor-pointer flex items-center justify-center' }"
-            @click="addModal = null"
-          >
-            <UIcon name="i-lucide-x" class="w-[18px] h-[18px]" />
-          </UButton>
-        </div>
-        <div class="p-6">
-          <div v-if="addModal.forceSub" class="mb-[18px]">
-            <label class="field-label">Parent Category</label>
-            <div class="select-wrap">
-              <select
-                class="field-input"
-                :value="addModal.parentId || ''"
-                @change="addModal.parentId = ($event.target as HTMLSelectElement).value || null"
-              >
-                <option v-for="opt in parentOptions" :key="opt.id" :value="opt.id">
-                  {{ opt.name }}
-                </option>
-              </select>
-            </div>
-          </div>
-          <VertexField
-            label="Category Name"
-            required
-            :error="addModal.error ? 'Enter a unique category name.' : ''"
-            class="mb-[18px] pb-[18px] border-b border-slate-100"
-          >
-            <input
-              class="field-input"
-              type="text"
-              :value="addModal.name"
-              placeholder="e.g. Resident SIM"
-              @input="addModal.name = ($event.target as HTMLInputElement).value; addModal.error = false"
-              @keydown.enter.prevent="confirmAdd"
+              :ui="{ base: 'hover:bg-slate-100 border-none bg-transparent text-slate-500 w-8 h-8 rounded-lg cursor-pointer flex items-center justify-center' }"
+              @click="addModal = null"
             >
-          </VertexField>
-
-          <div class="flex items-center justify-between gap-3 mb-4">
-            <div>
-              <div class="text-sm font-semibold text-slate-900">
-                Enable Category
-              </div>
-              <div class="text-[12.5px] text-slate-400 mt-0.5">
-                {{ addModal.enabled ? 'Visible on the storefront' : 'Hidden from the storefront' }}
+              <UIcon name="i-lucide-x" class="w-[18px] h-[18px]" />
+            </UButton>
+          </div>
+          <div class="p-6">
+            <div v-if="addModal.forceSub" class="mb-[18px]">
+              <label class="field-label">Parent Category</label>
+              <div class="select-wrap">
+                <USelect
+                  :model-value="addModal.parentId || undefined"
+                  :items="parentOptions"
+                  value-key="id"
+                  label-key="name"
+                  placeholder="Select parent…"
+                  @update:model-value="addModal.parentId = $event || null"
+                />
               </div>
             </div>
-            <div class="flex items-center gap-[9px] flex-shrink-0">
-              <button :style="trackStyle(addModal.enabled)" @click="addModal.enabled = !addModal.enabled">
-                <span :style="knobStyle(addModal.enabled)" />
-              </button>
-              <span class="text-[13.5px] font-semibold text-slate-700 w-[26px]">{{ addModal.enabled ? 'Yes' : 'No' }}</span>
+            <UFormField
+              name="name"
+              label="Category Name"
+              required
+              class="mb-[18px] pb-[18px] border-b border-slate-100"
+            >
+              <UInput v-model="addModal.name" placeholder="e.g. Resident SIM" />
+            </UFormField>
+
+            <div class="flex items-center justify-between gap-3 mb-4">
+              <div>
+                <div class="text-sm font-semibold text-slate-900">
+                  Enable Category
+                </div>
+                <div class="text-[12.5px] text-slate-400 mt-0.5">
+                  {{ addModal.enabled ? 'Visible on the storefront' : 'Hidden from the storefront' }}
+                </div>
+              </div>
+              <div class="flex items-center gap-[9px] flex-shrink-0">
+                <USwitch v-model="addModal.enabled" class="shrink-0" />
+                <span class="text-[13.5px] font-semibold text-slate-700 w-[26px]">{{ addModal.enabled ? 'Yes' : 'No' }}</span>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <div class="text-sm font-semibold text-slate-900">
+                  Include in Menu
+                </div>
+                <div class="text-[12.5px] text-slate-400 mt-0.5">
+                  {{ addModal.inMenu ? 'Shown in storefront navigation' : 'Not shown in navigation' }}
+                </div>
+              </div>
+              <div class="flex items-center gap-[9px] flex-shrink-0">
+                <USwitch v-model="addModal.inMenu" class="shrink-0" />
+                <span class="text-[13.5px] font-semibold text-slate-700 w-[26px]">{{ addModal.inMenu ? 'Yes' : 'No' }}</span>
+              </div>
             </div>
           </div>
+          <div class="flex justify-end gap-2.5 px-6 py-4 border-t border-slate-100">
+            <UButton
+              variant="ghost"
 
-          <div class="flex items-center justify-between gap-3">
-            <div>
-              <div class="text-sm font-semibold text-slate-900">
-                Include in Menu
-              </div>
-              <div class="text-[12.5px] text-slate-400 mt-0.5">
-                {{ addModal.inMenu ? 'Shown in storefront navigation' : 'Not shown in navigation' }}
-              </div>
-            </div>
-            <div class="flex items-center gap-[9px] flex-shrink-0">
-              <button :style="trackStyle(addModal.inMenu)" @click="addModal.inMenu = !addModal.inMenu">
-                <span :style="knobStyle(addModal.inMenu)" />
-              </button>
-              <span class="text-[13.5px] font-semibold text-slate-700 w-[26px]">{{ addModal.inMenu ? 'Yes' : 'No' }}</span>
-            </div>
+              :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-[15px] font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer' }"
+              @click="addModal = null"
+            >
+              Cancel
+            </UButton>
+            <UButton
+              type="submit"
+              variant="ghost"
+              :ui="{ base: 'border-none bg-green-500 text-white text-[15px] font-bold px-5 py-[9px] rounded-lg cursor-pointer' }"
+            >
+              Create
+            </UButton>
           </div>
-        </div>
-        <div class="flex justify-end gap-2.5 px-6 py-4 border-t border-slate-100">
-          <UButton
-            variant="ghost"
-
-            :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-[15px] font-semibold px-[18px] py-[9px] rounded-lg cursor-pointer' }"
-            @click="addModal = null"
-          >
-            Cancel
-          </UButton>
-          <UButton
-            variant="ghost"
-
-            :ui="{ base: 'border-none bg-green-500 text-white text-[15px] font-bold px-5 py-[9px] rounded-lg cursor-pointer' }"
-            @click="confirmAdd"
-          >
-            Create
-          </UButton>
-        </div>
+        </UForm>
       </div>
     </div>
 
@@ -966,27 +959,3 @@ function onReset() {
     <VertexToast :message="toast" />
   </div>
 </template>
-
-<style scoped>
-select.field-input {
-  appearance: none;
-  -webkit-appearance: none;
-  padding-right: 28px;
-  background-color: #fff;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 16px 16px;
-  cursor: pointer;
-}
-.tree-row:hover {
-  background: #f1f5f9;
-}
-.tree-row {
-  animation: treeRowIn 170ms ease;
-}
-@keyframes treeRowIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-</style>

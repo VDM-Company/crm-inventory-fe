@@ -12,115 +12,11 @@ useHead({ title: 'Dashboard — Vertex' })
 
 const router = useRouter()
 
-// ── seed catalog (design's SEED_PRODUCTS) ──
-// Written to `vertex_products` on first mount when the store is empty, so the
-// dashboard, Product Detail and Variant Detail all read the same records.
-const SEED_PRODUCTS: StoredProduct[] = [
-  {
-    id: 'p_tourist',
-    name: 'Tourist SIM 15GB',
-    sku: 'SKU-2000',
-    category: 'SIM Card',
-    categoryId: 'c_sim',
-    status: 'Active',
-    productType: 'variant',
-    hasVariants: true,
-    variantCount: 6,
-    platformIds: ['p_sp', 'p_sk'],
-    attributes: [{ name: 'Data', values: ['15GB'] }, { name: 'Duration', values: ['8 Days', '16 Days', '31 Days'] }],
-    variants: [
-      { name: '15GB / 8 Days', sku: 'SKU-2000-01', price: '24', stock: '42', active: true },
-      { name: '15GB / 16 Days', sku: 'SKU-2000-02', price: '32', stock: '28', active: true },
-      { name: '15GB / 31 Days', sku: 'SKU-2000-03', price: '44', stock: '12', active: false }
-    ]
-  },
-  {
-    id: 'p_unlimited',
-    name: 'Unlimited Data Plan 30D',
-    sku: 'SKU-2003',
-    category: 'Data Plan',
-    categoryId: 'c_data',
-    status: 'Active',
-    productType: 'single',
-    hasVariants: false,
-    variantCount: 0,
-    platformIds: ['p_sk'],
-    attributes: [],
-    variants: []
-  },
-  {
-    id: 'p_wifi',
-    name: 'Pocket WiFi Router X1',
-    sku: 'SKU-2002',
-    category: 'WiFi',
-    categoryId: 'c_wifi',
-    status: 'Active',
-    productType: 'variant',
-    hasVariants: true,
-    variantCount: 4,
-    platformIds: ['p_sp'],
-    attributes: [{ name: 'Color', values: ['Black', 'White', 'Blue', 'Green'] }],
-    variants: [
-      { name: 'Black', sku: 'SKU-2002-01', price: '60', stock: '15', active: true },
-      { name: 'White', sku: 'SKU-2002-02', price: '60', stock: '9', active: true },
-      { name: 'Blue', sku: 'SKU-2002-03', price: '62', stock: '4', active: true },
-      { name: 'Green', sku: 'SKU-2002-04', price: '62', stock: '0', active: false }
-    ]
-  },
-  {
-    id: 'p_bundle',
-    name: 'Travel Connectivity Bundle',
-    sku: 'SKU-2006',
-    category: 'SIM Card',
-    categoryId: 'c_sim',
-    status: 'Active',
-    productType: 'bundle',
-    hasVariants: false,
-    variantCount: 0,
-    platformIds: ['p_sp', 'p_sk'],
-    attributes: [],
-    variants: []
-  },
-  {
-    id: 'p_esim',
-    name: 'eSIM Global 5GB',
-    sku: 'SKU-2005',
-    category: 'SIM Card',
-    categoryId: 'c_sim',
-    status: 'Inactive',
-    productType: 'single',
-    hasVariants: false,
-    variantCount: 0,
-    platformIds: ['p_sp'],
-    attributes: [],
-    variants: []
-  },
-  {
-    id: 'p_prepaid',
-    name: 'Prepaid Data Plan 7D',
-    sku: 'SKU-2004',
-    category: 'Data Plan',
-    categoryId: 'c_data',
-    status: 'Active',
-    productType: 'variant',
-    hasVariants: true,
-    variantCount: 3,
-    platformIds: ['p_sk'],
-    attributes: [{ name: 'Data', values: ['3GB', '5GB', '10GB'] }],
-    variants: [
-      { name: '3GB', sku: 'SKU-2004-01', price: '12', stock: '30', active: true },
-      { name: '5GB', sku: 'SKU-2004-02', price: '18', stock: '22', active: true },
-      { name: '10GB', sku: 'SKU-2004-03', price: '28', stock: '11', active: true }
-    ]
-  }
-]
-
 // ── reactive state (mirrors the design's DCLogic component state) ──
 const search = ref('')
 const filtersOpen = ref(false)
-const page = ref(1)
 const moreHoverKey = ref<string | null>(null)
-const toast = ref<string | null>(null)
+const { message: toast, show: showToast } = usePageToast(3000)
 
 const catFilter = ref('')
 const platFilter = ref('')
@@ -131,44 +27,38 @@ const categories = ref<Category[]>([])
 const platforms = ref<Platform[]>([])
 // Seeded so SSR and the first client render agree; replaced with the real
 // store on mount.
-const storedProducts = ref<StoredProduct[]>(SEED_PRODUCTS)
+const storedProducts = ref<StoredProduct[]>([])
+const loading = ref(true)
 const nowTs = ref(0)
-
-let toastTimer: ReturnType<typeof setTimeout> | undefined
+const loadError = ref('')
 
 // SSR-safe browser reads happen only after mount.
-onMounted(() => {
-  categories.value = loadCategories()
-  platforms.value = loadPlatforms()
+
+const productsApi = useApiProducts()
+
+onMounted(async () => {
   nowTs.value = Date.now()
 
   try {
-    const raw = JSON.parse(localStorage.getItem('vertex_products') || '[]')
-    if (Array.isArray(raw) && raw.length) {
-      storedProducts.value = raw
-    } else {
-      localStorage.setItem('vertex_products', JSON.stringify(SEED_PRODUCTS))
-      storedProducts.value = SEED_PRODUCTS
-    }
-  } catch {
-    // ignore malformed storage
+    ;[categories.value, platforms.value, storedProducts.value] = await Promise.all([
+      loadCategories(), loadPlatforms(), productsApi.list()
+    ])
+  } catch (err) {
+    loadError.value = apiErrorMessage(err, 'Could not load the dashboard.')
+  } finally {
+    loading.value = false
   }
 
   try {
     const msg = sessionStorage.getItem('vertex_toast')
     if (msg) {
       sessionStorage.removeItem('vertex_toast')
-      toast.value = msg
-      toastTimer = setTimeout(() => {
-        toast.value = null
-      }, 3000)
+      showToast(msg)
     }
   } catch {
     // sessionStorage unavailable
   }
 })
-
-onBeforeUnmount(() => clearTimeout(toastTimer))
 
 // ── summary tiles ──
 const stats: DashStat[] = [
@@ -288,6 +178,33 @@ const allRows = computed<EnrichedRow[]>(() => {
 })
 
 // ── filter dropdown options (only values actually present in the table) ──
+// Reka rejects '' as a SelectItem value (it reserves '' for "cleared"), so the
+// "All ..." choices travel as a sentinel and map back to '' for the filters.
+const ALL = '__all'
+function allOption(r: Ref<string>) {
+  return computed({
+    get: () => r.value || ALL,
+    set: (v: string) => {
+      r.value = v === ALL ? '' : v
+    }
+  })
+}
+const TYPE_FILTER_ITEMS = [
+  { value: ALL, label: 'All types' },
+  { value: 'single', label: 'Single' },
+  { value: 'variant', label: 'Variant' },
+  { value: 'bundle', label: 'Bundle' }
+]
+const STATUS_FILTER_ITEMS = [
+  { value: ALL, label: 'All statuses' },
+  { value: 'Active', label: 'Active' },
+  { value: 'Inactive', label: 'Inactive' }
+]
+const catFilterSel = allOption(catFilter)
+const platFilterSel = allOption(platFilter)
+const typeFilterSel = allOption(typeFilter)
+const statusFilterSel = allOption(statusFilter)
+
 const categoryOptions = computed(() => flattenCategories(categories.value)
   .filter(o => allRows.value.some(r => (r.categoryId || r.productCategory) === o.id || r.productCategory === o.name))
   .map(o => ({ value: o.id, label: o.name })))
@@ -328,11 +245,8 @@ const filteredRows = computed(() => {
 })
 
 // ── pagination ──
-const pageSize = 15
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredRows.value.length / pageSize)))
-const clampedPage = computed(() => Math.min(page.value, totalPages.value))
-const startIdx = computed(() => (clampedPage.value - 1) * pageSize)
-const pagedRows = computed(() => filteredRows.value.slice(startIdx.value, startIdx.value + pageSize))
+const { page, totalPages, clampedPage, startIdx, slice: pageSlice } = usePagination(() => filteredRows.value.length, 15)
+const pagedRows = computed(() => pageSlice(filteredRows.value))
 
 function goPage(p: number) {
   page.value = Math.min(Math.max(1, p), totalPages.value)
@@ -374,6 +288,7 @@ function onNewProduct() {
 
 <template>
   <div class="px-8 pt-7 pb-20">
+    <VertexErrorBanner :message="loadError" class="mb-4" />
     <!-- TOAST -->
     <VertexToast :message="toast" />
 
@@ -477,72 +392,39 @@ function onNewProduct() {
                 <div class="flex flex-col gap-3.5">
                   <div>
                     <label class="text-[13px] font-semibold text-slate-700 mb-1.5 block">Category</label>
-                    <select
-                      v-model="catFilter"
-                      class="ff-select"
-                      @change="page = 1"
-                    >
-                      <option value="">
-                        All categories
-                      </option>
-                      <option v-for="o in categoryOptions" :key="o.value" :value="o.value">
-                        {{ o.label }}
-                      </option>
-                    </select>
+                    <USelect
+                      v-model="catFilterSel"
+                      :items="[{ value: ALL, label: 'All categories' }, ...categoryOptions]"
+                      :ui="SELECT_FILTER"
+                      @update:model-value="page = 1"
+                    />
                   </div>
                   <div>
                     <label class="text-[13px] font-semibold text-slate-700 mb-1.5 block">Platform</label>
-                    <select
-                      v-model="platFilter"
-                      class="ff-select"
-                      @change="page = 1"
-                    >
-                      <option value="">
-                        All platforms
-                      </option>
-                      <option v-for="o in platformOptions" :key="o.value" :value="o.value">
-                        {{ o.label }}
-                      </option>
-                    </select>
+                    <USelect
+                      v-model="platFilterSel"
+                      :items="[{ value: ALL, label: 'All platforms' }, ...platformOptions]"
+                      :ui="SELECT_FILTER"
+                      @update:model-value="page = 1"
+                    />
                   </div>
                   <div>
                     <label class="text-[13px] font-semibold text-slate-700 mb-1.5 block">Product Type</label>
-                    <select
-                      v-model="typeFilter"
-                      class="ff-select"
-                      @change="page = 1"
-                    >
-                      <option value="">
-                        All types
-                      </option>
-                      <option value="single">
-                        Single
-                      </option>
-                      <option value="variant">
-                        Variant
-                      </option>
-                      <option value="bundle">
-                        Bundle
-                      </option>
-                    </select>
+                    <USelect
+                      v-model="typeFilterSel"
+                      :items="TYPE_FILTER_ITEMS"
+                      :ui="SELECT_FILTER"
+                      @update:model-value="page = 1"
+                    />
                   </div>
                   <div>
                     <label class="text-[13px] font-semibold text-slate-700 mb-1.5 block">Status</label>
-                    <select
-                      v-model="statusFilter"
-                      class="ff-select"
-                      @change="page = 1"
-                    >
-                      <option value="">
-                        All statuses
-                      </option>
-                      <option value="Active">
-                        Active
-                      </option>
-                      <option value="Inactive">
-                        Inactive
-                      </option>
-                    </select>
+                    <USelect
+                      v-model="statusFilterSel"
+                      :items="STATUS_FILTER_ITEMS"
+                      :ui="SELECT_FILTER"
+                      @update:model-value="page = 1"
+                    />
                   </div>
                   <UButton
                     v-if="hasActiveFilters"
@@ -562,7 +444,9 @@ function onNewProduct() {
       </div>
 
       <!-- table -->
-      <div class="overflow-x-auto">
+      <VertexTableSkeleton v-if="loading" :rows="6" :columns="['26%', '14%', '18%', '16%', '12%', '8%']" />
+
+      <div v-else class="overflow-x-auto">
         <UTable
           :data="(pagedRows as DashRow[])"
           :columns="columns"
@@ -721,27 +605,4 @@ function onNewProduct() {
 </template>
 
 <style scoped>
-/* Native select styling from the design's `.ff-select`. */
-.ff-select {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 100%;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 9px 20px 9px 12px;
-  font-size: 14px;
-  color: #0f172a;
-  background-color: #fff;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 16px center;
-  background-size: 16px 16px;
-  outline: none;
-  cursor: pointer;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
-}
-.ff-select:focus {
-  border-color: #00c16a;
-  box-shadow: 0 0 0 3px rgba(0, 193, 106, 0.15);
-}
 </style>

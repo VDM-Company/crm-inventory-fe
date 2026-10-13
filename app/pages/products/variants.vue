@@ -63,8 +63,6 @@ const initialPid = Array.isArray(rawProduct) ? rawProduct[0] : rawProduct
 const productId = ref(initialPid && PRODUCTS[initialPid] ? initialPid : 'p1')
 const demoMode = ref<'populated' | 'empty'>('populated')
 const searchQuery = ref('')
-const page = ref(1)
-const pageSize = 8
 
 const product = computed(() => PRODUCTS[productId.value] || PRODUCTS.p1!)
 const allVariants = computed(() => demoMode.value === 'empty' ? [] : buildVariants(product.value))
@@ -74,9 +72,7 @@ const filtered = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   return allVariants.value.filter(v => !q || v.name.toLowerCase().includes(q) || v.sku.toLowerCase().includes(q))
 })
-const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / pageSize)))
-const clampedPage = computed(() => Math.min(page.value, totalPages.value))
-const startIdx = computed(() => (clampedPage.value - 1) * pageSize)
+const { page, totalPages, clampedPage, startIdx, endIdx, isFirstPage, isLastPage, slice: pageSlice } = usePagination(() => filtered.value.length, 8)
 
 const columns: TableColumn<VariantRow & { priceLabel: string }>[] = [
   { accessorKey: 'name', header: 'Variant', meta: { class: { th: 'px-4', td: 'px-4' } } },
@@ -89,7 +85,7 @@ const columns: TableColumn<VariantRow & { priceLabel: string }>[] = [
 ]
 
 const pageRows = computed(() =>
-  filtered.value.slice(startIdx.value, startIdx.value + pageSize).map(v => ({
+  pageSlice(filtered.value).map(v => ({
     ...v,
     priceLabel: '$' + v.price.toFixed(2)
   }))
@@ -102,11 +98,9 @@ const showNoResultsRow = computed(() => noResults.value)
 const showTable = computed(() => !isEmpty.value && !noResults.value)
 
 const paginationLabel = computed(() =>
-  `Showing ${filtered.value.length === 0 ? 0 : startIdx.value + 1}–${Math.min(startIdx.value + pageSize, filtered.value.length)} of ${filtered.value.length} variant(s)`
+  `Showing ${filtered.value.length === 0 ? 0 : startIdx.value + 1}–${Math.min(endIdx.value, filtered.value.length)} of ${filtered.value.length} variant(s)`
 )
 const pageNumbers = computed(() => Array.from({ length: totalPages.value }, (_, i) => i + 1))
-const isFirstPage = computed(() => clampedPage.value === 1)
-const isLastPage = computed(() => clampedPage.value === totalPages.value)
 
 function goToPage(p: number) {
   page.value = Math.min(Math.max(1, p), totalPages.value)
@@ -123,8 +117,12 @@ function onAddVariant() {
 function onViewDetail() {
   router.push('/products/detail')
 }
-function onDemoModeChange(e: Event) {
-  demoMode.value = (e.target as HTMLSelectElement).value as 'populated' | 'empty'
+const DEMO_MODE_ITEMS = [
+  { value: 'populated', label: 'Populated (variants listed)' },
+  { value: 'empty', label: 'Empty — no variants yet' }
+]
+function onDemoModeChange(v: string) {
+  demoMode.value = v as 'populated' | 'empty'
   page.value = 1
 }
 function onSearchChange(e: Event) {
@@ -139,18 +137,13 @@ function onSearchChange(e: Event) {
     <div class="bg-amber-50 border-b border-amber-200 px-6 py-2 flex items-center gap-2.5 text-xs text-amber-800">
       <UIcon name="i-lucide-flask-conical" class="w-3.5 h-3.5" />
       <span class="font-semibold">Prototype view:</span>
-      <select
-        :value="demoMode"
-        class="border border-amber-200 bg-white rounded-md px-2 py-1 text-xs text-amber-800"
-        @change="onDemoModeChange"
-      >
-        <option value="populated">
-          Populated (variants listed)
-        </option>
-        <option value="empty">
-          Empty — no variants yet
-        </option>
-      </select>
+      <USelect
+        :model-value="demoMode"
+        :items="DEMO_MODE_ITEMS"
+        class="w-auto"
+        :ui="{ base: 'px-2 py-1 text-[12px]/[18px] md:text-[12px]/[18px] border-amber-200 rounded-md text-amber-800', trailing: 'pe-1.5', trailingIcon: 'size-3.5 text-amber-700' }"
+        @update:model-value="onDemoModeChange"
+      />
     </div>
 
     <div class="px-8 pt-7 pb-20 flex-1">

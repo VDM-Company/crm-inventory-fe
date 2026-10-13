@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import * as z from 'zod'
+import type { FormSubmitEvent } from '@nuxt/ui'
 import type {
   AttributeDef,
   Category,
@@ -68,19 +70,21 @@ const componentModal = ref<ComponentModalState | null>(null)
 const saveConfirmOpen = ref(false)
 const cancelConfirmOpen = ref(false)
 const savedToast = ref(false)
-const saveError = ref<string[] | null>(null)
 const formDirty = ref(false)
 // snapshot of the attributes last "applied" — variant combinations only
 // regenerate when the user clicks Apply (design no longer auto-regenerates).
 const appliedKey = ref('')
 
-// masters — fees seeded deterministically so the pre-selected Pricing rows
-// render identically on server + first client paint; the rest follow the
-// Dashboard pattern (empty until `onMounted` reads localStorage).
+// masters — all fetched on mount. They start empty rather than seeded: a
+// seeded list renders names the real API may not agree with.
 const categories = ref<Category[]>([])
 const platforms = ref<Platform[]>([])
 const attributeDefs = ref<AttributeDef[]>([])
-const fees = ref<Fee[]>([...FEE_SEED])
+const fees = ref<Fee[]>([])
+const existingSkus = ref<string[]>([])
+const catalogProducts = ref<StoredProduct[]>([])
+const saveError = ref('')
+const saving = ref(false)
 
 const prodImageInput = ref<HTMLInputElement | null>(null)
 let toastTimer: number | null = null
@@ -88,11 +92,22 @@ let toastTimer: number | null = null
 const hasVariants = computed(() => productType.value === 'variant')
 const isBundle = computed(() => productType.value === 'bundle')
 
-onMounted(() => {
-  categories.value = loadCategories()
-  platforms.value = loadPlatforms()
-  attributeDefs.value = loadAttributeDefs()
-  fees.value = loadFees()
+const productsApi = useApiProducts()
+
+onMounted(async () => {
+  try {
+    ;[categories.value, platforms.value, attributeDefs.value, fees.value, existingSkus.value] = await Promise.all([
+      loadCategories(), loadPlatforms(), loadAttributeDefs(), loadFees(),
+      // the duplicate-SKU rule runs inside a zod refine, which cannot await —
+      // so the list it checks against is fetched once here
+      productsApi.list().then((list) => {
+        catalogProducts.value = list
+        return productSkus(list)
+      })
+    ])
+  } catch (err) {
+    saveError.value = apiErrorMessage(err, 'Could not load the form data.')
+  }
 })
 
 onBeforeUnmount(() => {
@@ -105,33 +120,11 @@ watch(
   [() => form, productType, isSubscription, published, notForSale, attributes, variants, bundleComponents],
   () => {
     formDirty.value = true
-    saveError.value = null
   },
   { deep: true }
 )
 
 // ── shared inline-style helpers (ported from the design) ──
-function ddTrigger(open: boolean) {
-  return `width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;border:1px solid ${open ? '#00c16a' : '#e2e8f0'};border-radius:8px;padding:9px 12px;height:40px;font-size:14px;background:#fff;cursor:pointer;color:#0f172a;${open ? 'box-shadow:0 0 0 3px rgba(0,193,106,0.15);' : ''}`
-}
-function ddChevron(open: boolean) {
-  return `display:inline-flex;align-items:center;color:#64748b;flex-shrink:0;transition:transform 150ms ease;transform:rotate(${open ? '180deg' : '0deg'});`
-}
-function ddOption(selected: boolean) {
-  return `width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;border:none;border-radius:6px;background:${selected ? '#ecfdf5' : 'transparent'};padding:8px 10px;font-size:14px;color:${selected ? '#047857' : '#334155'};font-weight:${selected ? 600 : 400};cursor:pointer;`
-}
-function trackStyle(active: boolean) {
-  return `width:40px;height:22px;border-radius:999px;border:none;cursor:pointer;background:${active ? '#00c16a' : '#e2e8f0'};position:relative;padding:2px;display:inline-flex;align-items:center;transition:background 150ms ease;flex-shrink:0;`
-}
-function knobStyle(active: boolean) {
-  return `width:18px;height:18px;border-radius:999px;background:#fff;display:block;box-shadow:0 1px 2px rgba(0,0,0,0.15);transform:translateX(${active ? '18px' : '0px'});transition:transform 150ms ease;`
-}
-function switchTrackCss(on: boolean, locked: boolean) {
-  return `width:40px;height:22px;border-radius:999px;border:none;background:${on ? '#00c16a' : '#e2e8f0'};position:relative;padding:2px;display:inline-flex;align-items:center;transition:background 150ms ease;cursor:${locked ? 'not-allowed' : 'pointer'};${locked ? 'opacity:0.65;' : ''}`
-}
-function switchKnobCss(on: boolean) {
-  return `width:18px;height:18px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,0.15);transform:translateX(${on ? '18px' : '0px'});transition:transform 150ms ease;display:block;`
-}
 
 function toggleDropdown(key: string) {
   openDropdown.value = openDropdown.value === key ? null : key
@@ -197,7 +190,7 @@ const categoryFlat = computed(() =>
     const selected = o.id === form.categoryId
     // parent rows read bolder than leaves, but every row stays selectable
     const style = `width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;border:none;border-radius:6px;background:${selected ? '#ecfdf5' : 'transparent'};padding:8px 10px;padding-left:${o.depth ? (10 + o.depth * 16) : 10}px;font-size:14px;color:${selected ? '#047857' : '#0f172a'};font-weight:${selected ? 600 : (o.header ? 600 : 400)};cursor:pointer;`
-    return { id: o.id, name: o.name, selected, style }
+    return { value: o.id, name: o.name, selected, style }
   })
 )
 function pickCategory(id: string) {
@@ -205,7 +198,6 @@ function pickCategory(id: string) {
   if (!cat) return
   form.categoryId = id
   form.category = cat.name
-  saveError.value = null
   closeDropdown()
 }
 
@@ -218,12 +210,12 @@ const assignedPlatformChips = computed(() =>
 const availablePlatforms = computed(() =>
   platforms.value.filter(p => form.platformIds.indexOf(p.id) === -1)
 )
+const platformItems = computed(() => availablePlatforms.value.map(p => ({ value: p.id, name: p.name })))
 const platformAllAssigned = computed(() => platforms.value.length > 0 && availablePlatforms.value.length === 0)
 const platformAddLabel = computed(() => assignedPlatformChips.value.length ? 'Add another platform' : 'Add platform')
 function addPlatform(id: string) {
   form.platformIds = [...form.platformIds, id]
   closeDropdown()
-  saveError.value = null
 }
 function removePlatform(id: string) {
   form.platformIds = form.platformIds.filter(x => x !== id)
@@ -233,10 +225,10 @@ const stockLabel = computed(() => form.stock === 'out_stock' ? 'Out of Stock' : 
 function stockDot(colour: string) {
   return `width:8px;height:8px;border-radius:999px;flex-shrink:0;background:${colour};`
 }
-const stockItems: [string, string, string][] = [
-  ['in_stock', 'In Stock', '#00c16a'],
-  ['out_stock', 'Out of Stock', '#dc2626']
-]
+const stockMenuItems = computed(() => ([
+  { value: 'in_stock', name: 'In Stock', dot: '#00c16a' },
+  { value: 'out_stock', name: 'Out of Stock', dot: '#dc2626' }
+]).map(o => ({ value: o.value, name: o.name, selected: form.stock === o.value, meta: { dot: o.dot } })))
 function pickStock(value: string) {
   form.stock = value
   closeDropdown()
@@ -252,16 +244,17 @@ function removeAttribute(id: string) {
 function onAttributeSelect(id: string, name: string) {
   attributes.value = attributes.value.map(a => a.id === id ? { ...a, name, values: [] } : a)
 }
+// The "+ Add value" pickers are menus, not selects: the value is never kept.
+// `null` holds Reka in controlled mode so the trigger falls back to its
+// placeholder after each pick — `undefined` makes it go uncontrolled and the
+// last pick sticks. The cast is only to satisfy USelect's prop type.
+const NO_VALUE = null as unknown as string | undefined
+
 function addAttributeValue(id: string, value: string) {
   if (!value) return
   attributes.value = attributes.value.map(a =>
     a.id === id && a.values.indexOf(value) === -1 ? { ...a, values: [...a.values, value] } : a
   )
-}
-function onPickValue(id: string, e: Event) {
-  const el = e.target as HTMLSelectElement
-  addAttributeValue(id, el.value)
-  el.value = ''
 }
 function removeAttributeValue(id: string, value: string) {
   attributes.value = attributes.value.map(a =>
@@ -364,16 +357,14 @@ function bundleComponentTitle(name: string) {
   const n = (name || '').trim()
   return /component$/i.test(n) ? n : (n + ' Component')
 }
-function getCatalog() {
-  let stored: { id: string, name: string, sku: string }[] = []
-  try {
-    stored = JSON.parse(localStorage.getItem('vertex_products') || '[]')
-  } catch {
-    // ignore malformed storage
-  }
-  return stored.map(p => ({ id: p.id, name: p.name, sku: p.sku })).concat(SEED_CATALOG)
-}
-const catalogOptions = computed(() => getCatalog().map(c => ({ id: c.id, label: c.name + ' (' + c.sku + ')' })))
+// The bundle picker offers the stored products (fetched on mount) plus the
+// design's demo catalog.
+const catalogOptions = computed(() =>
+  catalogProducts.value
+    .map(p => ({ id: p.id || '', name: p.name, sku: p.sku }))
+    .concat(SEED_CATALOG)
+    .map(c => ({ id: c.id, label: c.name + ' (' + c.sku + ')' }))
+)
 const bundleComponentRows = computed(() =>
   bundleComponents.value.map(c => ({ id: c.id, title: bundleComponentTitle(c.name), products: c.products }))
 )
@@ -410,7 +401,9 @@ const componentSaveDisabled = computed(() =>
 function saveComponent() {
   const m = componentModal.value
   if (!m) return
-  const catalog = getCatalog()
+  const catalog = catalogProducts.value
+    .map(p => ({ id: p.id || '', name: p.name, sku: p.sku }))
+    .concat(SEED_CATALOG)
   const products = m.rows.filter(r => r.productId).map((r) => {
     const p = catalog.find(c => c.id === r.productId)
     return { id: r.productId, name: p?.name || '', sku: p?.sku || '' }
@@ -466,11 +459,9 @@ const initialComponentRows = computed(() => {
 })
 function setComponentFeeId(i: number, feeId: string) {
   form.initialComponents = form.initialComponents.map((c, idx) => idx === i ? { ...c, feeId } : c)
-  saveError.value = null
 }
 function setComponentAmount(i: number, amount: string) {
   form.initialComponents = form.initialComponents.map((c, idx) => idx === i ? { ...c, amount } : c)
-  saveError.value = null
 }
 function toggleComponentPublish(i: number) {
   const c = form.initialComponents[i]
@@ -484,9 +475,6 @@ function removeInitialComponent(i: number) {
   const c = form.initialComponents[i]
   if (!c || c.feeId === FEE_BASE_ID) return
   form.initialComponents = form.initialComponents.filter((_, idx) => idx !== i)
-}
-function toggleSubscription() {
-  isSubscription.value = !isSubscription.value
 }
 function onPricingFocus() {
   if (pricingEditing.value) return
@@ -508,64 +496,70 @@ const showProductPrice = computed(() => productType.value !== 'variant')
 const pricePerVariant = computed(() => productType.value === 'variant')
 
 // ── status ──
-function togglePublished() {
-  published.value = !published.value
-}
 const statusHelper = computed(() => published.value ? 'Active — available for use' : 'Inactive — hidden from use')
-function toggleNotForSale() {
-  notForSale.value = !notForSale.value
-}
 const notForSaleHelper = computed(() =>
   notForSale.value ? 'Marked as gift' : 'Regular product'
 )
 
 // ── save / cancel ──
-function validate(): string[] {
-  const f = form
-  const missing: string[] = []
-  if (!f.name || !f.name.trim()) missing.push('Product name is required')
-  if (!f.sku || !f.sku.trim()) missing.push('Enter a SKU')
-  if (!f.category && !f.categoryId) missing.push('Category')
-  if (productType.value === 'variant') {
-    const attrs = attributes.value.filter(a => a.name && a.name.trim() && a.values.length)
-    if (!attrs.length) missing.push('Add at least one attribute value and click Apply')
-    else if (!variants.value.length) missing.push('Click Apply to generate combinations')
-    else if (variants.value.some(v => !v.sku || !String(v.sku).trim())) missing.push('Each variant needs a SKU')
+// Validation lives in one zod schema. The flat fields surface inline through
+// UFormField; the variant rules depend on state outside the schema (product
+// type, the applied attribute set) so they are raised in `superRefine`.
+const productSchema = computed(() => z.object({
+  name: z.string().trim().min(1, 'Product name is required'),
+  sku: z.string().trim().min(1, 'Enter a SKU'),
+  category: z.string(),
+  categoryId: z.string()
+}).superRefine((val, ctx) => {
+  if (!val.category && !val.categoryId) {
+    ctx.addIssue({ code: 'custom', path: ['categoryId'], message: 'Category is required' })
   }
-  const skuVal = (f.sku || '').trim()
-  if (skuVal) {
-    let existing: { sku?: string }[] = []
-    try {
-      existing = JSON.parse(localStorage.getItem('vertex_products') || '[]')
-    } catch {
-      // ignore malformed storage
-    }
-    if (existing.some(p => (p.sku || '').trim().toLowerCase() === skuVal.toLowerCase())) missing.push('SKU already exists')
-  }
-  return missing
-}
-const showSaveError = computed(() => (saveError.value || []).length > 0)
-const missingFieldsLabel = computed(() => (saveError.value || []).join(', '))
-const saveConfirmName = computed(() => form.name.trim() || 'this product')
-const saveDisabled = computed(() => validate().length > 0)
 
-function onSaveProduct() {
-  const missing = validate()
-  if (missing.length) {
-    saveError.value = missing
-    return
+  const sku = val.sku.trim().toLowerCase()
+  if (sku && existingSkus.value.includes(sku)) {
+    ctx.addIssue({ code: 'custom', path: ['sku'], message: 'SKU already exists' })
   }
-  saveError.value = null
+
+  if (productType.value !== 'variant') return
+  const applied = attributes.value.filter(a => a.name && a.name.trim() && a.values.length)
+  if (!applied.length) {
+    ctx.addIssue({ code: 'custom', path: ['variants'], message: 'Add at least one attribute value and click Apply' })
+  } else if (!variants.value.length) {
+    ctx.addIssue({ code: 'custom', path: ['variants'], message: 'Click Apply to generate combinations' })
+  } else if (variants.value.some(v => !v.sku || !String(v.sku).trim())) {
+    ctx.addIssue({ code: 'custom', path: ['variants'], message: 'Each variant needs a SKU' })
+  }
+}))
+type ProductSchema = { name: string, sku: string, category: string, categoryId: string }
+
+const validationResult = computed(() => productSchema.value.safeParse({
+  name: form.name,
+  sku: form.sku,
+  category: form.category,
+  categoryId: form.categoryId
+}))
+const saveConfirmName = computed(() => form.name.trim() || 'this product')
+// Matches the design: the button stays disabled until the product is valid.
+const saveDisabled = computed(() => !validationResult.value.success)
+
+// the variant rules have no field of their own, so render them beside the table
+const variantIssue = computed(() => {
+  const r = validationResult.value
+  if (r.success) return null
+  const issue = r.error.issues.find(i => i.path[0] === 'variants')
+  return issue ? issue.message : null
+})
+
+function onSaveProduct(_event: FormSubmitEvent<ProductSchema>) {
   saveConfirmOpen.value = true
 }
-function commitSave() {
+async function commitSave() {
   const f = form
   const variantsOn = productType.value === 'variant'
   const vList = variantsOn
     ? variants.value.map(v => ({ name: v.name, sku: v.sku, price: v.price, stock: v.stock, active: v.active }))
     : []
-  const rec: StoredProduct = {
-    id: 'u' + Date.now(),
+  const rec: Omit<StoredProduct, 'id'> = {
     name: f.name.trim() || 'Untitled Product',
     sku: f.sku.trim() || '—',
     notes: f.notes,
@@ -596,13 +590,17 @@ function commitSave() {
       : [],
     createdAt: Date.now()
   }
+  if (saving.value) return
+  saving.value = true
   try {
-    const list = JSON.parse(localStorage.getItem('vertex_products') || '[]')
-    list.unshift(rec)
-    localStorage.setItem('vertex_products', JSON.stringify(list))
-  } catch {
-    // ignore storage failure
+    await productsApi.create(rec)
+  } catch (err) {
+    saving.value = false
+    saveConfirmOpen.value = false
+    saveError.value = apiErrorMessage(err, 'Could not save the product.')
+    return
   }
+  saving.value = false
   try {
     sessionStorage.setItem('vertex_toast', 'Product created')
   } catch {
@@ -658,35 +656,24 @@ function onConfirmDiscard() {
           Cancel
         </UButton>
         <UButton
+          type="submit"
+          form="create-product"
           variant="ghost"
-
           :disabled="saveDisabled"
-
           :ui="{ base: ['border-none text-sm font-semibold px-5 py-[9px] rounded-lg transition-colors', saveDisabled ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-green-500 text-white cursor-pointer shadow-sm hover:bg-green-600'] }"
-          @click="onSaveProduct"
         >
           Save Product
         </UButton>
       </div>
     </div>
 
-    <div class="flex flex-col gap-6">
-      <!-- save error -->
-      <div
-        v-if="showSaveError"
-        class="flex items-start gap-3 bg-red-50 border border-red-200 rounded-[10px] px-4 py-3.5"
-      >
-        <UIcon name="i-lucide-circle-alert" class="w-[18px] h-[18px] text-red-600 flex-shrink-0 mt-px" />
-        <div>
-          <div class="text-sm font-semibold text-red-700">
-            Please complete all required fields before saving
-          </div>
-          <div class="text-[13px] text-red-600 mt-0.5">
-            Missing: {{ missingFieldsLabel }}
-          </div>
-        </div>
-      </div>
-
+    <UForm
+      id="create-product"
+      :schema="productSchema"
+      :state="form"
+      class="flex flex-col gap-6"
+      @submit="onSaveProduct"
+    >
       <!-- ROW 1: Core identification + Settings -->
       <div class="flex flex-wrap gap-6 items-stretch">
         <!-- Core identification -->
@@ -699,46 +686,41 @@ function onConfirmDiscard() {
           </p>
 
           <div class="grid gap-4 mb-4 grid-cols-[repeat(auto-fit,minmax(min(180px,100%),1fr))]">
-            <div>
-              <label class="field-label">Product Name</label>
-              <input
+            <UFormField
+              name="name"
+              label="Product Name"
+              required
+              :ui="FORM_FIELD_COMPACT"
+            >
+              <UInput
                 v-model="form.name"
-                class="field-input"
-                type="text"
                 placeholder="e.g. Premium Cotton T-Shirt"
-              >
-            </div>
-            <div>
-              <label class="field-label">SKU</label>
-              <input
+                :ui="fieldCompact()"
+              />
+            </UFormField>
+            <UFormField
+              name="sku"
+              label="SKU"
+              required
+              :ui="FORM_FIELD_COMPACT"
+            >
+              <UInput
                 v-model="form.sku"
-                class="field-input"
-                type="text"
                 placeholder="e.g. TSH-001"
-              >
-            </div>
+                :ui="fieldCompact()"
+              />
+            </UFormField>
             <div>
               <label class="field-label">Product Type</label>
               <div class="relative">
-                <button type="button" :style="ddTrigger(openDropdown === 'type')" @click="toggleDropdown('type')">
-                  <span class="whitespace-nowrap overflow-hidden text-ellipsis">{{ productTypeLabel }}</span>
-                  <span :style="ddChevron(openDropdown === 'type')"><UIcon name="i-lucide-chevron-down" class="w-4 h-4" /></span>
-                </button>
-                <template v-if="openDropdown === 'type'">
-                  <div class="fixed inset-0 z-40" @click="closeDropdown" />
-                  <div class="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.14)] p-1">
-                    <button
-                      v-for="opt in productTypeItems"
-                      :key="opt.value"
-                      type="button"
-                      :style="ddOption(opt.selected)"
-                      @click="setType(opt.value)"
-                    >
-                      <span>{{ opt.name }}</span>
-                      <UIcon v-if="opt.selected" name="i-lucide-check" class="w-[15px] h-[15px] text-green-600" />
-                    </button>
-                  </div>
-                </template>
+                <VertexSelectMenu
+                  :open="openDropdown === 'type'"
+                  :label="productTypeLabel"
+                  :items="productTypeItems"
+                  @toggle="toggleDropdown('type')"
+                  @close="closeDropdown"
+                  @select="setType($event as ProductType)"
+                />
               </div>
             </div>
           </div>
@@ -746,20 +728,20 @@ function onConfirmDiscard() {
           <div class="grid grid-cols-2 gap-4 mb-4 max-[560px]:grid-cols-1">
             <div>
               <label class="field-label">Notes</label>
-              <textarea
+              <UTextarea
                 v-model="form.notes"
-                class="field-input resize-y"
-                rows="3"
+                :rows="3"
                 placeholder="Internal notes about this product..."
+                :ui="fieldCompact('resize-y')"
               />
             </div>
             <div>
               <label class="field-label">Product Description</label>
-              <textarea
+              <UTextarea
                 v-model="form.description"
-                class="field-input resize-y"
-                rows="3"
+                :rows="3"
                 placeholder="Customer-facing product description..."
+                :ui="fieldCompact('resize-y')"
               />
             </div>
           </div>
@@ -817,33 +799,26 @@ function onConfirmDiscard() {
           </h2>
 
           <!-- category -->
-          <div class="mb-4">
-            <label class="field-label">Category</label>
+          <UFormField
+            name="categoryId"
+            label="Category"
+            required
+            class="mb-4"
+            :ui="FORM_FIELD_COMPACT"
+          >
             <div class="relative flex-1 min-w-0">
-              <button type="button" :style="ddTrigger(openDropdown === 'category')" @click="toggleDropdown('category')">
-                <span
-                  class="whitespace-nowrap overflow-hidden text-ellipsis"
-                  :class="form.categoryId || form.category ? 'text-slate-900' : 'text-slate-400'"
-                >{{ categoryDisplay }}</span>
-                <span :style="ddChevron(openDropdown === 'category')"><UIcon name="i-lucide-chevron-down" class="w-4 h-4" /></span>
-              </button>
-              <template v-if="openDropdown === 'category'">
-                <div class="fixed inset-0 z-40" @click="closeDropdown" />
-                <div class="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.14)] max-h-[280px] overflow-y-auto p-1">
-                  <button
-                    v-for="opt in categoryFlat"
-                    :key="opt.id"
-                    type="button"
-                    :style="opt.style"
-                    @click="pickCategory(opt.id)"
-                  >
-                    <span>{{ opt.name }}</span>
-                    <UIcon v-if="opt.selected" name="i-lucide-check" class="w-[15px] h-[15px] text-green-600" />
-                  </button>
-                </div>
-              </template>
+              <VertexSelectMenu
+                :open="openDropdown === 'category'"
+                :label="categoryDisplay"
+                :placeholder="!(form.categoryId || form.category)"
+                :items="categoryFlat"
+                max-height="280px"
+                @toggle="toggleDropdown('category')"
+                @close="closeDropdown"
+                @select="pickCategory"
+              />
             </div>
-          </div>
+          </UFormField>
 
           <!-- platforms -->
           <div class="mb-5">
@@ -868,27 +843,24 @@ function onConfirmDiscard() {
               </span>
             </div>
             <div class="relative">
-              <button type="button" :style="ddTrigger(openDropdown === 'platform')" @click="toggleDropdown('platform')">
-                <span class="text-slate-500 whitespace-nowrap overflow-hidden text-ellipsis">{{ platformAddLabel }}</span>
-                <span :style="ddChevron(openDropdown === 'platform')"><UIcon name="i-lucide-chevron-down" class="w-4 h-4" /></span>
-              </button>
-              <template v-if="openDropdown === 'platform'">
-                <div class="fixed inset-0 z-40" @click="closeDropdown" />
-                <div class="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.14)] p-1 max-h-[220px] overflow-y-auto">
-                  <button
-                    v-for="opt in availablePlatforms"
-                    :key="opt.id"
-                    type="button"
-                    :style="ddOption(false)"
-                    @click="addPlatform(opt.id)"
-                  >
-                    <span>{{ opt.name }}</span>
-                  </button>
+              <VertexSelectMenu
+                :open="openDropdown === 'platform'"
+                :label="platformAddLabel"
+                :items="platformItems"
+                max-height="220px"
+                @toggle="toggleDropdown('platform')"
+                @close="closeDropdown"
+                @select="addPlatform"
+              >
+                <template #label>
+                  <span class="text-slate-500">{{ platformAddLabel }}</span>
+                </template>
+                <template #empty>
                   <div v-if="platformAllAssigned" class="p-2.5 text-[13px] text-slate-400 text-center">
                     All platforms assigned
                   </div>
-                </div>
-              </template>
+                </template>
+              </VertexSelectMenu>
             </div>
           </div>
 
@@ -896,27 +868,25 @@ function onConfirmDiscard() {
           <div class="mb-5">
             <label class="field-label">Stock</label>
             <div class="relative">
-              <button type="button" :style="ddTrigger(openDropdown === 'stock')" @click="toggleDropdown('stock')">
-                <span class="inline-flex items-center gap-2">
-                  <span :style="stockDot(form.stock === 'out_stock' ? '#dc2626' : '#00c16a')" />{{ stockLabel }}
-                </span>
-                <span :style="ddChevron(openDropdown === 'stock')"><UIcon name="i-lucide-chevron-down" class="w-4 h-4" /></span>
-              </button>
-              <template v-if="openDropdown === 'stock'">
-                <div class="fixed inset-0 z-40" @click="closeDropdown" />
-                <div class="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.14)] p-1">
-                  <button
-                    v-for="opt in stockItems"
-                    :key="opt[0]"
-                    type="button"
-                    :style="ddOption(form.stock === opt[0])"
-                    @click="pickStock(opt[0])"
-                  >
-                    <span class="inline-flex items-center gap-2"><span :style="stockDot(opt[2])" />{{ opt[1] }}</span>
-                    <UIcon v-if="form.stock === opt[0]" name="i-lucide-check" class="w-[15px] h-[15px] text-green-600" />
-                  </button>
-                </div>
-              </template>
+              <VertexSelectMenu
+                :open="openDropdown === 'stock'"
+                :label="stockLabel"
+                :items="stockMenuItems"
+                @toggle="toggleDropdown('stock')"
+                @close="closeDropdown"
+                @select="pickStock"
+              >
+                <template #label>
+                  <span class="inline-flex items-center gap-2">
+                    <span :style="stockDot(form.stock === 'out_stock' ? '#dc2626' : '#00c16a')" />{{ stockLabel }}
+                  </span>
+                </template>
+                <template #option="{ item }">
+                  <span class="inline-flex items-center gap-2">
+                    <span :style="stockDot(String(item.meta?.dot))" />{{ item.name }}
+                  </span>
+                </template>
+              </VertexSelectMenu>
             </div>
           </div>
 
@@ -930,9 +900,7 @@ function onConfirmDiscard() {
                 {{ statusHelper }}
               </div>
             </div>
-            <button :style="trackStyle(published)" @click="togglePublished">
-              <span :style="knobStyle(published)" />
-            </button>
+            <USwitch v-model="published" class="shrink-0" />
           </div>
 
           <!-- not for sale -->
@@ -945,9 +913,7 @@ function onConfirmDiscard() {
                 {{ notForSaleHelper }}
               </div>
             </div>
-            <button :style="trackStyle(notForSale)" @click="toggleNotForSale">
-              <span :style="knobStyle(notForSale)" />
-            </button>
+            <USwitch v-model="notForSale" class="shrink-0" />
           </div>
         </UCard>
       </div>
@@ -980,23 +946,13 @@ function onConfirmDiscard() {
                   <div class="basis-[150px] grow shrink min-w-[120px] max-w-[240px]">
                     <label class="field-label text-xs">Attribute Name</label>
                     <div class="select-wrap">
-                      <select
-                        class="field-input"
-                        :value="attr.name"
-                        @change="onAttributeSelect(attr.id, ($event.target as HTMLSelectElement).value)"
-                      >
-                        <option value="">
-                          Select attribute...
-                        </option>
-                        <option
-                          v-for="opt in attr.typeOptions"
-                          :key="opt.value"
-                          :value="opt.value"
-                          :disabled="opt.disabled"
-                        >
-                          {{ opt.label }}
-                        </option>
-                      </select>
+                      <USelect
+                        :model-value="attr.name || undefined"
+                        :items="attr.typeOptions"
+                        placeholder="Select attribute..."
+                        :ui="fieldCompact()"
+                        @update:model-value="onAttributeSelect(attr.id, String($event))"
+                      />
                     </div>
                   </div>
                   <div class="basis-[170px] grow shrink min-w-0">
@@ -1061,18 +1017,13 @@ function onConfirmDiscard() {
                         </UButton>
                       </span>
                       <div v-if="attr.canAddValue" class="select-wrap basis-[130px] grow shrink min-w-[120px]">
-                        <select
-                          class="field-input text-[13px]"
-                          :value="''"
-                          @change="onPickValue(attr.id, $event)"
-                        >
-                          <option value="">
-                            + Add value
-                          </option>
-                          <option v-for="opt in attr.availableValues" :key="opt" :value="opt">
-                            {{ opt }}
-                          </option>
-                        </select>
+                        <USelect
+                          :model-value="NO_VALUE"
+                          :items="attr.availableValues"
+                          placeholder="+ Add value"
+                          :ui="SELECT_ADD_VALUE"
+                          @update:model-value="addAttributeValue(attr.id, String($event))"
+                        />
                       </div>
                       <span v-if="attr.noChoices" class="text-xs text-slate-400 p-1">No preset values — add on the Attributes page</span>
                       <span v-else-if="attr.allSelected" class="text-xs text-slate-400 p-1">All values added</span>
@@ -1083,7 +1034,7 @@ function onConfirmDiscard() {
 
                     title="Remove attribute"
 
-                    :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-500 w-9 h-9 rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0 mt-5' }"
+                    :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-red-500 w-9 h-9 rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0 mt-5' }"
                     @click="removeAttribute(attr.id)"
                   >
                     <UIcon name="i-lucide-trash-2" class="w-4 h-4" />
@@ -1139,24 +1090,25 @@ function onConfirmDiscard() {
                     class="grid grid-cols-[minmax(160px,1.6fr)_150px_90px_40px] gap-2 items-center px-4 py-2 border-b border-slate-100"
                   >
                     <span class="text-sm font-semibold text-slate-900">{{ v.name }}</span>
-                    <input
-                      class="field-input px-2.5 py-[7px] text-[13px]"
-                      type="text"
-                      :value="v.sku"
+                    <UInput
+                      :model-value="v.sku"
                       placeholder="SKU"
-                      @input="updateVariant(v.key, 'sku', ($event.target as HTMLInputElement).value)"
-                    >
+                      :ui="fieldCompactSm()"
+                      @update:model-value="updateVariant(v.key, 'sku', String($event))"
+                    />
                     <div class="text-center">
-                      <button :style="trackStyle(v.active)" @click="toggleVariantActive(v.key)">
-                        <span :style="knobStyle(v.active)" />
-                      </button>
+                      <USwitch
+                        :model-value="v.active"
+                        class="inline-flex"
+                        @update:model-value="toggleVariantActive(v.key)"
+                      />
                     </div>
                     <UButton
                       variant="ghost"
 
                       title="Delete variant"
 
-                      :ui="{ base: 'btn-icon-hover border-none bg-transparent text-slate-400 w-8 h-8 rounded-lg cursor-pointer inline-flex items-center justify-center' }"
+                      :ui="{ base: 'hover:bg-slate-100 border-none bg-transparent text-slate-400 w-8 h-8 rounded-lg cursor-pointer inline-flex items-center justify-center' }"
                       @click="removeVariant(v.key)"
                     >
                       <UIcon name="i-lucide-trash-2" class="w-[15px] h-[15px]" />
@@ -1175,6 +1127,16 @@ function onConfirmDiscard() {
               <div class="text-[13px] text-slate-400">
                 Click Apply to generate variant combinations.
               </div>
+            </div>
+
+            <!-- Save stays disabled until the variants are valid, so surface the
+                 reason here rather than leaving a dead button -->
+            <div
+              v-if="variantIssue"
+              class="mt-3 flex items-center gap-2 text-[13px] text-red-600"
+            >
+              <UIcon name="i-lucide-circle-alert" class="w-[15px] h-[15px] flex-shrink-0" />
+              <span>{{ variantIssue }}</span>
             </div>
           </UCard>
 
@@ -1214,7 +1176,7 @@ function onConfirmDiscard() {
 
                       title="Edit component"
 
-                      :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-slate-500 w-8 h-8 rounded-lg cursor-pointer inline-flex items-center justify-center' }"
+                      :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-slate-500 w-8 h-8 rounded-lg cursor-pointer inline-flex items-center justify-center' }"
                       @click="openEditComponent(comp.id)"
                     >
                       <UIcon name="i-lucide-pencil" class="w-3.5 h-3.5" />
@@ -1224,7 +1186,7 @@ function onConfirmDiscard() {
 
                       title="Delete component"
 
-                      :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-500 w-8 h-8 rounded-lg cursor-pointer inline-flex items-center justify-center' }"
+                      :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-red-500 w-8 h-8 rounded-lg cursor-pointer inline-flex items-center justify-center' }"
                       @click="removeComponent(comp.id)"
                     >
                       <UIcon name="i-lucide-trash-2" class="w-3.5 h-3.5" />
@@ -1285,9 +1247,7 @@ function onConfirmDiscard() {
                     {{ subscriptionHelper }}
                   </div>
                 </div>
-                <button :style="trackStyle(isSubscription)" @click="toggleSubscription">
-                  <span :style="knobStyle(isSubscription)" />
-                </button>
+                <USwitch v-model="isSubscription" class="shrink-0" />
               </div>
 
               <template v-if="showProductPrice">
@@ -1296,14 +1256,17 @@ function onConfirmDiscard() {
                     <div class="flex-1">
                       <label class="field-label">Monthly Fee</label>
                       <div class="relative">
-                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">¥</span>
-                        <input
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 z-10 text-sm text-slate-400">¥</span>
+                        <!-- `focus` is not a UInput emit, and its template binds
+                             `@focus` after `v-bind="$attrs"`, so a `@focus` here is
+                             dropped. `focusin` bubbles and passes straight through. -->
+                        <UInput
                           v-model="form.priceMonthly"
-                          class="field-input pl-[26px]"
                           type="number"
                           placeholder="0.00"
-                          @focus="onPricingFocus"
-                        >
+                          :ui="fieldCompact('pl-[26px]')"
+                          @focusin="onPricingFocus"
+                        />
                       </div>
                     </div>
                     <div v-if="pricingEditing" class="flex gap-1.5 flex-shrink-0">
@@ -1322,7 +1285,7 @@ function onConfirmDiscard() {
 
                         title="Cancel"
 
-                        :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-slate-500 w-[38px] h-[38px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
+                        :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-slate-500 w-[38px] h-[38px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
                         @click="onPricingCancel"
                       >
                         <UIcon name="i-lucide-x" class="w-[17px] h-[17px]" />
@@ -1364,39 +1327,35 @@ function onConfirmDiscard() {
                             <span class="text-[11px] font-semibold px-2 py-px rounded-full bg-blue-50 text-blue-600 border border-blue-200">Base</span>
                           </div>
                           <div v-else class="select-wrap">
-                            <select
-                              class="field-input"
-                              :value="c.feeId"
-                              @change="setComponentFeeId(c.index, ($event.target as HTMLSelectElement).value)"
-                            >
-                              <option value="">
-                                Select component...
-                              </option>
-                              <option v-for="opt in c.options" :key="opt.id" :value="opt.id">
-                                {{ opt.name }}
-                              </option>
-                            </select>
+                            <USelect
+                              :model-value="c.feeId || undefined"
+                              :items="c.options"
+                              value-key="id"
+                              label-key="name"
+                              placeholder="Select component..."
+                              :ui="fieldCompact()"
+                              @update:model-value="setComponentFeeId(c.index, String($event))"
+                            />
                           </div>
                         </div>
                         <div class="relative w-[150px] flex-shrink-0">
-                          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">¥</span>
-                          <input
-                            class="field-input pl-[26px]"
+                          <span class="absolute left-3 top-1/2 -translate-y-1/2 z-10 text-sm text-slate-400">¥</span>
+                          <UInput
+                            :model-value="String(c.amount)"
                             type="number"
-                            :value="c.amount"
                             placeholder="0"
-                            @input="setComponentAmount(c.index, ($event.target as HTMLInputElement).value)"
-                          >
+                            :ui="fieldCompact('pl-[26px]')"
+                            @update:model-value="setComponentAmount(c.index, String($event))"
+                          />
                         </div>
                         <div class="w-24 flex-shrink-0 flex justify-center">
-                          <button
+                          <USwitch
+                            :model-value="c.published"
                             :disabled="c.publishLocked"
                             :title="c.publishTitle"
-                            :style="switchTrackCss(c.published, c.publishLocked)"
-                            @click="toggleComponentPublish(c.index)"
-                          >
-                            <span :style="switchKnobCss(c.published)" />
-                          </button>
+                            :ui="{ root: c.publishLocked ? 'opacity-[0.65]' : '' }"
+                            @update:model-value="toggleComponentPublish(c.index)"
+                          />
                         </div>
                         <div class="w-[38px] flex-shrink-0">
                           <UButton
@@ -1405,7 +1364,7 @@ function onConfirmDiscard() {
                             variant="ghost"
                             title="Remove component"
 
-                            :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-500 w-[38px] h-[38px] rounded-lg cursor-pointer flex items-center justify-center' }"
+                            :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-red-500 w-[38px] h-[38px] rounded-lg cursor-pointer flex items-center justify-center' }"
                             @click="removeInitialComponent(c.index)"
                           >
                             <UIcon name="i-lucide-trash-2" class="w-4 h-4" />
@@ -1437,7 +1396,15 @@ function onConfirmDiscard() {
           </UCard>
         </div>
       </div>
-    </div>
+
+      <div
+        v-if="saveError"
+        class="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3.5 py-3 text-[13px] text-red-700"
+      >
+        <UIcon name="i-lucide-circle-alert" class="w-[15px] h-[15px] flex-shrink-0" />
+        <span>{{ saveError }}</span>
+      </div>
+    </UForm>
 
     <!-- cancel confirm -->
     <VertexConfirmModal
@@ -1466,7 +1433,7 @@ function onConfirmDiscard() {
           <UButton
             variant="ghost"
 
-            :ui="{ base: 'btn-icon-hover border-none bg-transparent text-slate-500 w-8 h-8 rounded-lg cursor-pointer flex items-center justify-center' }"
+            :ui="{ base: 'hover:bg-slate-100 border-none bg-transparent text-slate-500 w-8 h-8 rounded-lg cursor-pointer flex items-center justify-center' }"
             @click="closeComponentModal"
           >
             <UIcon name="i-lucide-x" class="w-[18px] h-[18px]" />
@@ -1475,12 +1442,11 @@ function onConfirmDiscard() {
         <div class="p-6">
           <div class="mb-5">
             <label class="field-label">Component Name</label>
-            <input
+            <UInput
               v-model="componentModal.name"
-              class="field-input"
-              type="text"
               placeholder="Input here"
-            >
+              :ui="fieldCompact()"
+            />
           </div>
           <div class="text-[13px] font-bold text-slate-900 mb-2.5">
             Add Product
@@ -1488,18 +1454,14 @@ function onConfirmDiscard() {
           <div class="flex flex-col gap-2.5 mb-3">
             <div v-for="row in componentModal.rows" :key="row.id" class="flex gap-2 items-center">
               <div class="select-wrap flex-1">
-                <select
-                  class="field-input"
-                  :value="row.productId"
-                  @change="updateModalRow(row.id, ($event.target as HTMLSelectElement).value)"
-                >
-                  <option value="">
-                    Select one
-                  </option>
-                  <option v-for="opt in catalogOptions" :key="opt.id" :value="opt.id">
-                    {{ opt.label }}
-                  </option>
-                </select>
+                <USelect
+                  :model-value="row.productId || undefined"
+                  :items="catalogOptions"
+                  value-key="id"
+                  placeholder="Select one"
+                  :ui="fieldCompact()"
+                  @update:model-value="updateModalRow(row.id, String($event))"
+                />
               </div>
               <UButton
                 v-if="componentModal.rows.length > 1"
@@ -1507,7 +1469,7 @@ function onConfirmDiscard() {
                 variant="ghost"
                 title="Remove product"
 
-                :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-500 w-[38px] h-[38px] rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0' }"
+                :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-red-500 w-[38px] h-[38px] rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0' }"
                 @click="removeModalRow(row.id)"
               >
                 <UIcon name="i-lucide-trash-2" class="w-4 h-4" />
@@ -1563,17 +1525,3 @@ function onConfirmDiscard() {
     />
   </div>
 </template>
-
-<style scoped>
-select.field-input {
-  appearance: none;
-  -webkit-appearance: none;
-  padding-right: 28px;
-  background-color: #fff;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 16px 16px;
-  cursor: pointer;
-}
-</style>

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import * as z from 'zod'
+import type { FormSubmitEvent } from '@nuxt/ui'
 import type { AttributeDef } from '~/types'
 
 const route = useRoute()
@@ -15,20 +17,33 @@ const editId = computed(() => {
 
 // ── state ──
 const attrs = ref<AttributeDef[]>([])
-const name = ref('')
-const type = ref('Select')
+// UForm drives validation off a single reactive state object; `name`/`type`
+// stay as computed refs so the rest of the page (preview, option rows) is
+// untouched.
+const state = reactive({ name: '', type: 'Select' })
+const name = computed({ get: () => state.name, set: v => (state.name = v) })
+const type = computed({ get: () => state.type, set: v => (state.type = v) })
 const required = ref(true)
 const options = ref<string[]>([''])
-const nameError = ref('')
 const optionsError = ref('')
+const saveError = ref('')
+// true from the first render when editing, so the server does not ship a
+// blank Create form that the fetch then overwrites
+const loading = ref(!!editId.value)
 
 const pageTitle = computed(() => editId.value ? 'Edit Attribute' : 'Create Attribute')
 useHead({ title: () => pageTitle.value + ' — Vertex' })
 
-// SSR-safe: the store is read on mount (localStorage is client-only), then the
-// edited attribute seeds the form.
-onMounted(() => {
-  attrs.value = loadAttributeDefs()
+// The list is fetched on mount, then the edited attribute seeds the form.
+onMounted(async () => {
+  try {
+    attrs.value = await loadAttributeDefs()
+  } catch (err) {
+    saveError.value = apiErrorMessage(err, 'Could not load attributes.')
+    return
+  } finally {
+    loading.value = false
+  }
   if (!editId.value) return
   const existing = attrs.value.find(a => a.id === editId.value)
   if (!existing) return
@@ -38,19 +53,24 @@ onMounted(() => {
   options.value = (existing.values || []).slice()
 })
 
+// Schema is a computed so the duplicate-name refinement sees the current
+// store and the row being edited.
+const schema = computed(() => z.object({
+  name: z.string()
+    .trim()
+    .min(1, 'Attribute name is required.')
+    .refine(
+      v => !attrs.value.some(a => a.name.toLowerCase() === v.toLowerCase() && a.id !== editId.value),
+      'An attribute with this name already exists.'
+    ),
+  type: z.string().min(1, 'Type is required.')
+}))
+type Schema = { name: string, type: string }
+
 const isOptionType = computed(() => OPTION_TYPES.indexOf(type.value) !== -1)
 const freeTypeHint = computed(() =>
   type.value === 'Numeric' ? 'Numeric inputs have no predefined values.' : 'Text inputs have no predefined values.'
 )
-
-function onNameChange(e: Event) {
-  name.value = (e.target as HTMLInputElement).value
-  nameError.value = ''
-}
-function onTypeChange(e: Event) {
-  type.value = (e.target as HTMLSelectElement).value
-  optionsError.value = ''
-}
 
 // ── option rows ──
 function setOption(i: number, v: string) {
@@ -87,16 +107,6 @@ const optionRows = computed(() =>
 )
 
 // ── required toggle ──
-function toggleRequired() {
-  required.value = !required.value
-}
-const requiredTrackStyle = computed(() =>
-  `width:40px;height:22px;border-radius:999px;border:none;cursor:pointer;background:${required.value ? '#00c16a' : '#e2e8f0'};position:relative;padding:2px;display:inline-flex;align-items:center;transition:background 150ms ease;`
-)
-const requiredKnobStyle = computed(() =>
-  `width:18px;height:18px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,0.15);transform:translateX(${required.value ? '18px' : '0px'});transition:transform 150ms ease;display:block;`
-)
-
 // ── live preview ──
 const cleanedOptions = computed(() => options.value.map(o => (o || '').trim()).filter(Boolean))
 const previewOptions = computed(() => cleanedOptions.value.length ? cleanedOptions.value : ['Option 1', 'Option 2'])
@@ -104,29 +114,27 @@ const previewLabel = computed(() => name.value || 'Attribute')
 const previewPlaceholder = computed(() => 'Enter ' + (name.value || 'value').toLowerCase())
 
 // ── save ──
-function validateAndBuild(): { name: string, type: string, values: string[] } | null {
-  const clean = name.value.trim()
-  if (!clean) {
-    nameError.value = 'Attribute name is required.'
-    return null
-  }
-  if (attrs.value.some(a => a.name.toLowerCase() === clean.toLowerCase() && a.id !== editId.value)) {
-    nameError.value = 'An attribute with this name already exists.'
-    return null
-  }
+// UForm validates name/type against the schema before this runs; the
+// option-count rule depends on the `required` toggle and stays here.
+const saving = ref(false)
+
+async function onSubmit(event: FormSubmitEvent<Schema>) {
   if (isOptionType.value && required.value && cleanedOptions.value.length === 0) {
     optionsError.value = 'Add at least one value.'
-    return null
+    return
   }
-  return { name: clean, type: type.value, values: cleanedOptions.value }
-}
-function onSave() {
-  const built = validateAndBuild()
-  if (!built) return
-  const next = editId.value
-    ? attrs.value.map(a => a.id === editId.value ? { ...a, name: built.name, type: built.type, values: built.values } : a)
-    : [...attrs.value, { id: 'attr_' + Date.now(), name: built.name, type: built.type, values: built.values }]
-  saveAttributeDefs(next)
+  if (saving.value) return
+  const built = { name: event.data.name, type: event.data.type, values: cleanedOptions.value }
+  saving.value = true
+  try {
+    if (editId.value) await apiUpdate<AttributeDef>('attributes', editId.value, built)
+    else await apiCreate<AttributeDef>('attributes', built)
+  } catch (err) {
+    saving.value = false
+    saveError.value = apiErrorMessage(err, 'Could not save the attribute.')
+    return
+  }
+  saving.value = false
   return navigateTo('/attributes')
 }
 </script>
@@ -146,7 +154,7 @@ function onSave() {
     <div class="flex items-center gap-3 mb-6">
       <NuxtLink
         to="/attributes"
-        class="btn-icon-hover w-[38px] h-[38px] border border-slate-200 bg-white rounded-lg inline-flex items-center justify-center text-slate-700 flex-shrink-0"
+        class="hover:bg-slate-100 w-[38px] h-[38px] border border-slate-200 bg-white rounded-lg inline-flex items-center justify-center text-slate-700 flex-shrink-0"
       >
         <UIcon name="i-lucide-arrow-left" class="w-[18px] h-[18px]" />
       </NuxtLink>
@@ -155,7 +163,16 @@ function onSave() {
       </h1>
     </div>
 
-    <div class="flex gap-6 items-start flex-wrap">
+    <VertexLoadingPanel v-if="loading" label="Loading attribute…" />
+
+    <UForm
+
+      v-else
+      :schema="schema"
+      :state="state"
+      class="flex gap-6 items-start flex-wrap"
+      @submit="onSubmit"
+    >
       <!-- config -->
       <div class="grow shrink basis-[420px] min-w-0 flex flex-col gap-6">
         <UCard class="p-6">
@@ -163,28 +180,28 @@ function onSave() {
             Attribute Details
           </h2>
 
-          <VertexField
+          <UFormField
+            name="name"
             label="Attribute Name"
             required
-            :error="nameError"
             class="mb-[18px]"
           >
-            <input
-              class="field-input"
-              type="text"
-              :value="name"
-              placeholder="e.g. Duration"
-              @input="onNameChange"
-            >
-          </VertexField>
+            <UInput v-model="state.name" placeholder="e.g. Duration" />
+          </UFormField>
 
-          <VertexField label="Input Type" required class="mb-[18px]">
-            <select class="field-input" :value="type" @change="onTypeChange">
-              <option v-for="t in INPUT_TYPES" :key="t" :value="t">
-                {{ t }}
-              </option>
-            </select>
-          </VertexField>
+          <UFormField
+            name="type"
+            label="Input Type"
+            required
+            class="mb-[18px]"
+          >
+            <USelect
+              v-model="type"
+              :items="INPUT_TYPES"
+              :ui="{ trailing: 'pe-[14px]' }"
+              @update:model-value="optionsError = ''"
+            />
+          </UFormField>
 
           <template v-if="isOptionType">
             <div class="flex items-center justify-between gap-3 py-3 border-t border-slate-100">
@@ -196,9 +213,7 @@ function onSave() {
                   Require at least one value to save.
                 </div>
               </div>
-              <button :style="requiredTrackStyle" @click="toggleRequired">
-                <span :style="requiredKnobStyle" />
-              </button>
+              <USwitch v-model="required" />
             </div>
 
             <div class="mt-2">
@@ -207,37 +222,38 @@ function onSave() {
                 <div v-for="o in optionRows" :key="o.index" class="flex items-center gap-2">
                   <div class="flex flex-col gap-0.5 flex-shrink-0">
                     <button
+                      type="button"
                       :disabled="o.isFirst"
                       title="Move up"
-                      class="btn-icon-hover"
+                      class="hover:bg-slate-100"
                       :style="o.upStyle"
                       @click="moveOption(o.index, -1)"
                     >
                       <UIcon name="i-lucide-chevron-up" class="w-[13px] h-[13px]" />
                     </button>
                     <button
+                      type="button"
                       :disabled="o.isLast"
                       title="Move down"
-                      class="btn-icon-hover"
+                      class="hover:bg-slate-100"
                       :style="o.downStyle"
                       @click="moveOption(o.index, 1)"
                     >
                       <UIcon name="i-lucide-chevron-down" class="w-[13px] h-[13px]" />
                     </button>
                   </div>
-                  <input
-                    class="field-input flex-1"
-                    type="text"
-                    :value="o.value"
+                  <UInput
+                    :model-value="o.value"
                     placeholder="Option value"
-                    @input="setOption(o.index, ($event.target as HTMLInputElement).value)"
-                  >
+                    class="flex-1"
+                    @update:model-value="setOption(o.index, String($event))"
+                  />
                   <UButton
                     variant="ghost"
 
                     title="Delete option"
 
-                    :ui="{ base: 'btn-icon-hover border border-slate-200 bg-white text-red-600 w-10 h-10 rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0' }"
+                    :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-red-600 w-10 h-10 rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0' }"
                     @click="removeOption(o.index)"
                   >
                     <UIcon name="i-lucide-trash-2" class="w-[15px] h-[15px]" />
@@ -275,13 +291,21 @@ function onSave() {
             Cancel
           </NuxtLink>
           <UButton
+            type="submit"
             variant="ghost"
-
+            :disabled="saving"
             :ui="{ base: 'border-none bg-green-500 text-white text-[15px] font-bold px-[22px] py-2.5 rounded-lg cursor-pointer shadow-sm hover:bg-green-600 transition-colors' }"
-            @click="onSave"
           >
             Save
           </UButton>
+        </div>
+
+        <div
+          v-if="saveError"
+          class="mt-3 flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3.5 py-3 text-[13px] text-red-700"
+        >
+          <UIcon name="i-lucide-circle-alert" class="w-[15px] h-[15px] flex-shrink-0" />
+          <span>{{ saveError }}</span>
         </div>
       </div>
 
@@ -296,25 +320,24 @@ function onSave() {
           </div>
           <label class="field-label">{{ previewLabel }}</label>
 
-          <input
+          <UInput
             v-if="type === 'Text'"
-            class="field-input"
-            type="text"
             :placeholder="previewPlaceholder"
             disabled
-          >
-          <input
+          />
+          <UInput
             v-else-if="type === 'Numeric'"
-            class="field-input"
             type="number"
             placeholder="0"
             disabled
-          >
-          <select v-else-if="type === 'Select'" class="field-input" disabled>
-            <option v-for="o in previewOptions" :key="o">
-              {{ o }}
-            </option>
-          </select>
+          />
+          <USelect
+            v-else-if="type === 'Select'"
+            :model-value="previewOptions[0]"
+            :items="previewOptions"
+            disabled
+            :ui="{ trailing: 'pe-[14px]' }"
+          />
           <div v-else class="flex flex-col gap-2.5">
             <label
               v-for="o in previewOptions"
@@ -336,20 +359,6 @@ function onSave() {
           </div>
         </UCard>
       </div>
-    </div>
+    </UForm>
   </div>
 </template>
-
-<style scoped>
-select.field-input {
-  appearance: none;
-  -webkit-appearance: none;
-  padding-right: 40px;
-  background-color: #fff;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 14px center;
-  background-size: 16px 16px;
-  cursor: pointer;
-}
-</style>

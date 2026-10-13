@@ -1,57 +1,16 @@
-import type { Category, CategoryFlatRow, CategoryTreeRow, CatEntry, CatScopeEntry } from '~/types'
+import type { ApiList, Category, CategoryFlatRow, CategoryTreeRow, CatEntry, CatScopeEntry } from '~/types'
 
-// Port of the design's `window.VertexCat` (category-store.js).
-// Hierarchical category tree persisted in localStorage. All reads are
-// SSR-safe — on the server `localStorage` is undefined and we fall back
-// to DEFAULTS so the first render matches the client's initial paint.
-
-const KEY = 'vertex_categories_v3'
-const PROD_KEY = 'vertex_cat_products_v1'
-
-const DEFAULTS: Category[] = [
-  { id: 'c_sim', name: 'SIM Cards', parentId: null, enabled: true },
-  { id: 'c_sim_tour', name: 'Tourist SIM', parentId: 'c_sim', enabled: true },
-  { id: 'c_sim_res', name: 'Resident SIM', parentId: 'c_sim', enabled: true },
-  { id: 'c_sim_esim', name: 'eSIM', parentId: 'c_sim', enabled: true },
-  { id: 'c_dev', name: 'Devices', parentId: null, enabled: true },
-  { id: 'c_dev_rout', name: 'Router', parentId: 'c_dev', enabled: true },
-  { id: 'c_dev_dong', name: 'Dongle', parentId: 'c_dev', enabled: true },
-  { id: 'c_data', name: 'Data Plan', parentId: null, enabled: true },
-  { id: 'c_data_pre', name: 'Prepaid Data', parentId: 'c_data', enabled: true },
-  { id: 'c_data_unl', name: 'Unlimited Data', parentId: 'c_data', enabled: true },
-  { id: 'c_wifi', name: 'WiFi', parentId: null, enabled: true },
-  { id: 'c_wifi_pkt', name: 'Pocket WiFi', parentId: 'c_wifi', enabled: true },
-  { id: 'c_wifi_home', name: 'Home Router', parentId: 'c_wifi', enabled: true },
-  { id: 'c_head', name: 'Headphones', parentId: null, enabled: true },
-  { id: 'c_acc', name: 'Accessories', parentId: null, enabled: true },
-  { id: 'c_acc_chg', name: 'Chargers', parentId: 'c_acc', enabled: true },
-  { id: 'c_acc_case', name: 'Cases', parentId: 'c_acc', enabled: true }
-]
+// Hierarchical category tree, served by `server/api`.
+// Reads are async and can throw; the tree helpers below stay pure so they can
+// run inside computeds over an already-loaded list.
 
 function clone(c: Category): Category {
   return { id: c.id, name: c.name, parentId: c.parentId || null, enabled: c.enabled !== false }
 }
 
-export function loadCategories(): Category[] {
-  if (import.meta.client) {
-    try {
-      const r = JSON.parse(localStorage.getItem(KEY) || 'null')
-      if (Array.isArray(r) && r.length) return r.map(clone)
-    } catch {
-      // ignore malformed storage
-    }
-  }
-  return DEFAULTS.map(clone)
-}
-
-export function saveCategories(list: Category[]): void {
-  if (import.meta.client) {
-    try {
-      localStorage.setItem(KEY, JSON.stringify(list))
-    } catch {
-      // ignore storage failure
-    }
-  }
+export async function loadCategories(): Promise<Category[]> {
+  const res = await $fetch<ApiList<Category>>('/api/categories')
+  return (res.data || []).map(clone)
 }
 
 export function categoryById(list: Category[], id: string | null): Category | null {
@@ -129,36 +88,18 @@ export function categoryTreeRows(list: Category[]): CategoryTreeRow[] {
 
 // ── per-category product membership + per-scope positions store ──
 // Shape: { <catId>: { members: [pid], scopes: { default: {positions}, <pid>: {positions, override} } } }
-export function loadCatProducts(): Record<string, CatEntry> {
-  if (import.meta.client) {
-    try {
-      return JSON.parse(localStorage.getItem(PROD_KEY) || '{}') || {}
-    } catch {
-      // ignore malformed storage
-    }
-  }
-  return {}
-}
-
-export function saveCatProducts(all: Record<string, CatEntry>): void {
-  if (import.meta.client) {
-    try {
-      localStorage.setItem(PROD_KEY, JSON.stringify(all))
-    } catch {
-      // ignore storage failure
-    }
-  }
-}
-
-export function categoryEntry(catId: string): CatEntry {
-  const e = loadCatProducts()[catId]
+// ── per-category product membership + per-scope positions ──
+// Its own sub-resource: `/api/categories/:id/products`.
+export async function categoryEntry(catId: string): Promise<CatEntry> {
+  const e = await $fetch<CatEntry>(`/api/categories/${catId}/products`)
   return { members: e?.members || [], scopes: (e?.scopes || {}) as Record<string, CatScopeEntry> }
 }
 
-export function saveCategoryEntry(catId: string, entry: CatEntry): void {
-  const all = loadCatProducts()
-  all[catId] = { members: entry.members || [], scopes: entry.scopes || {} }
-  saveCatProducts(all)
+export async function saveCategoryEntry(catId: string, entry: CatEntry): Promise<CatEntry> {
+  return apiPutRaw<CatEntry>(`categories/${catId}/products`, {
+    members: entry.members || [],
+    scopes: entry.scopes || {}
+  })
 }
 
 // Self + ALL descendant ids — filtering by a parent matches its whole subtree.

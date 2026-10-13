@@ -125,39 +125,30 @@ const groups = computed(() => CONFIG_GROUPS.map(def => ({
             >{{ f.badgeLabel }}</span>
           </div>
 
-          <UButton
+          <USwitch
             v-if="f.isToggle"
+            :model-value="f.on"
+            class="inline-flex"
+            @update:model-value="setCfg(f.key, $event)"
+          />
 
-            variant="ghost"
-
-            :ui="{ base: ['w-10 h-[22px] rounded-full border-none cursor-pointer relative p-0.5 inline-flex items-center transition-colors', f.on ? 'bg-green-500' : 'bg-slate-200'] }"
-            @click="setCfg(f.key, !f.on)"
-          >
-            <span
-              class="w-[18px] h-[18px] rounded-full bg-white block shadow-sm transition-transform duration-150"
-              :class="f.on ? 'translate-x-[18px]' : 'translate-x-0'"
-            />
-          </UButton>
-
-          <textarea
+          <UTextarea
             v-else-if="f.isTextarea"
-            :value="f.value"
-            rows="3"
-            class="field-input resize-y"
+            :model-value="f.value"
+            :rows="3"
             :disabled="f.locked"
             :placeholder="f.placeholder"
+            :ui="fieldUi('resize-y')"
             @change="setCfg(f.key, ($event.target as HTMLTextAreaElement).value)"
           />
 
-          <input
+          <UInput
             v-else
-            :value="f.value"
-            type="text"
-            class="field-input"
+            :model-value="f.value"
             :disabled="f.locked"
             :placeholder="f.placeholder"
             @change="setCfg(f.key, ($event.target as HTMLInputElement).value)"
-          >
+          />
 
           <div v-if="f.hint" class="text-[12.5px] text-slate-400 mt-1.5 flex items-center gap-[5px]">
             <UIcon name="i-lucide-info" class="w-3 h-3 flex-shrink-0" />{{ f.hint }}

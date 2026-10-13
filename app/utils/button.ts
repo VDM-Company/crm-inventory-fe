@@ -23,10 +23,10 @@ export const BTN_OUTLINE = 'border border-slate-200 bg-white text-slate-700 font
 export const BTN_DANGER = 'bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition-colors'
 
 /** Square icon button sitting on a card (bordered). */
-export const BTN_ICON = 'btn-icon-hover border border-slate-200 bg-white rounded-lg inline-flex items-center justify-center'
+export const BTN_ICON = 'hover:bg-slate-100 border border-slate-200 bg-white rounded-lg inline-flex items-center justify-center'
 
 /** Square icon button with no chrome until hover. */
-export const BTN_ICON_GHOST = 'btn-icon-hover border-none bg-transparent rounded-lg inline-flex items-center justify-center'
+export const BTN_ICON_GHOST = 'hover:bg-slate-100 border-none bg-transparent rounded-lg inline-flex items-center justify-center'
 
 /** Dashed "add another…" affordance. */
 export const BTN_DASHED = 'inline-flex items-center gap-1.5 border border-dashed border-green-500 bg-emerald-50 text-green-600 font-semibold rounded-lg'

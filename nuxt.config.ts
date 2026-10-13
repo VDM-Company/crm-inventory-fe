@@ -2,6 +2,7 @@
 export default defineNuxtConfig({
   modules: [
     '@nuxt/eslint',
+    '@nuxt/test-utils/module',
     '@nuxt/ui',
     '@vueuse/nuxt'
   ],
@@ -18,6 +19,14 @@ export default defineNuxtConfig({
   // (UInput/UModal/UTable) were adopted. Disable the integration outright.
   ui: {
     colorMode: false
+  },
+
+  // Private by default — only reachable from `server/`. Override at deploy
+  // time with NUXT_API_BASE_URL / NUXT_API_TOKEN. While `apiBaseUrl` is empty
+  // the `server/api` layer answers from its in-memory mock.
+  runtimeConfig: {
+    apiBaseUrl: '',
+    apiToken: ''
   },
 
   routeRules: {

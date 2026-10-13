@@ -11,19 +11,25 @@ const route = useRoute()
 
 const platformId = computed(() => typeof route.query.id === 'string' ? route.query.id : '')
 
-const platforms = ref<Platform[]>(PLATFORM_SEED)
+const platforms = ref<Platform[]>([])
+const loading = ref(true)
 const categories = ref<Category[]>([])
 const storedProducts = ref<StoredProduct[]>([])
 const search = ref('')
 
-onMounted(() => {
-  platforms.value = loadPlatforms()
-  categories.value = loadCategories()
+const loadError = ref('')
+
+const productsApi = useApiProducts()
+
+onMounted(async () => {
   try {
-    const raw = JSON.parse(localStorage.getItem('vertex_products') || '[]')
-    if (Array.isArray(raw)) storedProducts.value = raw
-  } catch {
-    // ignore malformed storage
+    ;[platforms.value, categories.value, storedProducts.value] = await Promise.all([
+      loadPlatforms(), loadCategories(), productsApi.list()
+    ])
+  } catch (err) {
+    loadError.value = apiErrorMessage(err, 'Could not load this platform.')
+  } finally {
+    loading.value = false
   }
 })
 
@@ -108,6 +114,7 @@ const emptyHint = computed(() => search.value.trim()
 
 <template>
   <div class="flex-1 min-w-0 px-8 pt-7 pb-20">
+    <VertexErrorBanner :message="loadError" class="mb-4" />
     <VertexBreadcrumb
       :items="[
         { label: 'Inventory', to: '/dashboard' },
@@ -120,7 +127,7 @@ const emptyHint = computed(() => search.value.trim()
     <div class="flex items-start gap-3.5 mb-6">
       <NuxtLink
         to="/platforms"
-        class="btn-icon-hover w-[38px] h-[38px] border border-slate-200 bg-white rounded-lg inline-flex items-center justify-center text-slate-700 flex-shrink-0 mt-0.5"
+        class="hover:bg-slate-100 w-[38px] h-[38px] border border-slate-200 bg-white rounded-lg inline-flex items-center justify-center text-slate-700 flex-shrink-0 mt-0.5"
       >
         <UIcon name="i-lucide-arrow-left" class="w-[18px] h-[18px]" />
       </NuxtLink>
@@ -151,7 +158,11 @@ const emptyHint = computed(() => search.value.trim()
     </div>
 
     <UCard class="overflow-hidden">
-      <div v-if="hasRows" class="overflow-x-auto">
+      <VertexTableSkeleton v-if="loading" :columns="['28%', '16%', '20%', '18%', '10%']" />
+
+      <VertexErrorBanner v-else-if="loadError" :message="loadError" class="m-5" />
+
+      <div v-else-if="hasRows" class="overflow-x-auto">
         <UTable
           :data="rows"
           :columns="columns"
@@ -197,7 +208,7 @@ const emptyHint = computed(() => search.value.trim()
             <div class="text-right">
               <NuxtLink
                 :to="row.original.detailHref"
-                class="btn-icon-hover inline-flex items-center gap-1.5 border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-3.5 py-[7px] rounded-lg no-underline"
+                class="hover:bg-slate-100 inline-flex items-center gap-1.5 border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-3.5 py-[7px] rounded-lg no-underline"
               >
                 <UIcon name="i-lucide-eye" class="w-3.5 h-3.5" /> View Detail
               </NuxtLink>
