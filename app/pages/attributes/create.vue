@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import * as z from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
-import type { AttributeDef } from '~/types'
+import type { Attribute, AttributeInputType } from '~/types'
 
 const route = useRoute()
 
-const INPUT_TYPES = ['Text', 'Select', 'Radio', 'Numeric', 'Checkbox']
-// only these carry a predefined value list
-const OPTION_TYPES = ['Select', 'Radio', 'Checkbox']
+// The API's own vocabulary. `Numeric` and `Checkbox` are gone because the API
+// does not define them; `Swatch` is new for the same reason.
+const INPUT_TYPES = Object.values(INPUT_TYPE_LABELS)
+const OPTION_TYPES = OPTION_INPUT_TYPES.map(inputTypeLabel)
 
 const editId = computed(() => {
   const raw = route.query.id
@@ -16,17 +17,28 @@ const editId = computed(() => {
 })
 
 // ── state ──
-const attributesApi = useApiAttributes()
+const attributesApi = useApiAttributesV2()
 
-const attrs = ref<AttributeDef[]>([])
+const attrs = ref<Attribute[]>([])
+/** The record being edited, kept whole for its option ids and lockVersion. */
+const editing = ref<Attribute | null>(null)
 // UForm drives validation off a single reactive state object; `name`/`type`
 // stay as computed refs so the rest of the page (preview, option rows) is
 // untouched.
-const state = reactive({ name: '', type: 'Select' })
+const state = reactive({ name: '', type: 'Dropdown', code: '' })
 const name = computed({ get: () => state.name, set: v => (state.name = v) })
 const type = computed({ get: () => state.type, set: v => (state.type = v) })
 const required = ref(true)
-const options = ref<string[]>([''])
+const codeTouched = ref(false)
+/**
+ * Option rows carry the id the API gave them.
+ *
+ * The old form held plain strings and saved the array whole, which made a
+ * rename indistinguishable from a delete plus an add. Products reference
+ * option ids, so the difference matters: renaming keeps every product that
+ * chose the option.
+ */
+const options = ref<OptionRow[]>([{ id: null, label: '' }])
 const optionsError = ref('')
 const saveError = ref('')
 // true from the first render when editing, so the server does not ship a
@@ -49,10 +61,13 @@ onMounted(async () => {
   if (!editId.value) return
   const existing = attrs.value.find(a => a.id === editId.value)
   if (!existing) return
-  name.value = existing.name
-  type.value = existing.type || 'Select'
+  editing.value = existing
+  name.value = localized(existing.label)
+  type.value = inputTypeLabel(existing.inputType)
+  state.code = existing.code
+  codeTouched.value = true
   required.value = true
-  options.value = (existing.values || []).slice()
+  options.value = (existing.options || []).map(o => ({ id: o.id, label: localized(o.label) }))
 })
 
 // Schema is a computed so the duplicate-name refinement sees the current
@@ -62,25 +77,42 @@ const schema = computed(() => z.object({
     .trim()
     .min(1, 'Attribute name is required.')
     .refine(
-      v => !attrs.value.some(a => a.name.toLowerCase() === v.toLowerCase() && a.id !== editId.value),
+      v => !attrs.value.some(a => localized(a.label).toLowerCase() === v.toLowerCase() && a.id !== editId.value),
       'An attribute with this name already exists.'
     ),
-  type: z.string().min(1, 'Type is required.')
+  type: z.string().min(1, 'Type is required.'),
+  code: z.string()
+    .trim()
+    .regex(FEE_ITEM_CODE_PATTERN, 'Use 2–50 lowercase letters, digits or underscores.')
+    .refine(
+      v => !attrs.value.some(a => a.code === v && a.id !== editId.value),
+      'An attribute with this code already exists.'
+    )
+    .optional()
 }))
-type Schema = { name: string, type: string }
+type Schema = { name: string, type: string, code?: string }
 
 const isOptionType = computed(() => OPTION_TYPES.indexOf(type.value) !== -1)
-const freeTypeHint = computed(() =>
-  type.value === 'Numeric' ? 'Numeric inputs have no predefined values.' : 'Text inputs have no predefined values.'
-)
+const freeTypeHint = computed(() => 'Text inputs have no predefined values.')
+
+// The code is derived from the name until someone types their own. It cannot
+// change after creation, so the field only shows on a create.
+function onNameInput(v: string) {
+  state.name = v
+  if (!editId.value && !codeTouched.value) state.code = slugifyCode(v)
+}
+function onCodeInput(v: string) {
+  state.code = v
+  codeTouched.value = true
+}
 
 // ── option rows ──
 function setOption(i: number, v: string) {
-  options.value = options.value.map((o, idx) => idx === i ? v : o)
+  options.value = options.value.map((o, idx) => idx === i ? { ...o, label: v } : o)
   optionsError.value = ''
 }
 function addOption() {
-  options.value = [...options.value, '']
+  options.value = [...options.value, { id: null, label: '' }]
 }
 function removeOption(i: number) {
   options.value = options.value.filter((_, idx) => idx !== i)
@@ -100,7 +132,7 @@ function arrowStyle(disabled: boolean) {
 const optionRows = computed(() =>
   options.value.map((o, i) => ({
     index: i,
-    value: o,
+    value: o.label,
     isFirst: i === 0,
     isLast: i === options.value.length - 1,
     upStyle: arrowStyle(i === 0),
@@ -110,10 +142,65 @@ const optionRows = computed(() =>
 
 // ── required toggle ──
 // ── live preview ──
-const cleanedOptions = computed(() => options.value.map(o => (o || '').trim()).filter(Boolean))
-const previewOptions = computed(() => cleanedOptions.value.length ? cleanedOptions.value : ['Option 1', 'Option 2'])
+const cleanedOptions = computed(() =>
+  options.value.map(o => ({ ...o, label: (o.label || '').trim() })).filter(o => o.label)
+)
+const cleanedLabels = computed(() => cleanedOptions.value.map(o => o.label))
+const previewOptions = computed(() => cleanedLabels.value.length ? cleanedLabels.value : ['Option 1', 'Option 2'])
 const previewLabel = computed(() => name.value || 'Attribute')
 const previewPlaceholder = computed(() => 'Enter ' + (name.value || 'value').toLowerCase())
+
+/**
+ * An edit is several requests, because the API manages options through their
+ * own endpoints rather than as a field on the attribute.
+ *
+ * Order matters: remove first so a label freed by a deletion can be reused by
+ * a rename in the same save, then rename, then create what is new, then set
+ * the order over the resulting ids. `reorderOptions` wants every id, so the
+ * new ones have to exist before it runs.
+ */
+async function saveExisting(id: string, label: { en: string }, inputType: AttributeInputType) {
+  const saved = editing.value?.options || []
+  const rows = cleanedOptions.value
+  const { removedIds, renamed } = diffAttributeOptions(saved, rows)
+
+  for (const optionId of removedIds) await attributesApi.removeOption(id, optionId)
+  for (const r of renamed) await attributesApi.updateOption(id, r.id, { label: { en: r.label } })
+
+  const orderedIds: string[] = []
+  for (const row of rows) {
+    if (row.id) {
+      orderedIds.push(row.id)
+    } else {
+      const created = await attributesApi.addOption(id, { label: { en: row.label } })
+      orderedIds.push(created.id)
+    }
+  }
+
+  const updated = await attributesApi.update(id, { label, inputType }, editing.value?.lockVersion ?? 0)
+  editing.value = updated
+
+  if (orderedIds.length > 1) await attributesApi.reorderOptions(id, orderedIds)
+}
+
+/**
+ * The server's own wording is usually best, but two codes carry more than a
+ * message and deserve to say so: a stale version means re-read, and `in_use`
+ * on an option names how many products still choose it.
+ */
+function describeSaveError(err: unknown): string {
+  const code = apiErrorCode(err)
+  if (code === 'stale_version') {
+    return 'Someone else changed this attribute. Reload the page before saving again.'
+  }
+  if (code === 'in_use') {
+    const used = Number(apiErrorDetails(err).usageCount)
+    return Number.isFinite(used) && used > 0
+      ? `That value is used by ${used} product${used === 1 ? '' : 's'}. Remove it from them before deleting it.`
+      : 'That value is still used by a product. Remove it from them before deleting it.'
+  }
+  return apiErrorMessage(err, 'Could not save the attribute.')
+}
 
 // ── save ──
 // UForm validates name/type against the schema before this runs; the
@@ -126,14 +213,25 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
     return
   }
   if (saving.value) return
-  const built = { name: event.data.name, type: event.data.type, values: cleanedOptions.value }
   saving.value = true
+  const label = { en: event.data.name }
+  const inputType = labelToInputType(event.data.type) as AttributeInputType
+
   try {
-    if (editId.value) await attributesApi.update(editId.value, built)
-    else await attributesApi.create(built)
+    if (editId.value) {
+      await saveExisting(editId.value, label, inputType)
+    } else {
+      // on a create the API takes the first options inline and assigns their ids
+      await attributesApi.create({
+        code: event.data.code ?? state.code,
+        label,
+        inputType,
+        options: cleanedLabels.value.map(l => ({ label: { en: l } }))
+      })
+    }
   } catch (err) {
     saving.value = false
-    saveError.value = apiErrorMessage(err, 'Could not save the attribute.')
+    saveError.value = describeSaveError(err)
     return
   }
   saving.value = false
@@ -188,8 +286,34 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
             required
             class="mb-[18px]"
           >
-            <UInput v-model="state.name" placeholder="e.g. Duration" />
+            <UInput
+              :model-value="state.name"
+              placeholder="e.g. Duration"
+              @update:model-value="onNameInput(String($event))"
+            />
           </UFormField>
+
+          <UFormField
+            v-if="!editId"
+            name="code"
+            label="Code"
+            required
+            class="mb-[18px]"
+            help="Identifies this attribute to the API. Lowercase letters, digits and underscores."
+          >
+            <UInput
+              :model-value="state.code"
+              placeholder="e.g. screen_size"
+              @update:model-value="onCodeInput(String($event))"
+            />
+          </UFormField>
+          <div v-else class="mb-[18px]">
+            <label class="field-label">Code</label>
+            <p class="text-[13px] text-slate-400 m-0">
+              <code class="text-slate-600">{{ state.code }}</code> — set when the attribute was created and
+              cannot be changed.
+            </p>
+          </div>
 
           <UFormField
             name="type"

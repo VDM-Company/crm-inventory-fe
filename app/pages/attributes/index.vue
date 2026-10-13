@@ -1,31 +1,31 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
-import type { AttributeDef, StoredProduct } from '~/types'
+import type { Attribute } from '~/types'
 
 useHead({ title: 'Attributes — Vertex' })
 
 // ── state (mirrors the design's DCLogic state) ──
-const attrs = ref<AttributeDef[]>([])
+const attrs = ref<Attribute[]>([])
 const { message: toast, show: showToast } = usePageToast(2800)
-const products = ref<StoredProduct[]>([])
 const loading = ref(true)
 const loadError = ref('')
 
 // UTable column defs — per-column padding/width via `meta.class`, matching the
 // design's first/last-column gutters.
-const columns: TableColumn<AttributeDef>[] = [
-  { accessorKey: 'name', header: 'Attribute Name', meta: { class: { th: 'px-5 w-[220px]', td: TABLE_EDGE.td } } },
-  { accessorKey: 'type', header: 'Type', meta: { class: { th: 'w-[130px]' } } },
-  { accessorKey: 'values', header: 'Values' },
+const columns: TableColumn<Attribute>[] = [
+  { id: 'name', header: 'Attribute Name', meta: { class: { th: 'px-5 w-[220px]', td: TABLE_EDGE.td } } },
+  { id: 'type', header: 'Type', meta: { class: { th: 'w-[130px]' } } },
+  { id: 'values', header: 'Values' },
   { id: 'action', header: 'Action', meta: { class: { th: 'px-5 text-right w-[130px]', td: TABLE_EDGE.td } } }
 ]
 
-const productsApi = useApiProducts()
-const attributesApi = useApiAttributes()
+const attributesApi = useApiAttributesV2()
 
+// No product fetch: the API reports `usageCount` per attribute, which is the
+// only thing this screen ever loaded products for.
 onMounted(async () => {
   try {
-    ;[attrs.value, products.value] = await Promise.all([attributesApi.list(), productsApi.list()])
+    attrs.value = await attributesApi.list()
   } catch (err) {
     loadError.value = apiErrorMessage(err, 'Could not load attributes.')
   } finally {
@@ -37,11 +37,18 @@ onMounted(async () => {
 function onCreate() {
   return navigateTo('/attributes/create')
 }
-function onEdit(a: AttributeDef) {
+function onEdit(a: Attribute) {
   return navigateTo({ path: '/attributes/create', query: { id: a.id } })
 }
 
 // ── delete ──
+// The shared delete flow renders `name` in its modal copy, so the row handed
+// to it carries the resolved label in place of the locale map.
+type DeletableAttribute = Omit<Attribute, 'label'> & { name: string }
+const askDelete = (a: Attribute) => {
+  deleteTarget.value = { ...a, name: localized(a.label) }
+}
+
 const {
   target: deleteTarget,
   blocked: deleteBlocked,
@@ -51,10 +58,11 @@ const {
   cancelLabel: deleteCancelLabel,
   confirm: confirmDelete,
   cancel: cancelDelete
-} = useResourceDelete<AttributeDef>({
+} = useResourceDelete<DeletableAttribute>({
   remove: attributesApi.remove,
   noun: 'attribute',
-  usageCount: t => attributeUsageCount(products.value, t.name),
+  // straight from the server, which counts products using any of its options
+  usageCount: t => t.usageCount,
   blockedMessage: u => `This attribute is used by ${u} product${u === 1 ? '' : 's'}. Remove it from them first.`,
   onDeleted: (t) => {
     attrs.value = attrs.value.filter(x => x.id !== t.id)
@@ -108,18 +116,18 @@ const {
               <div class="w-[34px] h-[34px] rounded-lg bg-emerald-50 text-green-600 flex items-center justify-center flex-shrink-0">
                 <UIcon name="i-lucide-tag" class="w-4 h-4" />
               </div>
-              <span class="text-base font-semibold text-slate-900">{{ row.original.name }}</span>
+              <span class="text-base font-semibold text-slate-900">{{ localized(row.original.label) }}</span>
             </div>
           </template>
 
           <template #type-cell="{ row }">
-            <span class="text-sm text-slate-700">{{ row.original.type || 'Select' }}</span>
+            <span class="text-sm text-slate-700">{{ inputTypeLabel(row.original.inputType) }}</span>
           </template>
 
           <template #values-cell="{ row }">
-            <div v-if="row.original.values.length" class="flex flex-wrap gap-[5px]">
+            <div v-if="row.original.options.length" class="flex flex-wrap gap-[5px]">
               <span
-                v-for="v in row.original.values"
+                v-for="v in optionLabels(row.original.options)"
                 :key="v"
                 class="text-xs font-semibold text-slate-600 bg-slate-100 border border-slate-200 rounded-full px-2.5 py-0.5 whitespace-nowrap"
               >{{ v }}</span>
@@ -143,7 +151,7 @@ const {
                 title="Delete attribute"
 
                 :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-red-600 w-[34px] h-[34px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
-                @click="deleteTarget = row.original"
+                @click="askDelete(row.original)"
               >
                 <UIcon name="i-lucide-trash-2" class="w-[15px] h-[15px]" />
               </UButton>
