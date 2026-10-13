@@ -1,103 +1,76 @@
 import type { StoredProduct } from '../types/domain'
 import { SIMPOINT_ID, SKSIM_ID } from './platforms'
-import { POCKET_WIFI_ID, SIM_CARDS_ID } from './categories'
+import { POCKET_WIFI_ID, TOURIST_SIM_ID } from './categories'
+
+/**
+ * The Vertex Commerce mock's products, with its real ids, names and SKUs.
+ *
+ * Mirrors the upstream set rather than inventing its own, for the same reason
+ * the other seeds do: a product that exists on one side only is what makes
+ * the two seams disagree. These ids are what let the Categories membership
+ * panel and the product screens resolve against either one while the last
+ * screens migrate.
+ *
+ * Shorter than the six it replaces — the upstream mock seeds three — and the
+ * variants are the four the collection's own `children` examples carry, on
+ * the Color × Validity axes.
+ */
+export const TOURIST_SIM_PRODUCT_ID = '01a116c8-6007-70ae-8cff-17c26a046588'
+export const TRAVEL_PACK_ID = '01a116c8-65e6-737e-abb9-38371018112e'
+export const POCKET_WIFI_PRODUCT_ID = '01a116c8-6391-73f0-ae63-ec1e8416ef3a'
 
 export const PRODUCT_SEED: StoredProduct[] = [
   {
-    id: 'p_tourist',
+    id: TOURIST_SIM_PRODUCT_ID,
     name: 'Tourist SIM 15GB',
-    sku: 'SKU-2000',
-    category: 'SIM Card',
-    categoryId: SIM_CARDS_ID,
+    sku: 'TSIM-15GB',
+    category: 'Tourist SIM',
+    categoryId: TOURIST_SIM_ID,
     status: 'Active',
-    productType: 'variant',
-    hasVariants: true,
-    variantCount: 6,
-    platformIds: [SIMPOINT_ID, SKSIM_ID],
-    attributes: [{ name: 'Data', values: ['15GB'] }, { name: 'Duration', values: ['8 Days', '16 Days', '31 Days'] }],
-    variants: [
-      { name: '15GB / 8 Days', sku: 'SKU-2000-01', price: '24', stock: '42', active: true },
-      { name: '15GB / 16 Days', sku: 'SKU-2000-02', price: '32', stock: '28', active: true },
-      { name: '15GB / 31 Days', sku: 'SKU-2000-03', price: '44', stock: '12', active: false }
-    ]
-  },
-  {
-    id: 'p_unlimited',
-    name: 'Unlimited Data Plan 30D',
-    sku: 'SKU-2003',
-    category: 'Data Plan',
-    categoryId: SIM_CARDS_ID,
-    status: 'Active',
+    // upstream `simple`
     productType: 'single',
     hasVariants: false,
     variantCount: 0,
-    platformIds: [SKSIM_ID],
-    attributes: [],
+    platformIds: [SKSIM_ID, SIMPOINT_ID],
+    attributes: [{ name: 'Data', values: ['15GB'] }],
     variants: []
   },
   {
-    id: 'p_wifi',
-    name: 'Pocket WiFi Router X1',
-    sku: 'SKU-2002',
-    category: 'WiFi',
+    id: TRAVEL_PACK_ID,
+    name: 'Travel Starter Pack',
+    sku: 'PACK-TRAVEL',
+    category: 'Pocket WiFi',
     categoryId: POCKET_WIFI_ID,
-    status: 'Active',
-    productType: 'variant',
-    hasVariants: true,
-    variantCount: 4,
-    platformIds: [SIMPOINT_ID],
-    attributes: [{ name: 'Color', values: ['Black', 'White'] }],
-    variants: [
-      { name: 'Black', sku: 'SKU-2002-01', price: '60', stock: '15', active: true },
-      { name: 'White', sku: 'SKU-2002-02', price: '60', stock: '9', active: true },
-      { name: 'Blue', sku: 'SKU-2002-03', price: '62', stock: '4', active: true },
-      { name: 'Green', sku: 'SKU-2002-04', price: '62', stock: '0', active: false }
-    ]
-  },
-  {
-    id: 'p_bundle',
-    name: 'Travel Connectivity Bundle',
-    sku: 'SKU-2006',
-    category: 'SIM Card',
-    categoryId: SIM_CARDS_ID,
     status: 'Active',
     productType: 'bundle',
     hasVariants: false,
     variantCount: 0,
-    platformIds: [SIMPOINT_ID, SKSIM_ID],
+    platformIds: [SKSIM_ID, SIMPOINT_ID],
     attributes: [],
     variants: []
   },
   {
-    id: 'p_esim',
-    name: 'eSIM Global 5GB',
-    sku: 'SKU-2005',
-    category: 'SIM Card',
-    categoryId: SIM_CARDS_ID,
-    status: 'Inactive',
-    productType: 'single',
-    hasVariants: false,
-    variantCount: 0,
-    platformIds: [SIMPOINT_ID],
-    attributes: [],
-    variants: []
-  },
-  {
-    id: 'p_prepaid',
-    name: 'Prepaid Data Plan 7D',
-    sku: 'SKU-2004',
-    category: 'Data Plan',
-    categoryId: SIM_CARDS_ID,
+    id: POCKET_WIFI_PRODUCT_ID,
+    name: 'Pocket WiFi Router X1',
+    sku: 'WIFI-X1',
+    category: 'Pocket WiFi',
+    categoryId: POCKET_WIFI_ID,
     status: 'Active',
+    // upstream `configurable`
     productType: 'variant',
     hasVariants: true,
-    variantCount: 3,
-    platformIds: [SKSIM_ID],
-    attributes: [{ name: 'Data', values: ['15GB', '30GB', 'Unlimited'] }],
+    variantCount: 4,
+    platformIds: [SKSIM_ID, SIMPOINT_ID],
+    attributes: [
+      { name: 'Color', values: ['Black', 'White'] },
+      { name: 'Validity', values: ['8 Days', '16 Days'] }
+    ],
+    // names and SKUs from the collection's own `children` examples
     variants: [
-      { name: '3GB', sku: 'SKU-2004-01', price: '12', stock: '30', active: true },
-      { name: '5GB', sku: 'SKU-2004-02', price: '18', stock: '22', active: true },
-      { name: '10GB', sku: 'SKU-2004-03', price: '28', stock: '11', active: true }
+      { name: 'Black / 8 Days', sku: 'WIFI-X1-8DAYS-BLACK', price: '5340', stock: '15', active: true },
+      { name: 'Black / 16 Days', sku: 'WIFI-X1-16DAYS-BLACK', price: '6200', stock: '9', active: true },
+      { name: 'White / 8 Days', sku: 'WIFI-X1-8DAYS-WHITE', price: '5340', stock: '4', active: true },
+      { name: 'White / 16 Days', sku: 'WIFI-X1-16D-WHT', price: '6200', stock: '0', active: false }
     ]
   }
 ]

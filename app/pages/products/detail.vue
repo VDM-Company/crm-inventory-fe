@@ -141,8 +141,24 @@ const isStored = ref(false)
 let editSnapshot: string | null = null
 let deleteTimer: number | null = null
 
+/**
+ * Structural defaults only — the shapes the template indexes into. Content
+ * fields are deliberately absent: a real record that simply has no notes must
+ * render as having none, not borrow the demo's.
+ */
+const EMPTY_PRODUCT: Partial<DetailProduct> = {
+  platformIds: [],
+  attributes: [],
+  variants: []
+}
+
 function normalizeProduct(rec: DetailProduct | null): { product: DetailProduct, stored: boolean } {
-  const base: DetailProduct = rec ? { ...DEMO_PRODUCT, ...rec } : { ...DEMO_PRODUCT }
+  // A record that was found supplies its own content. Spreading DEMO_PRODUCT
+  // under it filled every gap with the demo's — which showed one product's
+  // notes, category and variants on another's page.
+  const base: DetailProduct = rec
+    ? { ...EMPTY_PRODUCT, ...rec } as DetailProduct
+    : { ...DEMO_PRODUCT }
   if (!base.platformIds) base.platformIds = []
   if (base.productType !== 'bundle') {
     const hv = base.productType === 'variant' || !!base.hasVariants || !!(base.variants && base.variants.length)

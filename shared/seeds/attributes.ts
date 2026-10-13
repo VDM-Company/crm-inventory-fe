@@ -13,9 +13,13 @@ import type { AttributeDef } from '../types/domain'
 export const ATTR_COLOR_ID = '01a116c8-5eb3-71b2-b4b5-618a20332350'
 export const ATTR_DATA_ID = '01a116c8-5e8e-70d0-83b6-4b5eff865d8e'
 export const ATTR_NETWORK_ID = '01a116c8-5f01-7336-bb2a-1aa0e6277eda'
+export const ATTR_VALIDITY_ID = '01a116c8-5e73-73d7-a7a7-36866640010c'
 
 export const ATTRIBUTE_SEED: AttributeDef[] = [
   { id: ATTR_COLOR_ID, name: 'Color', type: 'Select', values: ['Black', 'White'] },
   { id: ATTR_DATA_ID, name: 'Data', type: 'Select', values: ['15GB', '30GB', 'Unlimited'] },
-  { id: ATTR_NETWORK_ID, name: 'Network', type: 'Text', values: [] }
+  { id: ATTR_NETWORK_ID, name: 'Network', type: 'Text', values: [] },
+  // Not in the mock's attribute LIST example, but its product variants use it
+  // — the collection's own create example and the X1 variants both name it.
+  { id: ATTR_VALIDITY_ID, name: 'Validity', type: 'Select', values: ['8 Days', '16 Days', '30 Days'] }
 ]
