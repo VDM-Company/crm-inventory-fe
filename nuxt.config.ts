@@ -25,8 +25,14 @@ export default defineNuxtConfig({
   // time with NUXT_API_BASE_URL / NUXT_API_TOKEN. While `apiBaseUrl` is empty
   // the `server/api` layer answers from its in-memory mock.
   runtimeConfig: {
+    // the old seam (server/utils/backend.ts) — four resources still on it
     apiBaseUrl: '',
-    apiToken: ''
+    apiToken: '',
+    // the Vertex Commerce API (server/utils/vertex.ts). Include the /api/v1
+    // prefix; the collection's baseUrl carries it and the paths assume it.
+    // Server-only: the token must never reach the browser.
+    vertexApiBase: '',
+    vertexApiToken: ''
   },
 
   routeRules: {

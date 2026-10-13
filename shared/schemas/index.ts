@@ -101,3 +101,51 @@ export const listQuerySchema = z.object({
   sort: z.string().optional(),
   dir: z.enum(['asc', 'desc']).optional()
 })
+
+// ── Vertex Commerce API ─────────────────────────────────────────────────────
+// Unlike the schemas above, these are NOT guesswork: every rule comes from the
+// collection in `docs/api/vertex-commerce.postman_collection.json`. They are
+// still `.loose()`, so a field the API gained since that export is forwarded
+// rather than silently dropped.
+
+/** Text keyed by locale. At least one locale, each a non-empty string. */
+const localizedText = z.record(z.string(), z.string().trim().min(1))
+  .refine(v => Object.keys(v).length > 0, 'Give the text in at least one language.')
+
+export const feeItemKindSchema = z.enum(['base', 'tax', 'shipping', 'other'])
+
+export const feeItemCreateSchema = z.object({
+  // the API answers 422 `regex` / `code_taken`; match it here so an obvious
+  // mistake fails before the round trip
+  code: z.string()
+    .trim()
+    .regex(/^[a-z0-9_]{2,50}$/, 'Use 2–50 lowercase letters, digits or underscores.'),
+  name: localizedText,
+  kind: feeItemKindSchema,
+  description: localizedText.nullish(),
+  icon: z.string().trim().nullish()
+}).loose()
+
+/**
+ * `lockVersion` is required, not optional: the API rejects a versioned update
+ * without it, and a schema that let it through would turn a typo into a
+ * runtime 409 instead of a 422 here. `code` and `kind` are absent because the
+ * API does not accept changes to them.
+ */
+export const feeItemUpdateSchema = z.object({
+  lockVersion: z.number({ error: 'lockVersion is required on an update.' }).int().min(0),
+  name: localizedText.optional(),
+  description: localizedText.nullish(),
+  icon: z.string().trim().nullish()
+}).loose()
+
+export const feeItemQuerySchema = z.object({
+  kind: feeItemKindSchema.optional(),
+  /** Follow every cursor and return the whole list — master data only. */
+  all: z.stringbool().optional(),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  // NOT z.coerce.boolean(): that reads the string 'false' as true, so
+  // `?includeTotal=false` would ask upstream for the count it calls costly.
+  includeTotal: z.stringbool().optional()
+}).loose()
