@@ -30,6 +30,15 @@ export function useApiPlatformsV2() {
 
     settings: (id: string) => $fetch<VertexPlatformSettings>(`${base}/${id}/settings`),
 
+    /**
+     * Drop this platform's own product order for one category, so it follows
+     * the Default order again. The platform owns the override, which is why
+     * this lives here rather than on the categories binding.
+     */
+    resetCategoryProductOrder: async (id: string, categoryId: string): Promise<void> => {
+      await $fetch(`${base}/${id}/categories/${categoryId}/products/reset`, { method: 'POST' })
+    },
+
     /** Full replace: send every group, or the API clears the missing ones. */
     saveSettings: (id: string, settings: Omit<VertexPlatformSettings, 'lockVersion'>, lockVersion: number) =>
       $fetch<VertexPlatformSettings>(`${base}/${id}/settings`, {

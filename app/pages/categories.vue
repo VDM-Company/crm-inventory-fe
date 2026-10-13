@@ -1,20 +1,12 @@
 <script setup lang="ts">
 import * as z from 'zod'
 import type { FormSubmitEvent, TableColumn } from '@nuxt/ui'
-import type { Category, CatEntry, CatScopeEntry, VertexCategory } from '~/types'
+import type { Category, VertexCategory, VertexProductRow } from '~/types'
 
 useHead({ title: 'Categories — Vertex' })
 
-interface CatalogProduct {
-  id: string
-  displayId: string
-  name: string
-  sku: string
-  status: string
-  price: number
-}
-// A catalog product as rendered in the membership table.
-type CatalogRow = CatalogProduct & { included: boolean, pos?: number }
+/** A product as the membership table renders it. */
+type CatalogRow = VertexProductRow & { included: boolean, pos?: number }
 
 interface AddModalState {
   parentId: string | null
@@ -60,10 +52,17 @@ const { message: toast, show: showToast } = usePageToast(2600)
 onMounted(async () => {
   let list: Category[] = []
   try {
-    const [tree, plats] = await Promise.all([categoriesApi.tree(), platformsApi.list()])
+    const [tree, plats, products] = await Promise.all([
+      categoriesApi.tree(),
+      platformsApi.list(),
+      // the catalogue to pick from; one page is enough for the picker, which
+      // searches and pages client-side
+      productsApi.page({ limit: 100 })
+    ])
     vertexById.value = indexVertexTree(tree)
     list = flattenVertexTree(tree)
     platforms.value = plats
+    catalog.value = products.data
   } catch (err) {
     showToast(apiErrorMessage(err, 'Could not load categories.'))
     return
@@ -80,50 +79,16 @@ onMounted(async () => {
 
 // ── style helpers (ported) ──
 
-// ── deterministic catalog (design's hash-based catalogFor) ──
-function hashCode(str: string): number {
-  let h = 0
-  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0
-  return Math.abs(h)
-}
-const SUFFIXES = ['Basic', 'Standard', 'Plus', 'Pro', 'Max', 'Lite', 'Mini', 'Ultra', 'Air', 'Go', 'Prime', 'Edge', 'Neo', 'One', 'Flex']
-function catalogFor(catId: string): CatalogProduct[] {
-  const cat = categoryById(cats.value, catId)
-  if (!cat) return []
-  const base = hashCode(catId)
-  const out: CatalogProduct[] = []
-  for (let n = 0; n < 15; n++) {
-    const seed = base + n * 97
-    const idNum = 3000 + (base % 4000) + n
-    out.push({
-      id: catId + '_p' + (n + 1),
-      displayId: String(idNum),
-      name: cat.name + ' ' + SUFFIXES[n % SUFFIXES.length] + ' ' + (n + 1),
-      sku: 'SKU-' + (base % 9000 + 1000) + '-' + String(n + 1).padStart(2, '0'),
-      status: (seed % 5 === 0) ? 'Inactive' : 'Active',
-      price: 8 + (seed % 92)
-    })
-  }
-  return out
-}
-function leafDescendants(catId: string): string[] {
-  const kids = categoryChildren(cats.value, catId)
-  if (!kids.length) return [catId]
-  let acc: string[] = []
-  kids.forEach((k) => {
-    acc = acc.concat(leafDescendants(k.id))
-  })
-  return acc
-}
-function productsForCategory(catId: string): CatalogProduct[] {
-  let acc: CatalogProduct[] = []
-  leafDescendants(catId).forEach((lid) => {
-    acc = acc.concat(catalogFor(lid))
-  })
-  return acc
-}
+// ── the catalogue to pick from ──
+// Was a hash-based fabrication of 15 rows per category, which is why the
+// Delete button could never be reached: every category looked fully stocked.
+// These are the real products now.
+const catalog = ref<VertexProductRow[]>([])
+const productsApi = useApiProductsV2()
+
+/** Direct assignments, as the API counts them. Zero for a node it has not sent. */
 function productCount(catId: string): number {
-  return leafDescendants(catId).length * 15
+  return vertexById.value.get(catId)?.productCount ?? 0
 }
 
 // ── selection ──
@@ -131,25 +96,30 @@ function productCount(catId: string): number {
 // after a later one and overwrite it.
 let selectSeq = 0
 
+/** What the server last reported, so a save can send only what changed. */
+const savedMembers = ref<string[]>([])
+
 async function select(id: string) {
   const cat = categoryById(cats.value, id)
   if (!cat) return
   const seq = ++selectSeq
-  let entry: CatEntry
+
+  let rows: VertexCategoryProduct[]
+  let ownOrder = false
   try {
-    entry = await categoryEntry(id)
+    // the membership of the scope on screen; without a platform it is Default
+    const res = await categoriesApi.productsPage(id, {
+      ...(scope.value === 'default' ? {} : { platformId: scope.value }),
+      all: true
+    })
+    rows = res.data
+    ownOrder = (res.meta.scope as { source?: string } | undefined)?.source === 'platform'
   } catch (err) {
     if (seq === selectSeq) showToast(apiErrorMessage(err, 'Could not load this category.'))
     return
   }
   if (seq !== selectSeq) return
-  const pos: Record<string, Record<string, number>> = {}
-  const ov: Record<string, boolean> = {}
-  Object.keys(entry.scopes || {}).forEach((k) => {
-    pos[k] = { ...(entry.scopes[k]!.positions || {}) }
-    if (k !== 'default') ov[k] = !!entry.scopes[k]!.override
-  })
-  if (!pos.default) pos.default = {}
+
   // keep ancestors expanded so the selected node stays visible
   const anc: Record<string, boolean> = {}
   let pid = cat.parentId
@@ -159,18 +129,22 @@ async function select(id: string) {
     const p = categoryById(cats.value, pid)
     pid = p ? p.parentId : null
   }
-  const catalogIds = productsForCategory(id).map(p => p.id)
-  const mem = (entry.members && entry.members.length) ? entry.members.slice() : catalogIds.slice()
-  if (!Object.keys(pos.default).length) {
-    catalogIds.forEach((cid, i) => {
-      pos.default![cid] = i + 1
-    })
-  }
+
+  // The API carries the order on each row rather than as a separate map, so
+  // the position editor is fed from there.
+  const key = scope.value === 'default' ? 'default' : scope.value
+  const pos: Record<string, Record<string, number>> = { default: {} }
+  pos[key] = {}
+  for (const r of rows) pos[key]![r.productId] = r.position
+  const ov: Record<string, boolean> = scope.value === 'default' ? {} : { [scope.value]: ownOrder }
+
+  const mem = rows.map(r => r.productId)
   selectedId.value = id
   draftName.value = cat.name
   draftEnabled.value = cat.enabled !== false
   nameError.value = false
   members.value = mem
+  savedMembers.value = mem.slice()
   positions.value = pos
   scopeOverride.value = ov
   scope.value = 'default'
@@ -282,16 +256,70 @@ function toggleMember(pid: string) {
     ? [...members.value, pid]
     : members.value.filter(x => x !== pid)
 }
-function onToggleUseDefaultOrder(e: Event) {
+/**
+ * Whether this platform keeps its own product order.
+ *
+ * Turning it ON is implicit: the next save sends `platformId`, and the API
+ * starts a custom order from that. Turning it OFF is an endpoint of its own
+ * — the platform has to be told to drop the override — so it takes effect
+ * immediately rather than waiting for Save, and the list is re-read after.
+ */
+async function onToggleUseDefaultOrder(e: Event) {
   const useDefault = (e.target as HTMLInputElement).checked
   const sc = scope.value
-  scopeOverride.value = { ...scopeOverride.value, [sc]: !useDefault }
-  if (!useDefault && !positions.value[sc]) {
+  if (sc === 'default') return
+
+  if (useDefault) {
+    try {
+      await platformsApi.resetCategoryProductOrder(sc, selectedId.value || '')
+    } catch (err) {
+      showToast(apiErrorMessage(err, 'Could not restore the default order.'))
+      return
+    }
+    scopeOverride.value = { ...scopeOverride.value, [sc]: false }
+    if (selectedId.value) await select(selectedId.value)
+    showToast('Following the default order again')
+    return
+  }
+
+  scopeOverride.value = { ...scopeOverride.value, [sc]: true }
+  if (!positions.value[sc]) {
     positions.value = { ...positions.value, [sc]: { ...(positions.value.default || {}) } }
   }
 }
 
 const saving = ref(false)
+
+/**
+ * Membership, as three requests rather than one replace.
+ *
+ * The API has no "here is the whole membership" call: products are added,
+ * removed, and then ordered. Order matters — `PUT` is refused with 422
+ * `members_mismatch` unless `productIds` is exactly the current members, so
+ * the adds and removes have to land first.
+ *
+ * On a platform scope the writes carry `platformId`, which is what makes that
+ * platform start its own order.
+ */
+async function saveMembership(id: string) {
+  const platformId = scope.value === 'default' ? undefined : scope.value
+  const before = savedMembers.value
+  const now = members.value
+
+  const added = now.filter(pid => !before.includes(pid))
+  const removed = before.filter(pid => !now.includes(pid))
+
+  if (added.length) await categoriesApi.addProducts(id, added)
+  if (removed.length) await categoriesApi.removeProducts(id, removed, platformId)
+
+  // The order the screen shows: whatever the position editor holds, with
+  // anything unnumbered after it.
+  const pos = effectivePositions()
+  const ordered = now.slice().sort((a, b) => (pos[a] ?? Infinity) - (pos[b] ?? Infinity))
+  if (ordered.length) await categoriesApi.orderProducts(id, ordered, platformId)
+
+  savedMembers.value = now.slice()
+}
 
 async function save() {
   const name = (draftName.value || '').trim()
@@ -301,14 +329,7 @@ async function save() {
   }
   const id = selectedId.value
   if (!id || saving.value) return
-  const scopes: Record<string, CatScopeEntry> = {}
-  Object.keys(positions.value).forEach((k) => {
-    scopes[k] = { positions: positions.value[k] || {} }
-    if (k !== 'default') scopes[k].override = !!scopeOverride.value[k]
-  })
-  Object.keys(scopeOverride.value).forEach((k) => {
-    if (!scopes[k]) scopes[k] = { positions: {}, override: !!scopeOverride.value[k] }
-  })
+
   saving.value = true
   try {
     const saved = await categoriesApi.update(
@@ -317,9 +338,7 @@ async function save() {
       lockVersionOf(id)
     )
     vertexById.value.set(id, saved)
-    // Membership still goes through the placeholder's sub-resource: the API's
-    // own product list returns ids that do not exist on this side yet.
-    await saveCategoryEntry(id, { members: members.value, scopes } as CatEntry)
+    await saveMembership(id)
   } catch (err) {
     saving.value = false
     showToast(apiErrorCode(err) === 'stale_version'
@@ -396,10 +415,12 @@ const scopeChoices = computed(() =>
     .map(c => ({ value: c.id, name: c.name, selected: c.id === scope.value }))
 )
 const scopeLabel = computed(() => (scopeChoices.value.find(c => c.value === scope.value) || scopeChoices.value[0])?.name || 'Default')
-function pickScope(id: string) {
+async function pickScope(id: string) {
   scope.value = id
   scopeOpen.value = false
   page.value = 1
+  // membership and order are per scope, so switching re-reads them
+  if (selectedId.value) await select(selectedId.value)
 }
 const scopeBadgeLabel = computed(() => overridden.value ? 'Overridden' : 'Inherited')
 const scopeBadgeStyle = computed(() =>
@@ -407,10 +428,11 @@ const scopeBadgeStyle = computed(() =>
 )
 
 // ── products table ──
-const filteredList = computed(() => {
+const filteredList = computed<CatalogRow[]>(() => {
   const positionsMap = effectivePositions()
   const q = (search.value || '').trim().toLowerCase()
-  const src = selectedId.value ? productsForCategory(selectedId.value) : []
+  // every product is offered; membership is the tick, not the filter
+  const src = selectedId.value ? catalog.value : []
   const list = src
     .filter(p => !q || p.name.toLowerCase().includes(q) || (p.sku || '').toLowerCase().includes(q))
     .map(p => ({ ...p, included: members.value.indexOf(p.id) !== -1, pos: positionsMap[p.id] }))
@@ -445,7 +467,7 @@ const productTableMeta = {
 
 const productColumns: TableColumn<CatalogRow>[] = [
   { id: 'select', header: '', meta: { class: { th: 'w-[46px] px-3.5 py-[11px]', td: 'px-3.5' } } },
-  { accessorKey: 'displayId', header: 'ID', meta: { class: { th: 'w-[70px]' } } },
+  { accessorKey: 'type', header: 'Type', meta: { class: { th: 'w-[110px]' } } },
   { accessorKey: 'name', header: 'Name' },
   { accessorKey: 'sku', header: 'SKU' },
   { accessorKey: 'status', header: 'Status', meta: { class: { th: 'w-24' } } },
@@ -775,8 +797,8 @@ function onReset() {
                     >
                   </template>
 
-                  <template #displayId-cell="{ row }">
-                    <span class="text-[13px] text-slate-500">{{ row.original.displayId }}</span>
+                  <template #type-cell="{ row }">
+                    <span class="text-[13px] text-slate-500 capitalize">{{ row.original.type }}</span>
                   </template>
 
                   <template #name-cell="{ row }">
@@ -788,11 +810,11 @@ function onReset() {
                   </template>
 
                   <template #status-cell="{ row }">
-                    <span :style="statusChipStyle(row.original.status)">{{ row.original.status }}</span>
+                    <span :style="statusChipStyle(row.original.status)" class="capitalize">{{ row.original.status }}</span>
                   </template>
 
                   <template #price-cell="{ row }">
-                    <span class="text-sm text-slate-700">{{ priceLabelOf(row.original.price) }}</span>
+                    <span class="text-sm text-slate-700">{{ priceLabelOf(row.original.priceFrom) }}</span>
                   </template>
 
                   <template #pos-cell="{ row }">

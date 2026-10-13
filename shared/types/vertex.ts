@@ -391,6 +391,8 @@ export interface VertexCategoryProduct {
 export interface VertexCategoryProductsQuery extends CursorQuery {
   platformId?: string
   q?: string
+  /** Follow every cursor and return the whole list. */
+  all?: boolean
 }
 
 // ── products ────────────────────────────────────────────────────────────────
