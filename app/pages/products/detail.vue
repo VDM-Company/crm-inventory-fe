@@ -174,7 +174,7 @@ async function loadRecordById(rawId: unknown): Promise<DetailProduct | null> {
 }
 
 const productsApi = useApiProducts()
-const categoriesApi = useApiCategories()
+const categoriesApi = useApiCategoriesV2()
 const platformsApi = useApiPlatformsV2()
 const attributesApi = useApiAttributes()
 const feesApi = useApiFees()
@@ -182,7 +182,7 @@ const feesApi = useApiFees()
 onMounted(async () => {
   try {
     ;[categories.value, platforms.value, attributeDefs.value, fees.value] = await Promise.all([
-      categoriesApi.list(), platformsApi.list(), attributesApi.list(), feesApi.list()
+      categoriesApi.tree().then(flattenVertexTree), platformsApi.list(), attributesApi.list(), feesApi.list()
     ])
   } catch (err) {
     saveError.value = apiErrorMessage(err, 'Could not load the form data.')

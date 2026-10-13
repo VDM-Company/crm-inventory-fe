@@ -21,12 +21,12 @@ const loadError = ref('')
 
 const productsApi = useApiProducts()
 const platformsApi = useApiPlatformsV2()
-const categoriesApi = useApiCategories()
+const categoriesApi = useApiCategoriesV2()
 
 onMounted(async () => {
   try {
     ;[platforms.value, categories.value, storedProducts.value] = await Promise.all([
-      platformsApi.list(), categoriesApi.list(), productsApi.list()
+      platformsApi.list(), categoriesApi.tree().then(flattenVertexTree), productsApi.list()
     ])
   } catch (err) {
     loadError.value = apiErrorMessage(err, 'Could not load this platform.')

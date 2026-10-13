@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import * as z from 'zod'
 import type { FormSubmitEvent, TableColumn } from '@nuxt/ui'
-import type { Category, CatEntry, CatScopeEntry } from '~/types'
+import type { Category, CatEntry, CatScopeEntry, VertexCategory } from '~/types'
 
 useHead({ title: 'Categories — Vertex' })
 
@@ -26,7 +26,16 @@ interface AddModalState {
 }
 
 // ── state (mirrors the design's DCLogic state) ──
-const categoriesApi = useApiCategories()
+const categoriesApi = useApiCategoriesV2()
+
+/**
+ * The tree as the API sent it, by id.
+ *
+ * The flat `cats` the panel renders drops `lockVersion`, which every write
+ * needs, so the full records are kept beside it rather than refetched.
+ */
+const vertexById = ref<Map<string, VertexCategory>>(new Map())
+const lockVersionOf = (id: string) => vertexById.value.get(id)?.lockVersion ?? 0
 const platformsApi = useApiPlatformsV2()
 
 const treeCollapsed = ref(false)
@@ -51,7 +60,10 @@ const { message: toast, show: showToast } = usePageToast(2600)
 onMounted(async () => {
   let list: Category[] = []
   try {
-    ;[list, platforms.value] = await Promise.all([categoriesApi.list(), platformsApi.list()])
+    const [tree, plats] = await Promise.all([categoriesApi.tree(), platformsApi.list()])
+    vertexById.value = indexVertexTree(tree)
+    list = flattenVertexTree(tree)
+    platforms.value = plats
   } catch (err) {
     showToast(apiErrorMessage(err, 'Could not load categories.'))
     return
@@ -199,14 +211,20 @@ async function onAddSubmit(event: FormSubmitEvent<AddSchema>) {
   }
   let cat: Category
   try {
-    cat = await categoriesApi.create({
-      name, parentId: m.parentId || null, enabled: m.enabled !== false
+    const created = await categoriesApi.create({
+      name: { en: name }, parentId: m.parentId || null, isEnabled: m.enabled !== false
     })
+    vertexById.value.set(created.id, created)
+    cat = flattenVertexTree([created])[0]!
   } catch (err) {
     showToast(apiErrorMessage(err, 'Could not create the category.'))
     return
   }
-  cats.value = [...cats.value, cat]
+  // the mock answers every create with the same canned record, so an id that
+  // is already on the list replaces its row rather than duplicating the key
+  cats.value = cats.value.some(c => c.id === cat.id)
+    ? cats.value.map(c => c.id === cat.id ? cat : c)
+    : [...cats.value, cat]
   if (m.parentId) expanded.value = { ...expanded.value, [m.parentId]: true }
   addModal.value = null
   await select(cat.id)
@@ -293,11 +311,20 @@ async function save() {
   })
   saving.value = true
   try {
-    await categoriesApi.update(id, { name, enabled: draftEnabled.value })
+    const saved = await categoriesApi.update(
+      id,
+      { name: { en: name }, isEnabled: draftEnabled.value },
+      lockVersionOf(id)
+    )
+    vertexById.value.set(id, saved)
+    // Membership still goes through the placeholder's sub-resource: the API's
+    // own product list returns ids that do not exist on this side yet.
     await saveCategoryEntry(id, { members: members.value, scopes } as CatEntry)
   } catch (err) {
     saving.value = false
-    showToast(apiErrorMessage(err, 'Could not save the category.'))
+    showToast(apiErrorCode(err) === 'stale_version'
+      ? 'Someone else changed this category. Reload the page before saving again.'
+      : apiErrorMessage(err, 'Could not save the category.'))
     return
   }
   saving.value = false
