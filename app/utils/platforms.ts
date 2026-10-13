@@ -1,5 +1,3 @@
-import type { StoredProduct } from '~/types'
-
 // Pure helpers over an already-loaded platform list. Reads and writes go
 // through `useApiPlatforms()`.
 
@@ -23,10 +21,4 @@ export function platformById<T extends { id: string }>(list: T[], id: string): T
  */
 export function platformSlug(name: string): string {
   return (name || '').toUpperCase().replace(/[^A-Z0-9]+/g, '').slice(0, 32)
-}
-
-// How many products are assigned to this platform (delete-protection).
-// Pure: pass a list loaded with `useApiProducts().list()` so it can drive a computed.
-export function platformAssignedCount(products: StoredProduct[], platformId: string): number {
-  return products.filter(p => Array.isArray(p.platformIds) && p.platformIds.indexOf(platformId) !== -1).length
 }

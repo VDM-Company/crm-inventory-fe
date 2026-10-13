@@ -11,27 +11,14 @@
  */
 import type { ApiList, ListQuery } from '#shared/types'
 import type { Backend } from './backend'
-import {
-  ATTRIBUTE_SEED,
-  CATEGORY_SEED,
-  FEE_SEED,
-  PLATFORM_CONFIG_SEED,
-  PLATFORM_SEED,
-  PRODUCT_SEED
-} from '#shared/seeds'
+import { FEE_SEED, PRODUCT_SEED } from '#shared/seeds'
 
 type Row = Record<string, unknown> & { id?: string }
 
 /** resource name -> rows. Cloned from the seeds on first touch. */
 const tables = new Map<string, Row[]>()
-/** singleton sub-resources, keyed by their full path. */
-const singletons = new Map<string, unknown>()
-
 const SEEDS: Record<string, unknown[]> = {
   products: PRODUCT_SEED,
-  categories: CATEGORY_SEED,
-  platforms: PLATFORM_SEED,
-  attributes: ATTRIBUTE_SEED,
   fees: FEE_SEED
 }
 
@@ -46,11 +33,6 @@ function table(resource: string): Row[] {
     tables.set(resource, t)
   }
   return t
-}
-
-function singleton(path: string, seed: () => unknown): unknown {
-  if (!singletons.has(path)) singletons.set(path, clone(seed()))
-  return singletons.get(path)
 }
 
 /** `products` -> `p`, so generated ids look like the seeded ones. */
@@ -139,26 +121,15 @@ export function mockBackend(): Backend {
       t.splice(i, 1)
     },
 
-    async getRaw<T>(path: string) {
-      const cfg = path.match(/^platforms\/([^/]+)\/config$/)
-      if (cfg) {
-        const id = cfg[1]!
-        if (!table('platforms').some(p => p.id === id)) throw notFound(`platforms/${id}`)
-        return clone(singleton(path, () => PLATFORM_CONFIG_SEED[id] ?? {})) as T
-      }
-      const mem = path.match(/^categories\/([^/]+)\/products$/)
-      if (mem) {
-        const id = mem[1]!
-        if (!table('categories').some(c => c.id === id)) throw notFound(`categories/${id}`)
-        return clone(singleton(path, () => ({ members: [], scopes: {} }))) as T
-      }
+    async getRaw<T>(path: string): Promise<T> {
+      // The two sub-resources this served — `platforms/:id/config` and
+      // `categories/:id/products` — moved to the Vertex seam. Nothing reaches
+      // this any more; it stays only because `Backend` still declares it.
       throw notFound(path)
     },
 
-    async putRaw<T>(path: string, body: unknown) {
-      await this.getRaw(path)
-      singletons.set(path, clone(body))
-      return clone(body) as T
+    async putRaw<T>(path: string): Promise<T> {
+      throw notFound(path)
     }
   }
 }

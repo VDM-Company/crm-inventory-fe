@@ -1,16 +1,8 @@
-import type { AttributeDef, StoredProduct } from '~/types'
+import type { AttributeDef } from '~/types'
 
 // Pure helpers over an already-loaded attribute list — the Create form's
 // variant builder and the Attributes master page both read it through
 // `useApiAttributes()`.
-
-// How many stored products reference this attribute name (delete-protection).
-// How many products use this attribute (delete-protection).
-// Pure: pass a list loaded with `useApiProducts().list()` so it can drive a computed.
-export function attributeUsageCount(products: StoredProduct[], name: string): number {
-  const needle = (name || '').toLowerCase()
-  return products.filter(p => (p.attributes || []).some(a => String(a?.name || '').toLowerCase() === needle)).length
-}
 
 export function attributeNames(list: AttributeDef[]): string[] {
   return list.map(a => a.name)

@@ -1,4 +1,4 @@
-import type { Category, CategoryFlatRow, CategoryTreeRow, CatEntry, CatScopeEntry } from '~/types'
+import type { Category, CategoryFlatRow, CategoryTreeRow } from '~/types'
 
 // Pure helpers over an already-loaded category tree, so they can run inside a
 // computed. Load the list with `useApiCategories().list()`.
@@ -74,22 +74,6 @@ export function categoryTreeRows(list: Category[]): CategoryTreeRow[] {
   }
   walk(null, 0)
   return out
-}
-
-// ── per-category product membership + per-scope positions store ──
-// Shape: { <catId>: { members: [pid], scopes: { default: {positions}, <pid>: {positions, override} } } }
-// ── per-category product membership + per-scope positions ──
-// Its own sub-resource: `/api/categories/:id/products`.
-export async function categoryEntry(catId: string): Promise<CatEntry> {
-  const e = await $fetch<CatEntry>(`/api/categories/${catId}/products`)
-  return { members: e?.members || [], scopes: (e?.scopes || {}) as Record<string, CatScopeEntry> }
-}
-
-export async function saveCategoryEntry(catId: string, entry: CatEntry): Promise<CatEntry> {
-  return apiPutRaw<CatEntry>(`categories/${catId}/products`, {
-    members: entry.members || [],
-    scopes: entry.scopes || {}
-  })
 }
 
 // Self + ALL descendant ids — filtering by a parent matches its whole subtree.

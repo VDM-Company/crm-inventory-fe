@@ -2,9 +2,9 @@
  * Typed client for `server/api`.
  *
  * What is left after the resource bindings took over CRUD and the dead
- * helpers were removed: the error readers the screens share, and `apiPutRaw`
- * for the two sub-resources that are not CRUD (`platforms/:id/config`,
- * `categories/:id/products`).
+ * helpers were removed: the error readers the screens share. The two
+ * sub-resources `apiPutRaw` served — `platforms/:id/config` and
+ * `categories/:id/products` — now go through the Vertex seam.
  *
  * `apiFieldErrors` currently has no caller. It stays because the server still
  * shapes 422s for it — `unprocessable()` in `server/utils/errors.ts`, the
@@ -14,10 +14,6 @@
  * together.
  */
 import type { FieldErrors } from '#shared/types'
-
-export function apiPutRaw<T>(path: string, body: unknown) {
-  return $fetch<T>(`/api/${path}`, { method: 'PUT', body: body as Record<string, unknown> })
-}
 
 /**
  * Pull `fieldErrors` off a failed request so they can go straight into

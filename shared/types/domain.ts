@@ -13,17 +13,6 @@ export interface Category {
   enabled: boolean
 }
 
-/** Per-scope storefront ordering for one category. Keyed 'default' | platformId. */
-export interface CatScopeEntry {
-  positions: Record<string, number>
-  override?: boolean
-}
-
-export interface CatEntry {
-  members: string[]
-  scopes: Record<string, CatScopeEntry>
-}
-
 export interface Platform {
   id: string
   name: string

@@ -3,10 +3,9 @@ import {
   attributeAvailableFor,
   attributeNames,
   attributeTypeFor,
-  attributeUsageCount,
   attributeValuesFor
 } from '../../../app/utils/attributes'
-import type { AttributeDef, StoredProduct } from '../../../shared/types/domain'
+import type { AttributeDef } from '../../../shared/types/domain'
 
 const defs: AttributeDef[] = [
   { id: 'a_data', name: 'Data', type: 'Select', values: ['5GB', '10GB', '15GB'] },
@@ -53,35 +52,5 @@ describe('attributeAvailableFor', () => {
 
   it('is empty once everything is taken', () => {
     expect(attributeAvailableFor(defs, 'Color', ['Black', 'White'])).toEqual([])
-  })
-})
-
-describe('attributeUsageCount', () => {
-  const product = (id: string, names: string[]): StoredProduct => ({
-    id,
-    name: id,
-    sku: id,
-    status: 'Active',
-    productType: 'variant',
-    hasVariants: true,
-    variantCount: 1,
-    platformIds: [],
-    attributes: names.map(name => ({ name, values: [] }))
-  })
-
-  it('counts the products using the attribute', () => {
-    const products = [product('p1', ['Data', 'Color']), product('p2', ['Data'])]
-    expect(attributeUsageCount(products, 'Data')).toBe(2)
-    expect(attributeUsageCount(products, 'Color')).toBe(1)
-    expect(attributeUsageCount(products, 'Size')).toBe(0)
-  })
-
-  it('matches case-insensitively, since the name is free text', () => {
-    expect(attributeUsageCount([product('p1', ['Data'])], 'data')).toBe(1)
-  })
-
-  it('ignores products with no attributes', () => {
-    const bare = { ...product('p3', []), attributes: undefined }
-    expect(attributeUsageCount([bare], 'Data')).toBe(0)
   })
 })

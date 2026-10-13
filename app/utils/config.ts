@@ -1,9 +1,12 @@
 import type { ConfigGroup, ConfigValues } from '~/types'
 import { PLATFORM_CONFIG_SEED, GENERIC_CONFIG_SEED } from '#shared/seeds'
 
-// Port of the design's Configuration screen store.
-// Each platform owns its full set of values — there is no Default scope and no
-// per-field override (that model was dropped in Master v3).
+// The field groups the platform Configuration form renders, and the seed that
+// fills a new platform's form.
+//
+// Reads and writes moved to `useApiPlatformsV2().settings` / `saveSettings`,
+// which speak the API's grouped shape; `shared/utils/platform-settings.ts`
+// maps between that and the flat keys below.
 
 export const CONFIG_GROUPS: ConfigGroup[] = [
   { group: 'store', title: 'Store Information', icon: 'store', fields: [
@@ -32,14 +35,4 @@ export { PLATFORM_CONFIG_SEED, GENERIC_CONFIG_SEED } from '#shared/seeds'
 // same value the first client paint produces.
 export function platformConfigSeed(platformId: string): ConfigValues {
   return { ...(PLATFORM_CONFIG_SEED[platformId] || GENERIC_CONFIG_SEED) }
-}
-
-export async function loadPlatformConfig(platformId: string): Promise<ConfigValues> {
-  const stored = await $fetch<ConfigValues>(`/api/platforms/${platformId}/config`)
-  // the seed supplies any key the stored record has not been given yet
-  return { ...platformConfigSeed(platformId), ...(stored || {}) }
-}
-
-export async function savePlatformConfig(platformId: string, cfg: ConfigValues): Promise<ConfigValues> {
-  return apiPutRaw<ConfigValues>(`platforms/${platformId}/config`, cfg)
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { platformAssignedCount, platformById, platformSlug } from '../../../app/utils/platforms'
-import type { Platform, StoredProduct } from '../../../shared/types/domain'
+import { platformById, platformSlug } from '../../../app/utils/platforms'
+import type { Platform } from '../../../shared/types/domain'
 
 const platforms: Platform[] = [
   { id: 'p_sp', name: 'SIM Point', code: 'sim_point', url: 'vdm.com/sp-sim' },
@@ -39,30 +39,5 @@ describe('platformSlug', () => {
 
   it('stays within a length the API will accept', () => {
     expect(platformSlug('x'.repeat(100))).toHaveLength(32)
-  })
-})
-
-describe('platformAssignedCount', () => {
-  const product = (id: string, platformIds: string[]): StoredProduct => ({
-    id,
-    name: id,
-    sku: id,
-    status: 'Active',
-    productType: 'single',
-    hasVariants: false,
-    variantCount: 0,
-    platformIds
-  })
-
-  it('counts the products assigned to the platform', () => {
-    const products = [product('p1', ['p_sp', 'p_sk']), product('p2', ['p_sp'])]
-    expect(platformAssignedCount(products, 'p_sp')).toBe(2)
-    expect(platformAssignedCount(products, 'p_sk')).toBe(1)
-    expect(platformAssignedCount(products, 'p_general')).toBe(0)
-  })
-
-  it('ignores products whose platform list is missing', () => {
-    const bare = { ...product('p3', []), platformIds: undefined as unknown as string[] }
-    expect(platformAssignedCount([bare], 'p_sp')).toBe(0)
   })
 })
