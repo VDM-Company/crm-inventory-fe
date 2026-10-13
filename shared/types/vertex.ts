@@ -387,3 +387,216 @@ export interface VertexCategoryProductsQuery extends CursorQuery {
   platformId?: string
   q?: string
 }
+
+// ── products ────────────────────────────────────────────────────────────────
+
+/**
+ * `simple` is a standalone product, `configurable` a parent with variants,
+ * `bundle` a product made of other products.
+ *
+ * ASSUMPTION, to confirm with the backend author: `GET /admin/catalog/stats`
+ * buckets products as `single | variant | bundle` instead. Two of those three
+ * words differ from every product endpoint, which uses the enum below. This
+ * takes the product endpoints as canonical, since they are what this resource
+ * reads and writes, and leaves the stats wording alone until it is confirmed.
+ */
+export type VertexProductType = 'simple' | 'configurable' | 'bundle'
+
+/**
+ * The list filter documents `draft|active|inactive|trashed`, and the saved
+ * examples also contain `scheduled`. Both are included rather than picking
+ * one, since rejecting a status the API returns would be worse than accepting
+ * one it never sends.
+ */
+export type VertexProductStatus = 'draft' | 'active' | 'inactive' | 'trashed' | 'scheduled'
+
+/** The collection only ever shows `in_stock`, so this stays open. */
+export type ProductStockStatus = string
+
+/** A category as a product reports it: resolved name, no tree. */
+export interface ProductCategoryRef {
+  id: string
+  name: string
+  path: string
+}
+
+/** A platform as a product reports it. */
+export interface ProductPlatformRef {
+  id: string
+  code: string
+  name: string
+  isActive?: boolean
+}
+
+export interface ProductPricingSummary {
+  hasDefaultPrice: boolean | null
+  /** Integer JPY. */
+  defaultInitialTotal: number | null
+  defaultMonthly: number | null
+  /** How many platforms price it differently from Default. */
+  differsOnPlatforms: number
+}
+
+/**
+ * One attribute value on a product.
+ *
+ * `value` is option ids for a choice attribute and `LocalizedText` for a free
+ * text one; `display` is what to render either way, so a screen does not have
+ * to resolve ids itself.
+ */
+export interface ProductAttributeValue {
+  attributeId: string
+  code: string
+  label: string
+  inputType: string
+  value: string[] | LocalizedText
+  display: string
+  /** Where the value came from — `product` is the only one the examples show. */
+  source: string
+}
+
+export interface ProductMedia {
+  id: string
+  role: 'base' | 'gallery' | string
+  url: string
+  alt: LocalizedText | null
+  sortOrder: number
+  sizes: Record<string, string>
+}
+
+/**
+ * A product as the LIST returns it.
+ *
+ * Deliberately a different type from `VertexProduct`: the two endpoints answer
+ * with genuinely different shapes, and `name` is the clearest case — a plain
+ * resolved string here, a `LocalizedText` on the detail.
+ *
+ * ASSUMPTION, to confirm: that this is intended rather than an oversight. The
+ * `*Source` fields suggest it is — the list reports values already resolved
+ * for a platform, and says where each came from — but the collection does not
+ * state it.
+ */
+export interface VertexProductRow {
+  id: string
+  type: VertexProductType
+  status: VertexProductStatus
+  name: string
+  nameSource: string | null
+  sku: string
+  parent: { id: string, name: string, sku: string } | null
+  axisValues: unknown[]
+  variantCount: number | null
+  platforms: ProductPlatformRef[]
+  categories: ProductCategoryRef[]
+  categoriesSource: string | null
+  stockStatus: ProductStockStatus
+  stockStatusComputed: boolean
+  pricingSummary: ProductPricingSummary
+  /** Integer JPY. */
+  priceFrom: number | null
+  monthlyFrom: number | null
+  priceSource: string | null
+  priceDiffersOnPlatforms: number
+  isNew: boolean
+  imageUrl: string | null
+  imagesSource: string | null
+  deletedAt: string | null
+  lockVersion: number
+  updatedAt: string
+}
+
+/**
+ * A product as the DETAIL returns it — the Default values, with per-platform
+ * content fetched separately through `platform-content`.
+ *
+ * `lockedFields` are the fields the API refuses to change once the product
+ * has left Draft (422 `field_locked`). `status` is not patched here either;
+ * it moves through `POST :id/status`.
+ */
+export interface VertexProduct {
+  id: string
+  type: VertexProductType
+  status: VertexProductStatus
+  sku: string
+  parentId: string | null
+  parent: { id: string, name: string, sku: string } | null
+  name: LocalizedText
+  nameEdited: boolean
+  description: LocalizedText | null
+  notes: string | null
+  isSubscription: boolean
+  isGift: boolean
+  requiresShipping: boolean
+  lockedFields: string[]
+  stockStatus: ProductStockStatus
+  stockStatusComputed: boolean
+  everOrdered: boolean
+  categories: ProductCategoryRef[]
+  platforms: ProductPlatformRef[]
+  /** The variants of a configurable; null for anything else. */
+  children: VertexProduct[] | null
+  axisValues: unknown[]
+  variantAxes: unknown[]
+  attributes: ProductAttributeValue[]
+  bundleOptions: unknown[]
+  pricingSummary: ProductPricingSummary
+  media: ProductMedia[]
+  publishedAt: string | null
+  deletedAt: string | null
+  createdAt: string
+  updatedAt: string
+  lockVersion: number
+}
+
+/**
+ * POST body.
+ *
+ * Creates product data only — prices are set afterwards through the
+ * price-plan endpoints. A Draft needs no more than a name; without a `sku`
+ * the API generates one. `status` may only ever be `draft` here.
+ */
+export interface VertexProductDraft {
+  type?: VertexProductType
+  name: LocalizedText
+  sku?: string
+  description?: LocalizedText | null
+  notes?: string | null
+  requiresShipping?: boolean
+  isSubscription?: boolean
+  isGift?: boolean
+  categoryIds?: string[]
+  platformIds?: string[]
+  attributes?: { attributeId: string, optionIds?: string[], valueText?: LocalizedText }[]
+  media?: { uploadId: string, role?: string, alt?: LocalizedText }[]
+  status?: 'draft'
+}
+
+/**
+ * PATCH body.
+ *
+ * `type` and `status` are absent because the API does not change them here:
+ * a type only moves simple → configurable through `variants/generate`, and
+ * status moves through `POST :id/status`. Per-platform name, notes, images
+ * and categories go through `platform-content`.
+ */
+export type VertexProductPatch = Partial<Omit<VertexProductDraft, 'type' | 'status'>>
+
+export interface VertexProductQuery extends CursorQuery {
+  q?: string
+  /** `top_level` by default; `children` or `all` include variants. */
+  hierarchy?: 'top_level' | 'children' | 'all'
+  parentId?: string
+  sellable?: boolean
+  /** Comma lists. */
+  type?: string
+  status?: string
+  stockStatus?: string
+  categoryId?: string
+  includeDescendants?: boolean
+  platformId?: string
+  platformIds?: string
+  excludeProductId?: string
+  containsProductId?: string
+  isGift?: boolean
+  sort?: string
+}

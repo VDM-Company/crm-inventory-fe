@@ -328,3 +328,84 @@ export const vertexCategoryProductsOrderSchema = z.object({
   productIds,
   platformId: z.string().trim().min(1).optional()
 }).loose()
+
+export const vertexProductTypeSchema = z.enum(['simple', 'configurable', 'bundle'])
+
+const productAttributeValue = z.object({
+  attributeId: z.string().trim().min(1),
+  optionIds: z.array(z.string().trim().min(1)).optional(),
+  valueText: localizedText.optional()
+}).loose().refine(
+  v => (v.optionIds?.length ?? 0) > 0 || v.valueText !== undefined,
+  'Give the attribute option ids or a text value.'
+)
+
+const productMedia = z.object({
+  uploadId: z.string().trim().min(1),
+  role: z.string().trim().optional(),
+  alt: localizedText.optional()
+}).loose()
+
+const productBody = z.object({
+  name: localizedText,
+  sku: z.string().trim().min(1).optional(),
+  description: localizedText.nullish(),
+  notes: z.string().nullish(),
+  requiresShipping: z.boolean().optional(),
+  isSubscription: z.boolean().optional(),
+  isGift: z.boolean().optional(),
+  categoryIds: z.array(z.string().trim().min(1)).optional(),
+  platformIds: z.array(z.string().trim().min(1)).optional(),
+  attributes: z.array(productAttributeValue).optional(),
+  media: z.array(productMedia).optional()
+}).loose()
+
+/** `status` may only ever be `draft` on create; anything else is 422 `in`. */
+export const vertexProductCreateSchema = productBody.extend({
+  type: vertexProductTypeSchema.optional(),
+  status: z.literal('draft', { error: 'A product can only be created as a draft.' }).optional()
+})
+
+/**
+ * `type` and `status` are rejected rather than ignored: the API changes a
+ * type only through `variants/generate` and a status only through
+ * `POST :id/status`, so accepting either here would look like a save that
+ * worked.
+ */
+export const vertexProductUpdateSchema = productBody.partial().extend({
+  lockVersion: z.number({ error: 'lockVersion is required on an update.' }).int().min(0),
+  type: z.never({ error: 'A product type changes through variant generation, not here.' }).optional(),
+  status: z.never({ error: 'Status changes through POST /status, not here.' }).optional()
+})
+
+export const vertexProductStatusSchema = z.object({
+  status: z.enum(['draft', 'active', 'inactive'], { error: 'Choose draft, active or inactive.' })
+}).loose()
+
+export const vertexProductDuplicateSchema = z.object({
+  name: localizedText.optional(),
+  skuPrefix: z.string().trim().min(1).optional()
+}).loose()
+
+export const vertexProductQuerySchema = z.object({
+  q: z.string().trim().optional(),
+  hierarchy: z.enum(['top_level', 'children', 'all']).optional(),
+  parentId: z.string().trim().min(1).optional(),
+  sellable: z.stringbool().optional(),
+  // comma lists upstream, so they stay strings rather than arrays
+  type: z.string().trim().optional(),
+  status: z.string().trim().optional(),
+  stockStatus: z.string().trim().optional(),
+  categoryId: z.string().trim().optional(),
+  includeDescendants: z.stringbool().optional(),
+  platformId: z.string().trim().optional(),
+  platformIds: z.string().trim().optional(),
+  excludeProductId: z.string().trim().min(1).optional(),
+  containsProductId: z.string().trim().min(1).optional(),
+  isGift: z.stringbool().optional(),
+  sort: z.string().trim().optional(),
+  all: z.stringbool().optional(),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  includeTotal: z.stringbool().optional()
+}).loose()
