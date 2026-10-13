@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { mountSuspended, registerEndpoint } from '@nuxt/test-utils/runtime'
 import { defineComponent } from 'vue'
+import { FEE_BASE_ID } from '../../../shared/seeds'
 
 async function withSetup<T>(fn: () => T) {
   let result!: T
@@ -94,9 +95,11 @@ describe('useApiFees', () => {
     const api = await withSetup(() => useApiFees())
     const fees = await api.list()
 
-    // structural, not data: every product's pricing carries it
+    // structural, not data: every product's pricing carries it. The id comes
+    // from the seed rather than a literal, so it survives the seed being
+    // realigned to the upstream's ids.
     expect(fees[0]).toEqual({
-      id: 'fee_base', name: 'Base Price', description: 'Core product price', system: true
+      id: FEE_BASE_ID, name: 'Base Price', description: 'Core product price', system: true
     })
   })
 

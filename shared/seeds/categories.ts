@@ -1,21 +1,23 @@
 import type { Category } from '../types/domain'
 
+/**
+ * The Vertex Commerce mock's category tree, flattened to the shape the older
+ * screens read, with its real ids.
+ *
+ * Shorter than the tree this replaced — the upstream mock seeds five
+ * categories, not seventeen — because a seed that invents rows the API does
+ * not have is what made the two seams disagree in the first place.
+ */
+export const SIM_CARDS_ID = '01a116c8-5f59-720a-8ab7-47b2ccb23a6a'
+export const TOURIST_SIM_ID = '01a116c8-5f68-737f-8e64-ca7edc41f65a'
+export const ESIM_ID = '01a116c8-5f76-7014-b8fe-f96f42462af0'
+export const POCKET_WIFI_ID = '01a116c8-5f83-710b-9d23-4a66a96b21dd'
+export const ACCESSORIES_ID = '01a116c8-5f92-7281-8786-6bbe1d9a5bb5'
+
 export const CATEGORY_SEED: Category[] = [
-  { id: 'c_sim', name: 'SIM Cards', parentId: null, enabled: true },
-  { id: 'c_sim_tour', name: 'Tourist SIM', parentId: 'c_sim', enabled: true },
-  { id: 'c_sim_res', name: 'Resident SIM', parentId: 'c_sim', enabled: true },
-  { id: 'c_sim_esim', name: 'eSIM', parentId: 'c_sim', enabled: true },
-  { id: 'c_dev', name: 'Devices', parentId: null, enabled: true },
-  { id: 'c_dev_rout', name: 'Router', parentId: 'c_dev', enabled: true },
-  { id: 'c_dev_dong', name: 'Dongle', parentId: 'c_dev', enabled: true },
-  { id: 'c_data', name: 'Data Plan', parentId: null, enabled: true },
-  { id: 'c_data_pre', name: 'Prepaid Data', parentId: 'c_data', enabled: true },
-  { id: 'c_data_unl', name: 'Unlimited Data', parentId: 'c_data', enabled: true },
-  { id: 'c_wifi', name: 'WiFi', parentId: null, enabled: true },
-  { id: 'c_wifi_pkt', name: 'Pocket WiFi', parentId: 'c_wifi', enabled: true },
-  { id: 'c_wifi_home', name: 'Home Router', parentId: 'c_wifi', enabled: true },
-  { id: 'c_head', name: 'Headphones', parentId: null, enabled: true },
-  { id: 'c_acc', name: 'Accessories', parentId: null, enabled: true },
-  { id: 'c_acc_chg', name: 'Chargers', parentId: 'c_acc', enabled: true },
-  { id: 'c_acc_case', name: 'Cases', parentId: 'c_acc', enabled: true }
+  { id: SIM_CARDS_ID, name: 'SIM Cards', parentId: null, enabled: true },
+  { id: TOURIST_SIM_ID, name: 'Tourist SIM', parentId: SIM_CARDS_ID, enabled: true },
+  { id: ESIM_ID, name: 'eSIM', parentId: SIM_CARDS_ID, enabled: true },
+  { id: POCKET_WIFI_ID, name: 'Pocket WiFi', parentId: null, enabled: true },
+  { id: ACCESSORIES_ID, name: 'Accessories', parentId: null, enabled: true }
 ]

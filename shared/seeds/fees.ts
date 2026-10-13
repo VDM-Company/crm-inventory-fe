@@ -1,12 +1,17 @@
 import type { Fee } from '../types/domain'
 
-/** The one fee every product carries; it cannot be removed or unpublished. */
-export const FEE_BASE_ID = 'fee_base'
+/**
+ * The Vertex Commerce mock's fee items, with its real ids.
+ *
+ * All three are system rows upstream (`is_system: true`), which is why none
+ * of them can be deleted on the Pricing screen any more.
+ */
+export const FEE_BASE_ID = '01a116c8-5bb9-7015-ade8-524d8e5a9617'
+export const FEE_TAX_ID = '01a116c8-5bbc-7366-bf20-3dd85e4ecd21'
+export const FEE_SHIPPING_ID = '01a116c8-5bbd-7a3a-a162-2181f12499fd'
 
 export const FEE_SEED: Fee[] = [
   { id: FEE_BASE_ID, name: 'Base Price', description: 'Core product price', system: true },
-  { id: 'fee_tax', name: 'Tax', description: 'Applicable taxes', system: false },
-  { id: 'fee_shipping', name: 'Shipping', description: 'Delivery cost', system: false },
-  { id: 'fee_handling', name: 'Handling', description: 'Handling / processing fee', system: false },
-  { id: 'fee_insurance', name: 'Insurance', description: 'Optional coverage', system: false }
+  { id: FEE_TAX_ID, name: 'Tax', description: '', system: true },
+  { id: FEE_SHIPPING_ID, name: 'Shipping', description: '', system: true }
 ]

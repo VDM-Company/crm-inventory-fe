@@ -4,7 +4,7 @@ import type { Platform, StoredProduct } from '~/types'
 // through `useApiPlatforms()`.
 
 // re-exported so the existing auto-imported call sites keep working
-export { PLATFORM_SEED } from '#shared/seeds'
+export { PLATFORM_SEED, SKSIM_ID, SIMPOINT_ID, OLDSTORE_ID } from '#shared/seeds'
 
 export function platformById(list: Platform[], id: string): Platform | null {
   return list.find(p => p.id === id) || null

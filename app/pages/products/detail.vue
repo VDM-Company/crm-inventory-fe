@@ -74,7 +74,7 @@ const DEMO_PRODUCT: DetailProduct = {
   notes: 'Best seller for inbound travelers. Restocked every 6 weeks.',
   category: 'SIM Card',
   platform: 'SK SIM',
-  platformIds: ['p_sk'],
+  platformIds: [SKSIM_ID],
   status: 'Active',
   image: null,
   attributes: [

@@ -42,7 +42,7 @@ const DEMO_PRODUCT: ParentProduct = {
   productType: 'variant',
   hasVariants: true,
   category: 'SIM Card',
-  platformIds: ['p_sk'],
+  platformIds: [SKSIM_ID],
   attributes: [
     { name: 'Data', values: ['15GB'] },
     { name: 'Duration', values: ['8 Days', '16 Days', '31 Days'] }
@@ -123,16 +123,16 @@ function hydrate(v: VariantRow): VariantRow {
       monthly: '',
       components: [
         { feeId: FEE_BASE_ID, published: true, amount: (v.price === '' || v.price == null) ? '' : v.price },
-        { feeId: 'fee_tax', published: true, amount: '' },
-        { feeId: 'fee_shipping', published: true, amount: '' }
+        { feeId: FEE_TAX_ID, published: true, amount: '' },
+        { feeId: FEE_SHIPPING_ID, published: true, amount: '' }
       ]
     }
   } else {
     // v3 guarantees the three default components exist on an already-priced row
     const comps = (d.pricing.components || []).map(c => ({ ...c }))
     if (!comps.some(c => c.feeId === FEE_BASE_ID)) comps.unshift({ feeId: FEE_BASE_ID, published: true, amount: '' })
-    if (!comps.some(c => c.feeId === 'fee_tax')) comps.push({ feeId: 'fee_tax', published: true, amount: '' })
-    if (!comps.some(c => c.feeId === 'fee_shipping')) comps.push({ feeId: 'fee_shipping', published: true, amount: '' })
+    if (!comps.some(c => c.feeId === FEE_TAX_ID)) comps.push({ feeId: FEE_TAX_ID, published: true, amount: '' })
+    if (!comps.some(c => c.feeId === FEE_SHIPPING_ID)) comps.push({ feeId: FEE_SHIPPING_ID, published: true, amount: '' })
     d.pricing = {
       isSubscription: !!d.pricing.isSubscription,
       monthly: d.pricing.monthly != null ? d.pricing.monthly : '',

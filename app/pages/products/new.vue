@@ -46,8 +46,8 @@ const form = reactive({
   stock: 'in_stock',
   initialComponents: [
     { feeId: 'fee_base', published: true, amount: '' },
-    { feeId: 'fee_tax', published: true, amount: '' },
-    { feeId: 'fee_shipping', published: true, amount: '' }
+    { feeId: FEE_TAX_ID, published: true, amount: '' },
+    { feeId: FEE_SHIPPING_ID, published: true, amount: '' }
   ] as InitialComponent[]
 })
 
