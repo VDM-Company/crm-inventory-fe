@@ -11,6 +11,7 @@ import {
 } from '../../shared/schemas'
 import { fromVertex, toVertex } from '../../shared/utils/vertex-wire'
 import { localized } from '../../shared/utils/localized'
+import { variantLabel } from '../../shared/utils/variant-pricing'
 import type { BundleOption, BundleQuote, PricePlan, ProductContent, ProductPricing, VariantPreview } from '../../shared/types/vertex'
 
 interface PostmanResponse { code: number, name?: string, body?: string, originalRequest?: { body?: { raw?: string } } }
@@ -154,6 +155,41 @@ describe('variants', () => {
 
     expect(toVertex(parsed)).toEqual(body)
     expect(() => vertexVariantSimulateSchema.parse({ name: { en: 'x' }, axes: [{ attributeId: 'a', optionIds: ['o'] }] })).toThrow()
+  })
+})
+
+describe('variant children', () => {
+  // the only examples that carry them: duplicate and generate both answer with
+  // the parent and its four variants
+  const withChildren = () => example(endpoint('/duplicate', 'POST'), 201).data
+
+  it('returns variants as LIST rows, not full product records', () => {
+    const parent = fromVertex<Record<string, unknown>>(withChildren())
+    const kids = parent.children as Record<string, unknown>[]
+
+    expect(kids).toHaveLength(4)
+    // a list row: it has priceFrom and imageUrl, and no detail-only fields
+    expect(kids[0]).toHaveProperty('priceFrom')
+    expect(kids[0]).toHaveProperty('variantCount')
+    expect(kids[0]).not.toHaveProperty('attributes')
+    expect(kids[0]).not.toHaveProperty('lockedFields')
+  })
+
+  it('carries the axis values the screen names a variant by', () => {
+    const kids = (fromVertex<Record<string, unknown>>(withChildren()).children) as {
+      axisValues: { attributeLabel: string, label: string }[]
+    }[]
+
+    expect(kids[0]!.axisValues).toEqual([
+      { attributeLabel: 'Color', label: 'Black' },
+      { attributeLabel: 'Validity', label: '8 Days' }
+    ])
+    expect(variantLabel(kids[0]!.axisValues)).toBe('Black / 8 Days')
+  })
+
+  it('gives every variant its own id, which is what its prices hang off', () => {
+    const kids = (fromVertex<Record<string, unknown>>(withChildren()).children) as { id: string }[]
+    expect(new Set(kids.map(k => k.id)).size).toBe(4)
   })
 })
 

@@ -471,6 +471,12 @@ export interface ProductMedia {
   sizes: Record<string, string>
 }
 
+/** One axis value on a variant: which attribute, and which option's label. */
+export interface AxisValue {
+  attributeLabel: string
+  label: string
+}
+
 /**
  * A product as the LIST returns it.
  *
@@ -491,7 +497,7 @@ export interface VertexProductRow {
   nameSource: string | null
   sku: string
   parent: { id: string, name: string, sku: string } | null
-  axisValues: unknown[]
+  axisValues: AxisValue[]
   variantCount: number | null
   platforms: ProductPlatformRef[]
   categories: ProductCategoryRef[]
@@ -540,9 +546,14 @@ export interface VertexProduct {
   everOrdered: boolean
   categories: ProductCategoryRef[]
   platforms: ProductPlatformRef[]
-  /** The variants of a configurable; null for anything else. */
-  children: VertexProduct[] | null
-  axisValues: unknown[]
+  /**
+   * The variants of a configurable, as LIST rows rather than full records —
+   * each carries its `axisValues`, and its own id to read the full one with.
+   * Null for anything that is not a configurable, and absent without
+   * `?include=children`.
+   */
+  children: VertexProductRow[] | null
+  axisValues: AxisValue[]
   variantAxes: unknown[]
   attributes: ProductAttributeValue[]
   bundleOptions: unknown[]

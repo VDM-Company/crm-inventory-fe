@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Fee, VertexPlatform } from '~/types'
+import type { FeeItem, ProductPricing, VertexPlatform, VertexProduct } from '~/types'
 
 useHead({ title: 'Variant Detail — Vertex' })
 
@@ -22,37 +22,6 @@ interface VariantRow {
   pricing?: VariantPricing
   priceOverrides?: Record<string, PriceOverride>
 }
-interface ParentProduct {
-  id: string | null
-  name: string
-  sku?: string
-  productType?: string
-  hasVariants?: boolean
-  category?: string
-  categoryPath?: string
-  platformIds?: string[]
-  attributes?: { name: string, values: string[] }[]
-  variants?: VariantRow[]
-}
-
-const DEMO_PRODUCT: ParentProduct = {
-  id: null,
-  name: 'Tourist SIM 15GB',
-  sku: 'SKU-2000',
-  productType: 'variant',
-  hasVariants: true,
-  category: 'SIM Card',
-  platformIds: [SKSIM_ID],
-  attributes: [
-    { name: 'Data', values: ['15GB'] },
-    { name: 'Duration', values: ['8 Days', '16 Days', '31 Days'] }
-  ],
-  variants: [
-    { name: '15GB / 8 Days', sku: 'SKU-2000-01', price: 24, stock: 42, active: true },
-    { name: '15GB / 16 Days', sku: 'SKU-2000-02', price: 32, stock: 28, active: true },
-    { name: '15GB / 31 Days', sku: 'SKU-2000-03', price: 44, stock: 12, active: false }
-  ]
-}
 
 function qParam(v: unknown): string {
   if (Array.isArray(v)) return typeof v[0] === 'string' ? v[0] : ''
@@ -62,10 +31,6 @@ const productKey = qParam(route.query.product) || 'demo'
 const variantNameQuery = qParam(route.query.variant)
 
 // ── state ──
-// SSR-safe: server and first client paint both render the DEMO product; the
-// stored record is fetched on mount.
-const product = ref<ParentProduct>({ ...DEMO_PRODUCT })
-const isStored = ref(false)
 const mode = ref<'view' | 'edit'>('view')
 const scope = ref('default')
 const scopeOpen = ref(false)
@@ -75,39 +40,77 @@ const saveError = ref('')
 const loading = ref(true)
 
 const platforms = ref<VertexPlatform[]>([])
-const fees = ref<Fee[]>([])
+const fees = ref<FeeItem[]>([])
 const imageInput = ref<HTMLInputElement | null>(null)
 
-const productsApi = useApiProducts()
+const productsApi = useApiProductsV2()
 const platformsApi = useApiPlatformsV2()
-const feesApi = useApiFees()
+const feesApi = useApiFeeItems()
+
+/**
+ * The three API documents this screen folds together.
+ *
+ * A variant is its own product here — a child with `parentId`, its own SKU,
+ * status and price plan — so the screen reads the parent (for its children
+ * and its platforms), the variant record, and the variant's pricing. It is
+ * NOT a row inside the parent any more.
+ *
+ * The URL still says `?product=<parentId>&variant=<label>` because
+ * `products/detail` still links that way; it becomes `?id=<variantId>` when
+ * that screen moves.
+ */
+const parentRecord = ref<VertexProduct | null>(null)
+const variantRecord = ref<VertexProduct | null>(null)
+const pricingDoc = ref<ProductPricing | null>(null)
+const notFoundHere = ref(false)
+
+const baseFeeId = computed(() => fees.value.find(f => f.kind === 'base')?.id || '')
+
+async function loadPricing(variantId: string) {
+  try {
+    pricingDoc.value = await productsApi.pricing(variantId)
+  } catch (err) {
+    // a product with no price yet, or one the API will not price
+    pricingDoc.value = null
+    if ((err as { statusCode?: number })?.statusCode !== 422) {
+      saveError.value = apiErrorMessage(err, 'Could not load this variant’s prices.')
+    }
+  }
+}
 
 onMounted(async () => {
   try {
-    try {
-      ;[platforms.value, fees.value] = await Promise.all([platformsApi.list(), feesApi.list()])
-    } catch (err) {
-      saveError.value = apiErrorMessage(err, 'Could not load this variant.')
+    ;[platforms.value, fees.value] = await Promise.all([platformsApi.list(), feesApi.list()])
+  } catch (err) {
+    saveError.value = apiErrorMessage(err, 'Could not load this variant.')
+  }
+
+  if (!productKey || productKey === 'demo') {
+    loading.value = false
+    return
+  }
+
+  try {
+    const parent = await productsApi.get(productKey, { include: 'children' })
+    parentRecord.value = parent
+    const child = findVariantByLabel(parent.children, variantNameQuery)
+    if (!child) {
+      notFoundHere.value = true
+      return
     }
-    if (productKey && productKey !== 'demo') {
-      try {
-        const rec = await productsApi.get<ParentProduct>(productKey)
-        if (rec) {
-          product.value = rec
-          isStored.value = !!rec.id
-        }
-      } catch (err) {
-        // only an unknown id keeps the demo record; anything else must surface,
-        // or an edit here would report success without saving
-        if ((err as { statusCode?: number })?.statusCode !== 404) {
-          saveError.value = apiErrorMessage(err, 'Could not load this product.')
-        }
-      }
-    }
+    variantRecord.value = await productsApi.get(child.id)
+    await loadPricing(child.id)
+  } catch (err) {
+    saveError.value = apiErrorMessage(err, 'Could not load this variant.')
   } finally {
     loading.value = false
   }
 })
+
+/** The row the screen renders, built from the three documents above. */
+const view = computed(() =>
+  variantRecord.value ? toVariantView(variantRecord.value, pricingDoc.value, scope.value, variantNameQuery) : null
+)
 
 const isViewMode = computed(() => mode.value === 'view')
 const isEditMode = computed(() => mode.value === 'edit')
@@ -115,47 +118,69 @@ const isEditMode = computed(() => mode.value === 'edit')
 // ── the variant + its hydrated pricing ──
 // a variant carries a full pricing object; legacy rows only have `price`, which
 // seeds the Base Price component amount
+/**
+ * Make sure the editor has a Base Price row.
+ *
+ * It no longer invents Tax and Shipping rows: with the API the components
+ * ARE the plan's lines, and a line that is not there is a price nobody set.
+ * Only the base is seeded, because a plan must carry exactly one.
+ */
 function hydrate(v: VariantRow): VariantRow {
   const d: VariantRow = { ...v }
-  if (!d.pricing) {
-    d.pricing = {
-      isSubscription: false,
-      monthly: '',
-      components: [
-        { feeId: FEE_BASE_ID, published: true, amount: (v.price === '' || v.price == null) ? '' : v.price },
-        { feeId: FEE_TAX_ID, published: true, amount: '' },
-        { feeId: FEE_SHIPPING_ID, published: true, amount: '' }
-      ]
-    }
-  } else {
-    // v3 guarantees the three default components exist on an already-priced row
-    const comps = (d.pricing.components || []).map(c => ({ ...c }))
-    if (!comps.some(c => c.feeId === FEE_BASE_ID)) comps.unshift({ feeId: FEE_BASE_ID, published: true, amount: '' })
-    if (!comps.some(c => c.feeId === FEE_TAX_ID)) comps.push({ feeId: FEE_TAX_ID, published: true, amount: '' })
-    if (!comps.some(c => c.feeId === FEE_SHIPPING_ID)) comps.push({ feeId: FEE_SHIPPING_ID, published: true, amount: '' })
-    d.pricing = {
-      isSubscription: !!d.pricing.isSubscription,
-      monthly: d.pricing.monthly != null ? d.pricing.monthly : '',
-      components: comps
-    }
+  const comps = (d.pricing?.components || []).map(c => ({ ...c }))
+  if (baseFeeId.value && !comps.some(c => c.feeId === baseFeeId.value)) {
+    comps.unshift({ feeId: baseFeeId.value, published: true, amount: '' })
   }
-  d.priceOverrides = d.priceOverrides ? JSON.parse(JSON.stringify(d.priceOverrides)) : {}
+  d.pricing = {
+    isSubscription: !!d.pricing?.isSubscription,
+    monthly: d.pricing?.monthly ?? '',
+    components: comps
+  }
+  d.priceOverrides = {}
   return d
 }
 
-const variant = computed<VariantRow | null>(() =>
-  (product.value.variants || []).find(v => v.name === variantNameQuery) || null
-)
-const found = computed(() => !!variant.value)
+/**
+ * The variant as the old view model, built from the API record and its plan.
+ *
+ * `notFoundHere` is deliberate: an unknown label used to fall through to the
+ * demo product, which showed one variant's data under another's name.
+ */
+const variant = computed<VariantRow | null>(() => {
+  const vw = view.value
+  if (!vw) return null
+  return {
+    name: vw.label,
+    sku: vw.sku,
+    description: vw.description,
+    active: vw.active,
+    stock: vw.stockStatus,
+    pricing: {
+      isSubscription: false,
+      monthly: '',
+      components: vw.components.map(c => ({
+        feeId: c.feeItemId,
+        published: c.isPublished,
+        amount: c.amount,
+        label: c.label
+      }))
+    },
+    priceOverrides: {}
+  }
+})
+const found = computed(() => !!variantRecord.value && !notFoundHere.value)
 // the row the page renders from: the draft while editing, a hydrated copy in view
 const src = computed<VariantRow | null>(() => {
   if (isEditMode.value && draft.value) return draft.value
   return variant.value ? hydrate(variant.value) : null
 })
 
-const parentName = computed(() => product.value.name || 'Product')
-const parentTo = computed(() => isStored.value && product.value.id
-  ? { path: '/products/detail', query: { id: product.value.id } }
+const parentName = computed(() => {
+  const p = parentRecord.value
+  return (p ? localized(p.name) : '') || 'Product'
+})
+const parentTo = computed(() => parentRecord.value
+  ? { path: '/products/detail', query: { id: parentRecord.value.id } }
   : { path: '/products/detail' }
 )
 const headerTitle = computed(() => (parentName.value ? parentName.value.toUpperCase() + ' — ' : '') + variantNameQuery)
@@ -163,13 +188,11 @@ const skuLabel = computed(() => src.value?.sku || '—')
 const active = computed(() => !!src.value?.active)
 const statusLabel = computed(() => active.value ? 'Active' : 'Inactive')
 const statusHelper = computed(() => active.value ? 'Available for sale' : 'Hidden from customers')
-const categoryLabel = computed(() => product.value.categoryPath || product.value.category || '—')
-const attrPairs = computed(() => {
-  const attrNames = (product.value.attributes || []).map(a => a.name)
-  return (variantNameQuery || '').split(' / ').map((val, i) => ({
-    label: (attrNames[i] ? attrNames[i] + ' = ' : '') + val
-  }))
-})
+const categoryLabel = computed(() => (parentRecord.value?.categories || [])[0]?.path || '—')
+// the API names the axes on the variant itself
+const attrPairs = computed(() =>
+  (variantRecord.value?.axisValues || []).map(a => ({ label: `${a.attributeLabel} = ${a.label}` }))
+)
 
 // ── style helpers (this screen's toggles are larger than the other pages') ──
 function scopeOptionStyle(selected: boolean) {
@@ -179,8 +202,11 @@ const BADGE_PUBLISHED = 'font-size:11px;font-weight:600;color:#64748b;background
 const BADGE_UNPUBLISHED = 'font-size:11px;font-weight:600;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:999px;padding:1px 8px;white-space:nowrap;'
 
 // ── scope (Default / one of the parent's assigned platforms) ──
+// a variant inherits its parent's platforms; the API has no per-variant set
 const assignedPlatforms = computed(() =>
-  (product.value.platformIds || []).map(id => platformById(platforms.value, id)).filter((p): p is VertexPlatform => !!p)
+  (parentRecord.value?.platforms || [])
+    .map(p => platformById(platforms.value, p.id))
+    .filter((p): p is VertexPlatform => !!p)
 )
 const scopeChoices = computed(() =>
   [{ id: 'default', name: 'Default (All Platforms)' }]
@@ -263,7 +289,7 @@ function onToggleGift() {
 }
 
 // ── per-variant platforms (a subset of the parent's) ──
-const parentPlatformIds = computed(() => product.value.platformIds || [])
+const parentPlatformIds = computed(() => (parentRecord.value?.platforms || []).map(p => p.id))
 const variantPlatformIds = computed(() => {
   const base = Array.isArray(src.value?.platformIds) ? src.value!.platformIds! : parentPlatformIds.value
   return base.filter(id => parentPlatformIds.value.indexOf(id) !== -1)
@@ -302,8 +328,11 @@ function addComponent() {
   const d = draft.value
   if (!d || !d.pricing) return
   const used = d.pricing.components.map(c => c.feeId)
+  // Only real fee items: the old fallback invented `fee_custom_<ts>`, which
+  // the API rejects. With none left the button is disabled instead.
   const next = fees.value.find(f => used.indexOf(f.id) === -1)
-  const feeId = next ? next.id : 'fee_custom_' + Date.now()
+  if (!next) return
+  const feeId = next.id
   draft.value = {
     ...d,
     pricing: { ...d.pricing, components: [...d.pricing.components, { feeId, published: true, amount: '' }] }
@@ -311,7 +340,7 @@ function addComponent() {
 }
 function removeComponent(feeId: string) {
   const d = draft.value
-  if (!d || !d.pricing || feeId === FEE_BASE_ID) return
+  if (!d || !d.pricing || feeId === baseFeeId.value) return
   draft.value = {
     ...d,
     pricing: { ...d.pricing, components: d.pricing.components.filter(c => c.feeId !== feeId) }
@@ -366,13 +395,13 @@ const pricingComponents = computed(() =>
     const pub = c.published !== false
     return {
       feeId: c.feeId,
-      name: feeById(fees.value, c.feeId)?.name || c.label || 'Component',
+      name: localized(fees.value.find(f => f.id === c.feeId)?.name) || c.label || 'Component',
       amount: (amt === '' || amt == null) ? '' : amt,
       amountLabel: (amt === '' || amt == null) ? '¥0' : '¥' + Number(amt).toLocaleString('en-US'),
       published: pub,
       publishedLabel: pub ? 'Published' : 'Unpublished',
       publishedStyle: pub ? BADGE_PUBLISHED : BADGE_UNPUBLISHED,
-      canRemove: isEditMode.value && c.feeId !== FEE_BASE_ID,
+      canRemove: isEditMode.value && c.feeId !== baseFeeId.value,
       rowStyle: `display:grid;grid-template-columns:1fr 150px 130px 40px;gap:8px;align-items:center;padding:11px 16px;border-bottom:1px solid #f1f5f9;${pub ? '' : 'background:#fafafa;color:#94a3b8;'}`
     }
   })
@@ -402,22 +431,73 @@ function onCancelEdit() {
   scopeOpen.value = false
   mode.value = 'view'
 }
+/**
+ * Saving is four requests, and their order is the API's, not a preference.
+ *
+ *   1. PATCH the variant — its own record, with its own `lockVersion`.
+ *   2. Override the platform's price, if this scope was following Default and
+ *      a price was edited. The API copies the Default plan to start from.
+ *   3. Create a price plan, but only when the prices actually changed: every
+ *      POST supersedes the active plan and adds a row to the product's price
+ *      history, so a rename must not reprice.
+ *   4. Set the status LAST. Activating validates the product is complete, so
+ *      doing it before the plan exists answers 422 `base_price_required`.
+ *
+ * It is not a transaction. A failure partway leaves the earlier steps
+ * applied, which is why the records are re-read before the error is shown.
+ */
 async function onSaveEdit() {
   const d = draft.value
-  if (!d) return
-  const merged: ParentProduct = {
-    ...product.value,
-    variants: (product.value.variants || []).map(v => v.name === variantNameQuery ? { ...d } : v)
-  }
-  if (isStored.value && merged.id) {
-    try {
-      await productsApi.update<ParentProduct>(merged.id, merged)
-    } catch (err) {
-      saveError.value = apiErrorMessage(err, 'Could not save the variant.')
-      return
+  const v = variantRecord.value
+  if (!d || !v) return
+
+  const lines = componentsToLines(
+    (d.pricing?.components || []).map(c => ({
+      feeItemId: c.feeId,
+      amount: String(c.amount ?? ''),
+      isPublished: c.published !== false
+    })),
+    baseFeeId.value
+  )
+  const savedLines = scopePricing(pricingDoc.value, scope.value)?.activePlan?.lines
+  const pricesChanged = !pricePlanUnchanged(savedLines, lines)
+  const wantActive = !!d.active
+
+  saveError.value = ''
+  try {
+    const patched = await productsApi.update(
+      v.id,
+      { description: d.description ? { en: d.description } : null },
+      v.lockVersion
+    )
+    variantRecord.value = patched
+
+    if (pricesChanged) {
+      if (!isDefaultScope.value && !scopeOverrides(pricingDoc.value, scope.value)) {
+        await productsApi.overridePlatformPrice(v.id, scope.value)
+      }
+      await productsApi.createPricePlan(v.id, { scope: scope.value, effectiveAt: null, lines })
     }
+
+    if (wantActive !== (patched.status === 'active')) {
+      variantRecord.value = await productsApi.setStatus(v.id, wantActive ? 'active' : 'inactive')
+    }
+
+    await loadPricing(v.id)
+  } catch (err) {
+    // the steps above are not atomic, so re-read before reporting
+    try {
+      variantRecord.value = await productsApi.get(v.id)
+      await loadPricing(v.id)
+    } catch {
+      // leave what is on screen; the message below is the useful part
+    }
+    saveError.value = apiErrorCode(err) === 'stale_version'
+      ? 'Someone else changed this variant. Reload the page before saving again.'
+      : apiErrorMessage(err, 'Could not save the variant.')
+    return
   }
-  product.value = merged
+
   mode.value = 'view'
   showToast('Variant updated successfully')
 }

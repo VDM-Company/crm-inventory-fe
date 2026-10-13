@@ -56,8 +56,12 @@ export function useApiProductsV2() {
     page: (query?: VertexProductQuery) =>
       $fetch<VertexList<VertexProductRow>>(base, { query: query as Record<string, unknown> }),
 
-    /** The Default values of one product. */
-    get: (id: string) => $fetch<VertexProduct>(`${base}/${id}`),
+    /**
+     * The Default values of one product. `include: 'children'` adds a
+     * configurable's variants, as list rows carrying their axis values.
+     */
+    get: (id: string, options?: { include?: 'children' }) =>
+      $fetch<VertexProduct>(`${base}/${id}`, { query: options?.include ? { include: options.include } : undefined }),
 
     /** Creates product data only; prices come from the price-plan endpoints. */
     create: (draft: VertexProductDraft) =>
