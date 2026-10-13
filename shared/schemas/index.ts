@@ -203,3 +203,52 @@ export const vertexPlatformQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
   includeTotal: z.stringbool().optional()
 }).loose()
+
+export const attributeInputTypeSchema = z.enum(['dropdown', 'swatch', 'radio', 'text'])
+
+const attributeOptionBody = z.object({
+  label: localizedText,
+  swatchType: z.string().trim().optional(),
+  swatchValue: z.string().trim().optional()
+}).loose()
+
+export const vertexAttributeCreateSchema = z.object({
+  code: z.string().trim().regex(/^[a-z0-9_]{2,50}$/, 'Use 2–50 lowercase letters, digits or underscores.'),
+  label: localizedText,
+  inputType: attributeInputTypeSchema,
+  isFilterable: z.boolean().optional(),
+  // the API accepts the first options inline and assigns their ids
+  options: z.array(attributeOptionBody).optional()
+}).loose()
+
+/**
+ * `options` is rejected rather than ignored: after creation the API manages
+ * them through their own endpoints, and silently dropping them here would
+ * look like a save that worked.
+ */
+export const vertexAttributeUpdateSchema = z.object({
+  lockVersion: z.number({ error: 'lockVersion is required on an update.' }).int().min(0),
+  label: localizedText.optional(),
+  inputType: attributeInputTypeSchema.optional(),
+  isFilterable: z.boolean().optional(),
+  options: z.never({ error: 'Change options through the option endpoints, not with the attribute.' }).optional()
+}).loose()
+
+export const vertexAttributeOptionCreateSchema = attributeOptionBody
+export const vertexAttributeOptionUpdateSchema = attributeOptionBody.partial()
+
+/** Full order: every option id, in the order they should sit. */
+export const vertexAttributeOptionOrderSchema = z.object({
+  optionIds: z.array(z.string().trim().min(1)).min(1, 'List the options in the order they should sit.')
+}).loose()
+
+export const vertexAttributeQuerySchema = z.object({
+  q: z.string().trim().optional(),
+  inputType: z.string().trim().optional(),
+  variantAxis: z.stringbool().optional(),
+  isFilterable: z.stringbool().optional(),
+  all: z.stringbool().optional(),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  includeTotal: z.stringbool().optional()
+}).loose()

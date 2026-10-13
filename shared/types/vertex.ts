@@ -177,3 +177,85 @@ export interface VertexPlatformQuery extends CursorQuery {
   status?: 'active' | 'inactive'
   q?: string
 }
+
+// ── attributes ──────────────────────────────────────────────────────────────
+
+/** Only `dropdown` and `swatch` can be a variant axis; the server decides. */
+export type AttributeInputType = 'dropdown' | 'swatch' | 'radio' | 'text'
+
+/**
+ * One value of an attribute.
+ *
+ * This is the piece with no equivalent in the old shape, where an attribute
+ * carried `values: string[]`. Here every value is a record with its own id,
+ * its own order and its own usage count — which is why writing them is four
+ * endpoints rather than one array, and why a product references
+ * `option_ids` rather than strings.
+ *
+ * There is no `lockVersion`: the API versions the attribute, not the option.
+ */
+export interface AttributeOption {
+  id: string
+  label: LocalizedText
+  swatchType: string | null
+  swatchValue: string | null
+  swatchUrl: string | null
+  sortOrder: number
+  /** Whether any product or variant has ever used it. */
+  used: boolean
+  /** How many products use it. Deleting a used option is 409 `in_use`. */
+  usageCount: number
+}
+
+export interface Attribute {
+  id: string
+  code: string
+  label: LocalizedText
+  inputType: AttributeInputType
+  isFilterable: boolean
+  /** Server-derived from `inputType`; not something a client sets. */
+  canBeVariantAxis: boolean
+  options: AttributeOption[]
+  sortOrder: number
+  usageCount: number
+  lockVersion: number
+}
+
+/** POST body. Options may ride along, label-only; the API assigns their ids. */
+export interface AttributeDraft {
+  code: string
+  label: LocalizedText
+  inputType: AttributeInputType
+  isFilterable?: boolean
+  options?: { label: LocalizedText, swatchType?: string, swatchValue?: string }[]
+}
+
+/**
+ * PATCH body.
+ *
+ * `options` is absent on purpose: after creation the API manages them through
+ * their own endpoints, so changing the set is `addOption` / `updateOption` /
+ * `removeOption` / `reorderOptions`, not a field here.
+ */
+export interface AttributePatch {
+  label?: LocalizedText
+  inputType?: AttributeInputType
+  isFilterable?: boolean
+}
+
+export interface AttributeOptionDraft {
+  label: LocalizedText
+  swatchType?: string
+  swatchValue?: string
+}
+
+export type AttributeOptionPatch = Partial<AttributeOptionDraft>
+
+export interface AttributeQuery extends CursorQuery {
+  q?: string
+  /** Comma list; an unknown value is 422 `in`. */
+  inputType?: string
+  /** True narrows to the types that can be a variant axis. */
+  variantAxis?: boolean
+  isFilterable?: boolean
+}
