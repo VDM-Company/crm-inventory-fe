@@ -18,3 +18,18 @@ export function localized(text: LocalizedText | null | undefined, locale = 'en')
 
 /** What the API accepts for a fee item `code`; 422 `regex` otherwise. */
 export const FEE_ITEM_CODE_PATTERN = /^[a-z0-9_]{2,50}$/
+
+/**
+ * Turn a display name into something the API accepts as a `code`.
+ *
+ * Mirrors `FEE_ITEM_CODE_PATTERN` so a form can offer a sensible default
+ * instead of making someone invent one. It can still produce a string the
+ * API rejects — one character, or empty — so the field stays validated.
+ */
+export function slugifyCode(text: string): string {
+  return (text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 50)
+}

@@ -51,3 +51,24 @@ export function apiErrorMessage(err: unknown, fallback = 'Something went wrong.'
   const data = (err as { data?: { data?: { message?: string }, message?: string } })?.data
   return data?.data?.message ?? data?.message ?? fallback
 }
+
+/**
+ * The upstream's own error code — `stale_version`, `in_use`,
+ * `system_fee_item`, … — for screens that react differently per code rather
+ * than just showing the message.
+ *
+ * Only the Vertex seam sets this; the older one leaves it undefined.
+ */
+export function apiErrorCode(err: unknown): string | undefined {
+  const data = (err as { data?: { data?: { code?: string }, code?: string } })?.data
+  return data?.data?.code ?? data?.code
+}
+
+/**
+ * Whatever the upstream attached to the error: `usageCount` on a 409
+ * `in_use`, `lockVersion` on a `stale_version`.
+ */
+export function apiErrorDetails(err: unknown): Record<string, unknown> {
+  const data = (err as { data?: { data?: { details?: Record<string, unknown> }, details?: Record<string, unknown> } })?.data
+  return data?.data?.details ?? data?.details ?? {}
+}

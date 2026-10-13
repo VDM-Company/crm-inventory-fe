@@ -1,25 +1,33 @@
 <script setup lang="ts">
 import * as z from 'zod'
 import type { FormSubmitEvent, TableColumn } from '@nuxt/ui'
-import type { Fee, StoredProduct } from '~/types'
+import type { FeeItem } from '~/types'
 
 useHead({ title: 'Pricing Setting — Vertex' })
 
 interface ModalState {
   id: string | null
+  /** Immutable once created, so the input only shows on a create. */
+  code: string
   name: string
   desc: string
   icon: string
+  /** The version this row carried when it was read; required on a save. */
+  lockVersion: number
+  /** Stop auto-slugging the code once someone has typed their own. */
+  codeTouched: boolean
   error: string
 }
 
-// fallback icon per seeded component id (rows saved before the picker existed)
+// Fallback icon per seeded component, keyed by the API's `code`. The API
+// carries an `icon` of its own; this only covers the seeded rows, which have
+// none.
 const ICONS: Record<string, string> = {
-  fee_base: 'anchor',
-  fee_tax: 'receipt',
-  fee_shipping: 'truck',
-  fee_handling: 'package',
-  fee_insurance: 'shield-check'
+  base_price: 'anchor',
+  tax: 'receipt',
+  shipping: 'truck',
+  handling: 'package',
+  insurance: 'shield-check'
 }
 const DEFAULT_ICON = 'circle-dollar-sign'
 const ICON_CHOICES = [
@@ -30,19 +38,19 @@ const ICON_CHOICES = [
 ]
 
 // ── state (mirrors the design's DCLogic state) ──
-const fees = ref<Fee[]>([])
+const fees = ref<FeeItem[]>([])
 const loading = ref(true)
 const loadError = ref('')
 const modal = ref<ModalState | null>(null)
 const { message: toast, show: showToast } = usePageToast()
-const products = ref<StoredProduct[]>([])
 
-const feesApi = useApiFees()
-const productsApi = useApiProducts()
+const feesApi = useApiFeeItems()
 
+// No product fetch any more: the API reports `usageCount` per fee item, which
+// is the only thing this screen ever loaded products for.
 onMounted(async () => {
   try {
-    ;[fees.value, products.value] = await Promise.all([feesApi.list(), productsApi.list()])
+    fees.value = await feesApi.list()
   } catch (err) {
     loadError.value = apiErrorMessage(err, 'Could not load pricing components.')
   } finally {
@@ -50,14 +58,16 @@ onMounted(async () => {
   }
 })
 
-const columns: TableColumn<Fee>[] = [
+const columns: TableColumn<FeeItem>[] = [
   { accessorKey: 'name', header: 'Component Name', meta: { class: { th: 'px-5', td: TABLE_EDGE.td } } },
   { id: 'action', header: 'Action', meta: { class: { th: 'px-5 text-right w-[130px]', td: TABLE_EDGE.td } } }
 ]
 
-function iconOf(f: Fee) {
-  return f.icon || ICONS[f.id] || DEFAULT_ICON
+function iconOf(f: FeeItem) {
+  return f.icon || ICONS[f.code] || DEFAULT_ICON
 }
+const nameOf = (f: FeeItem) => localized(f.name)
+const descOf = (f: FeeItem) => localized(f.description)
 function iconChoiceStyle(selected: boolean) {
   return `width:42px;height:42px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;background:${selected ? '#ecfdf5' : '#fff'};border:1px solid ${selected ? '#00c16a' : '#e2e8f0'};color:${selected ? '#00a155' : '#64748b'};`
 }
@@ -70,41 +80,109 @@ function editStyleOf(system: boolean) {
 
 // ── create / edit ──
 function onCreate() {
-  modal.value = { id: null, name: '', desc: '', icon: DEFAULT_ICON, error: '' }
+  modal.value = {
+    id: null, code: '', name: '', desc: '', icon: DEFAULT_ICON,
+    lockVersion: 0, codeTouched: false, error: ''
+  }
 }
-function onEdit(f: Fee) {
-  if (f.system) return
-  modal.value = { id: f.id, name: f.name, desc: f.description || '', icon: iconOf(f), error: '' }
+function onEdit(f: FeeItem) {
+  if (f.isSystem) return
+  modal.value = {
+    id: f.id,
+    code: f.code,
+    name: nameOf(f),
+    desc: descOf(f),
+    icon: iconOf(f),
+    lockVersion: f.lockVersion,
+    codeTouched: true,
+    error: ''
+  }
 }
-const saveDisabled = computed(() => !(modal.value && modal.value.name.trim()))
-// Schema is a computed so the duplicate-name refinement sees the current fee
-// list and the row being edited.
+
+// The code is derived from the name until someone types their own, so nobody
+// has to invent one — but it stays editable, and the API owns the rule.
+function onNameInput(value: string) {
+  if (!modal.value) return
+  modal.value.name = value
+  if (!modal.value.id && !modal.value.codeTouched) modal.value.code = slugifyCode(value)
+}
+function onCodeInput(value: string) {
+  if (!modal.value) return
+  modal.value.code = value
+  modal.value.codeTouched = true
+}
+
+const saveDisabled = computed(() => {
+  const m = modal.value
+  if (!m?.name.trim()) return true
+  // `code` is only sent on a create; the API does not accept changes to it
+  return !m.id && !FEE_ITEM_CODE_PATTERN.test(m.code)
+})
+
+// A computed so the uniqueness checks see the current list and the row being
+// edited.
 const modalSchema = computed(() => z.object({
   name: z.string()
     .trim()
     .min(1, 'Component name is required.')
     .refine(
-      v => !fees.value.some(f => f.name.toLowerCase() === v.toLowerCase() && f.id !== modal.value?.id),
+      v => !fees.value.some(f => nameOf(f).toLowerCase() === v.toLowerCase() && f.id !== modal.value?.id),
       'A component with this name already exists.'
+    ),
+  code: z.string()
+    .trim()
+    .regex(FEE_ITEM_CODE_PATTERN, 'Use 2–50 lowercase letters, digits or underscores.')
+    .refine(
+      v => !fees.value.some(f => f.code === v && f.id !== modal.value?.id),
+      'A component with this code already exists.'
     )
+    .optional()
 }))
-type ModalSchema = { name: string }
+type ModalSchema = { name: string, code?: string }
+
+/**
+ * Put a row the server just refused back in step.
+ *
+ * A 409 `stale_version` means someone else saved first, so the version in
+ * hand is no longer the one to send. Re-reading the record fixes the next
+ * attempt instead of leaving the form permanently unable to save.
+ */
+async function refreshRow(id: string) {
+  try {
+    const fresh = await feesApi.get(id)
+    fees.value = fees.value.map(f => f.id === id ? fresh : f)
+    if (modal.value?.id === id) modal.value.lockVersion = fresh.lockVersion
+  } catch {
+    // the row may be gone entirely; the list reload on next visit will say so
+  }
+}
 
 async function onModalSubmit(event: FormSubmitEvent<ModalSchema>) {
   const m = modal.value
   if (!m) return
-  const name = event.data.name
+  const name = { en: event.data.name }
+  const description = m.desc.trim() ? { en: m.desc.trim() } : null
+
   try {
     if (m.id) {
-      const saved = await feesApi.update(m.id, { name, description: m.desc, icon: m.icon })
+      const saved = await feesApi.update(m.id, { name, description, icon: m.icon }, m.lockVersion)
       fees.value = fees.value.map(f => f.id === m.id ? saved : f)
     } else {
       const saved = await feesApi.create({
-        name, description: m.desc, icon: m.icon || DEFAULT_ICON, system: false
+        code: event.data.code ?? m.code,
+        name,
+        kind: 'other',
+        description,
+        icon: m.icon || DEFAULT_ICON
       })
       fees.value = [...fees.value, saved]
     }
   } catch (err) {
+    if (apiErrorCode(err) === 'stale_version' && m.id) {
+      await refreshRow(m.id)
+      showToast('Someone else changed this component. It has been reloaded — try saving again.')
+      return
+    }
     showToast(apiErrorMessage(err, 'Could not save the component.'))
     return
   }
@@ -113,6 +191,10 @@ async function onModalSubmit(event: FormSubmitEvent<ModalSchema>) {
 }
 
 // ── delete ──
+// The shared delete flow renders `name` in its modal copy, so the row handed
+// to it carries the resolved string in place of the locale map.
+type DeletableFee = Omit<FeeItem, 'name'> & { name: string }
+
 const {
   target: deleteTarget,
   blocked: deleteBlocked,
@@ -122,17 +204,24 @@ const {
   cancelLabel: deleteCancelLabel,
   confirm: confirmDelete,
   cancel: cancelDelete
-} = useResourceDelete<Fee>({
+} = useResourceDelete<DeletableFee>({
   remove: feesApi.remove,
   noun: 'component',
-  usageCount: t => feeUsageCount(products.value, t.id),
-  blockedMessage: u => `This component is used by ${u} product${u === 1 ? '' : 's'}. Remove it from them first.`,
-  isLocked: t => t.system,
+  // straight from the server, which counts price lines including history —
+  // this screen used to load every product to work it out
+  usageCount: t => t.usageCount,
+  blockedMessage: u => `This component is used by ${u} price line${u === 1 ? '' : 's'}. Remove it from them first.`,
+  isLocked: t => t.isSystem,
   onDeleted: (t) => {
     fees.value = fees.value.filter(f => f.id !== t.id)
   },
   notify: showToast
 })
+
+/** `useResourceDelete` wants a plain `name` for its modal copy. */
+const askDelete = (f: FeeItem) => {
+  deleteTarget.value = { ...f, name: nameOf(f) }
+}
 </script>
 
 <template>
@@ -183,14 +272,14 @@ const {
               </div>
               <div>
                 <div class="flex items-center gap-2">
-                  <span class="text-base font-semibold text-slate-900">{{ row.original.name }}</span>
+                  <span class="text-base font-semibold text-slate-900">{{ nameOf(row.original) }}</span>
                   <span
-                    v-if="row.original.system"
+                    v-if="row.original.isSystem"
                     class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200"
                   >Default</span>
                 </div>
-                <div v-if="row.original.description" class="text-[13px] text-slate-400 mt-0.5">
-                  {{ row.original.description }}
+                <div v-if="descOf(row.original)" class="text-[13px] text-slate-400 mt-0.5">
+                  {{ descOf(row.original) }}
                 </div>
               </div>
             </div>
@@ -199,21 +288,21 @@ const {
           <template #action-cell="{ row }">
             <div class="flex items-center justify-end gap-2">
               <button
-                :disabled="row.original.system"
+                :disabled="row.original.isSystem"
                 class="hover:bg-slate-100"
-                :style="editStyleOf(row.original.system)"
+                :style="editStyleOf(row.original.isSystem)"
                 @click="onEdit(row.original)"
               >
                 <UIcon name="i-lucide-pencil" class="w-3.5 h-3.5" /> Edit
               </button>
               <UButton
-                v-if="!row.original.system"
+                v-if="!row.original.isSystem"
 
                 variant="ghost"
                 title="Delete component"
 
                 :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-red-600 w-[34px] h-[34px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
-                @click="deleteTarget = row.original"
+                @click="askDelete(row.original)"
               >
                 <UIcon name="i-lucide-trash-2" class="w-[15px] h-[15px]" />
               </UButton>
@@ -257,8 +346,33 @@ const {
               required
               class="mb-[18px]"
             >
-              <UInput v-model="modal.name" placeholder="e.g. Handling" />
+              <UInput
+                :model-value="modal.name"
+                placeholder="e.g. Handling"
+                @update:model-value="onNameInput(String($event))"
+              />
             </UFormField>
+            <UFormField
+              v-if="!modal.id"
+              name="code"
+              label="Code"
+              required
+              class="mb-[18px]"
+              help="Identifies this component to the API. Lowercase letters, digits and underscores."
+            >
+              <UInput
+                :model-value="modal.code"
+                placeholder="e.g. handling_fee"
+                @update:model-value="onCodeInput(String($event))"
+              />
+            </UFormField>
+            <div v-else class="mb-[18px]">
+              <label class="field-label">Code</label>
+              <p class="text-[13px] text-slate-400 m-0">
+                <code class="text-slate-600">{{ modal.code }}</code> — set when the component was created and
+                cannot be changed.
+              </p>
+            </div>
             <div class="mb-[18px]">
               <label class="field-label">Icon</label>
               <div class="flex flex-wrap gap-2">
