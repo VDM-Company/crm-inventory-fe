@@ -149,6 +149,28 @@ describe('per-platform overrides', () => {
     expect(() => vertexCategoryPlatformContentSchema.parse({ lockVersion: 1, reset: ['name'] })).not.toThrow()
   })
 
+  it('sends reset entries in the API spelling, not the app one', () => {
+    // these are field NAMES carried as string values, and the case mapper
+    // renames keys — so `isEnabled` would go upstream unchanged and the API
+    // would not know the field. The collection's own example says `is_enabled`.
+    const parsed = vertexCategoryPlatformContentSchema.parse({
+      lockVersion: 3, reset: ['isEnabled', 'includeInMenu', 'productSort', 'name']
+    })
+
+    expect(toVertex(parsed)).toEqual({
+      lock_version: 3,
+      reset: ['is_enabled', 'include_in_menu', 'product_sort', 'name']
+    })
+  })
+
+  it('still catches a multi-word field that is both set and reset', () => {
+    // the translation must not run before the cross-field check, or this stops
+    // firing for every field whose name has more than one word
+    expect(() => vertexCategoryPlatformContentSchema.parse({
+      lockVersion: 1, includeInMenu: false, reset: ['includeInMenu']
+    })).toThrow()
+  })
+
   it('rejects resetting a field the API does not let a platform override', () => {
     expect(() => vertexCategoryPlatformContentSchema.parse({ lockVersion: 1, reset: ['path'] })).toThrow()
   })

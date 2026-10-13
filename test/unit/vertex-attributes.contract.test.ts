@@ -87,6 +87,17 @@ describe('attribute wire shape', () => {
     for (const o of attr.options) expect(o).not.toHaveProperty('lockVersion')
   })
 
+  it('leaves a locale key alone inside a product attribute value', () => {
+    // `attributes[].value` is a locale map for a free-text attribute, so its
+    // keys are data: `pt_br` must not become `ptBr`
+    const mapped = fromVertex<{ attributes: { value: Record<string, string> }[] }>({
+      attributes: [{ attribute_id: 'a1', value: { en: 'docomo', pt_br: 'docomo BR' } }]
+    })
+
+    expect(Object.keys(mapped.attributes[0]!.value).sort()).toEqual(['en', 'pt_br'])
+    expect(mapped.attributes[0]).toHaveProperty('attributeId')
+  })
+
   it('decides canBeVariantAxis itself rather than leaving it to the client', () => {
     const attr = fromVertex<Attribute>(example(endpoint('/attributes', 'GET'), 200).data[0])
     expect(typeof attr.canBeVariantAxis).toBe('boolean')

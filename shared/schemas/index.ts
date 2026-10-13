@@ -13,6 +13,7 @@
  * request. Validate what we know; forward the rest untouched.
  */
 import * as z from 'zod'
+import { camelToSnake } from '../utils/vertex-wire'
 
 const id = z.string().trim().min(1)
 const nullableId = z.string().trim().min(1).nullable()
@@ -303,7 +304,15 @@ export const vertexCategoryPlatformContentSchema = z.object({
       ctx.addIssue({ code: 'custom', path: ['reset'], message: `\`${f}\` cannot be both overridden and reset.` })
     }
   }
-})
+}).transform(v => ({
+  // `reset` holds field NAMES as string values, and the case mapper renames
+  // keys, not values — so `isEnabled` would go upstream unchanged and the API
+  // would not know the field. Translate them here, after the checks above:
+  // run on the field instead, `superRefine` would be comparing snake_case
+  // reset entries against camelCase sent ones and would quietly stop firing.
+  ...v,
+  ...(v.reset ? { reset: v.reset.map(camelToSnake) } : {})
+}))
 
 export const vertexCategoryProductsQuerySchema = z.object({
   platformId: z.string().trim().min(1).optional(),

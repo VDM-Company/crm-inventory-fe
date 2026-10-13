@@ -269,9 +269,14 @@ export interface AttributeQuery extends CursorQuery {
 // ── categories ──────────────────────────────────────────────────────────────
 
 /**
- * How a category orders its products. The API rejects an unknown value with
- * 422 `in`, but the collection only ever shows `position`, so this stays a
- * string rather than an enum invented from one example.
+ * How a category orders its products — `position` and `-price` both appear in
+ * the collection, so a leading `-` reverses. The API rejects an unknown value
+ * with 422 `in`, but it does not list them, so this stays a string rather
+ * than an enum invented from two examples.
+ *
+ * Note the value is the API's own vocabulary, field names included: it is
+ * passed through untouched, because the case mapper renames keys and not
+ * values. Same for a product list's `sort` (`-updated_at`).
  */
 export type CategoryProductSort = string
 
@@ -598,5 +603,9 @@ export interface VertexProductQuery extends CursorQuery {
   excludeProductId?: string
   containsProductId?: string
   isGift?: boolean
+  /**
+   * The API's own spelling, e.g. `-updated_at` — a field name carried as a
+   * value, so nothing translates it. Pass what the API documents.
+   */
   sort?: string
 }

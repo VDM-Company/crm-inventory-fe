@@ -21,7 +21,11 @@ export const camelToSnake = (k: string) => k.replace(/[A-Z]/g, c => '_' + c.toLo
  * `details` on an error is deliberately NOT here. Its keys (`lock_version`,
  * `usage_count`) are field names the screens read camelCased like any other.
  */
-export const DATA_KEYED_FIELDS = new Set(['name', 'label', 'description', 'alt', 'valueText', 'value_text'])
+export const DATA_KEYED_FIELDS = new Set([
+  'name', 'label', 'description', 'alt', 'title', 'valueText', 'value_text',
+  // a product attribute's free-text value arrives as `value: { en: … }`
+  'value'
+])
 
 function mapKeys(value: unknown, fn: (k: string) => string, keysAreData = false): unknown {
   if (Array.isArray(value)) return value.map(v => mapKeys(v, fn, keysAreData))
