@@ -19,14 +19,14 @@ const search = ref('')
 
 const loadError = ref('')
 
-const productsApi = useApiProducts()
+const productsApi = useApiProductsV2()
 const platformsApi = useApiPlatformsV2()
 const categoriesApi = useApiCategoriesV2()
 
 onMounted(async () => {
   try {
     ;[platforms.value, categories.value, storedProducts.value] = await Promise.all([
-      platformsApi.list(), categoriesApi.tree().then(flattenVertexTree), productsApi.list()
+      platformsApi.list(), categoriesApi.tree().then(flattenVertexTree), productsApi.page({ limit: 100 }).then(r => toStoredProducts(r.data))
     ])
   } catch (err) {
     loadError.value = apiErrorMessage(err, 'Could not load this platform.')

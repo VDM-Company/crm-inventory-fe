@@ -33,7 +33,7 @@ const loadError = ref('')
 
 // SSR-safe browser reads happen only after mount.
 
-const productsApi = useApiProducts()
+const productsApi = useApiProductsV2()
 const categoriesApi = useApiCategoriesV2()
 const platformsApi = useApiPlatformsV2()
 
@@ -42,7 +42,7 @@ onMounted(async () => {
 
   try {
     ;[categories.value, platforms.value, storedProducts.value] = await Promise.all([
-      categoriesApi.tree().then(flattenVertexTree), platformsApi.list(), productsApi.list()
+      categoriesApi.tree().then(flattenVertexTree), platformsApi.list(), productsApi.page({ limit: 100 }).then(r => toStoredProducts(r.data))
     ])
   } catch (err) {
     loadError.value = apiErrorMessage(err, 'Could not load the dashboard.')
@@ -150,7 +150,9 @@ const allRows = computed<EnrichedRow[]>(() => {
       typeLabel: migType === 'bundle' ? 'Bundle' : (migType === 'variant' ? 'Variant' : 'Single'),
       hasVariants,
       variantCount: hasVariants ? vCount : 0,
-      isNew: !r.createdAt || (nowTs.value - r.createdAt) < 24 * 60 * 60 * 1000,
+      // The API decides this itself; the timestamp rule is the fallback for
+      // a record that does not carry the flag.
+      isNew: r.isNew ?? (!r.createdAt || (nowTs.value - r.createdAt) < 24 * 60 * 60 * 1000),
       image: r.image,
       catId: cat ? cat.id : null,
       categoryId: r.categoryId,
