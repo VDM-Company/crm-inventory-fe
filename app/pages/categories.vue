@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import * as z from 'zod'
 import type { FormSubmitEvent, TableColumn } from '@nuxt/ui'
-import type { Category, CatEntry, CatScopeEntry, Platform } from '~/types'
+import type { Category, CatEntry, CatScopeEntry } from '~/types'
 
 useHead({ title: 'Categories — Vertex' })
 
@@ -27,11 +27,11 @@ interface AddModalState {
 
 // ── state (mirrors the design's DCLogic state) ──
 const categoriesApi = useApiCategories()
-const platformsApi = useApiPlatforms()
+const platformsApi = useApiPlatformsV2()
 
 const treeCollapsed = ref(false)
 const cats = ref<Category[]>([])
-const platforms = ref<Platform[]>([])
+const platforms = ref<VertexPlatform[]>([])
 const selectedId = ref<string | null>(null)
 const expanded = ref<Record<string, boolean>>({})
 const draftName = ref('')

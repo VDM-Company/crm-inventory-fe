@@ -5,7 +5,6 @@ import type {
   AttributeDef,
   Category,
   Fee,
-  Platform,
   ProductType,
   StoredProduct
 } from '~/types'
@@ -78,7 +77,7 @@ const appliedKey = ref('')
 // masters — all fetched on mount. They start empty rather than seeded: a
 // seeded list renders names the real API may not agree with.
 const categories = ref<Category[]>([])
-const platforms = ref<Platform[]>([])
+const platforms = ref<VertexPlatform[]>([])
 const attributeDefs = ref<AttributeDef[]>([])
 const fees = ref<Fee[]>([])
 const existingSkus = ref<string[]>([])
@@ -94,7 +93,7 @@ const isBundle = computed(() => productType.value === 'bundle')
 
 const productsApi = useApiProducts()
 const categoriesApi = useApiCategories()
-const platformsApi = useApiPlatforms()
+const platformsApi = useApiPlatformsV2()
 const attributesApi = useApiAttributes()
 const feesApi = useApiFees()
 
@@ -208,7 +207,7 @@ function pickCategory(id: string) {
 const assignedPlatformChips = computed(() =>
   form.platformIds
     .map(id => platformById(platforms.value, id))
-    .filter((p): p is Platform => !!p)
+    .filter((p): p is VertexPlatform => !!p)
     .map(p => ({ id: p.id, name: p.name }))
 )
 const availablePlatforms = computed(() =>

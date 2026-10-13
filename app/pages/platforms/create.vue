@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import * as z from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
-import type { ConfigValues, Platform } from '~/types'
+import type { ConfigValues, VertexPlatform } from '~/types'
 
 const route = useRoute()
 const router = useRouter()
 
 // ── state (mirrors the design's DCLogic state) ──
-const platformsApi = useApiPlatforms()
+const platformsApi = useApiPlatformsV2()
 
 const editId = ref<string | null>(null)
 // derived from the route so the title is right before the record arrives
@@ -22,7 +22,10 @@ const form = reactive({ name: '', code: '', url: '' })
 const codeTouched = ref(false)
 const dirty = ref(false)
 const saveError = ref('')
-const allPlatforms = ref<Platform[]>([])
+const allPlatforms = ref<VertexPlatform[]>([])
+// The platform's own version, needed on an edit. Settings are created with
+// the platform here, so they have no version of their own yet.
+const platformVersion = ref(0)
 const discardOpen = ref(false)
 // Config starts blank on this screen (the design does not preload an existing
 // platform's saved values here) and is written on save.
@@ -46,7 +49,9 @@ onMounted(async () => {
       editId.value = id
       form.name = existing.name
       form.code = existing.code
-      form.url = existing.url
+      // the form's URL field is the platform's `domain` upstream
+      form.url = existing.domain
+      platformVersion.value = existing.lockVersion
       codeTouched.value = true
     }
   }
@@ -96,20 +101,36 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
   const f = event.data
   if (saving.value) return
   saving.value = true
-  let savedId = editId.value
   try {
     if (editId.value) {
-      await platformsApi.update(editId.value, { name: f.name.trim(), url: f.url.trim() })
+      const saved = await platformsApi.update(
+        editId.value,
+        { name: f.name.trim(), domain: f.url.trim() },
+        platformVersion.value
+      )
+      platformVersion.value = saved.lockVersion
+      // settings already exist for a platform being edited, so they are
+      // written separately, with their own version read first
+      const current = await platformsApi.settings(editId.value)
+      await platformsApi.saveSettings(editId.value, configValuesToSettings(cfg.value), current.lockVersion)
     } else {
-      const created = await platformsApi.create({
-        name: f.name.trim(), code: f.code.trim(), url: f.url.trim()
+      // on a create the API takes the settings inline, which is one round
+      // trip instead of two and leaves no window where the platform exists
+      // without them
+      await platformsApi.create({
+        name: f.name.trim(),
+        code: f.code.trim(),
+        domain: f.url.trim(),
+        defaultLocale: 'en',
+        locales: ['en'],
+        settings: configValuesToSettings(cfg.value)
       })
-      savedId = created.id
     }
-    if (savedId) await savePlatformConfig(savedId, { ...cfg.value, baseUrl: f.url.trim() })
   } catch (err) {
     saving.value = false
-    saveError.value = apiErrorMessage(err, 'Could not save the platform.')
+    saveError.value = apiErrorCode(err) === 'stale_version'
+      ? 'Someone else changed this platform. Reload the page to get the current values before saving again.'
+      : apiErrorMessage(err, 'Could not save the platform.')
     return
   }
   saving.value = false

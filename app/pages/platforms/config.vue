@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import * as z from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
-import type { ConfigValues, Platform } from '~/types'
+import type { ConfigValues, VertexPlatform } from '~/types'
 
 useHead({ title: 'Edit Platform — Vertex' })
 
@@ -9,21 +9,26 @@ const route = useRoute()
 const router = useRouter()
 
 // ── platform + identity ──
-const platformsApi = useApiPlatforms()
+const platformsApi = useApiPlatformsV2()
 
-const platforms = ref<Platform[]>([])
+const platforms = ref<VertexPlatform[]>([])
 const loading = ref(true)
 
-const platform = computed<Platform | null>(() => {
+const platform = computed<VertexPlatform | null>(() => {
   const id = typeof route.query.id === 'string' ? route.query.id : ''
   return (id ? platformById(platforms.value, id) : null) || platforms.value[0] || null
 })
 
 const identity = reactive({ name: '', code: '', url: '' })
 const cfg = ref<ConfigValues>({})
+// The two records version separately upstream: the platform carries one
+// `lockVersion`, its settings another. Sending the wrong one is a 409 that
+// reads like a race but is not.
+const platformVersion = ref(0)
+const settingsVersion = ref(0)
 const schema = z.object({
   name: z.string().trim().min(1, 'Name is required.'),
-  url: z.string().trim().min(1, 'URL / Path is required.')
+  url: z.string().trim().min(1, 'Domain is required.')
 })
 type Schema = { name: string, url: string }
 const dirty = ref(false)
@@ -36,7 +41,9 @@ function hydrateIdentity() {
   const p = platform.value
   identity.name = p ? p.name : ''
   identity.code = p ? p.code : ''
-  identity.url = p ? p.url : ''
+  // `url` on the form is the platform's own `domain` upstream, not a config value
+  identity.url = p ? p.domain : ''
+  platformVersion.value = p ? p.lockVersion : 0
 }
 
 hydrateIdentity()
@@ -46,7 +53,13 @@ onMounted(async () => {
     platforms.value = await platformsApi.list()
     hydrateIdentity()
     const p = platform.value
-    cfg.value = p ? await loadPlatformConfig(p.id) : { ...GENERIC_CONFIG_SEED }
+    if (p) {
+      const settings = await platformsApi.settings(p.id)
+      settingsVersion.value = settings.lockVersion
+      cfg.value = settingsToConfigValues(settings)
+    } else {
+      cfg.value = { ...GENERIC_CONFIG_SEED }
+    }
   } catch (err) {
     saveError.value = apiErrorMessage(err, 'Could not load this platform.')
   } finally {
@@ -74,11 +87,25 @@ async function onSubmit(_event: FormSubmitEvent<Schema>) {
   if (p) {
     saving.value = true
     try {
-      await platformsApi.update(p.id, { name: identity.name.trim(), url: identity.url.trim() })
-      await savePlatformConfig(p.id, { ...cfg.value, baseUrl: identity.url.trim() })
+      // Two writes, each with its own version. The settings PUT is a full
+      // replace: every group goes, or the API clears the ones left out.
+      const saved = await platformsApi.update(
+        p.id,
+        { name: identity.name.trim(), domain: identity.url.trim() },
+        platformVersion.value
+      )
+      platformVersion.value = saved.lockVersion
+      const savedSettings = await platformsApi.saveSettings(
+        p.id,
+        configValuesToSettings(cfg.value),
+        settingsVersion.value
+      )
+      settingsVersion.value = savedSettings.lockVersion
     } catch (err) {
       saving.value = false
-      saveError.value = apiErrorMessage(err, 'Could not save the platform.')
+      saveError.value = apiErrorCode(err) === 'stale_version'
+        ? 'Someone else changed this platform. Reload the page to get the current values before saving again.'
+        : apiErrorMessage(err, 'Could not save the platform.')
       return
     }
     saving.value = false

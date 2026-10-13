@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
-import type { Category, Platform, StoredProduct } from '~/types'
+import type { Category, VertexPlatform, StoredProduct } from '~/types'
 
 interface ScopeOverride { name?: string, priceMonthly?: string | number }
 type Overrides = Record<string, ScopeOverride>
@@ -11,7 +11,7 @@ const route = useRoute()
 
 const platformId = computed(() => typeof route.query.id === 'string' ? route.query.id : '')
 
-const platforms = ref<Platform[]>([])
+const platforms = ref<VertexPlatform[]>([])
 const loading = ref(true)
 const categories = ref<Category[]>([])
 const storedProducts = ref<StoredProduct[]>([])
@@ -20,7 +20,7 @@ const search = ref('')
 const loadError = ref('')
 
 const productsApi = useApiProducts()
-const platformsApi = useApiPlatforms()
+const platformsApi = useApiPlatformsV2()
 const categoriesApi = useApiCategories()
 
 onMounted(async () => {
@@ -35,7 +35,7 @@ onMounted(async () => {
   }
 })
 
-const platform = computed<Platform | null>(() => platformById(platforms.value, platformId.value))
+const platform = computed<VertexPlatform | null>(() => platformById(platforms.value, platformId.value))
 
 function fmtYen(v: string | number | null | undefined) {
   return (v === '' || v == null) ? '—' : '¥' + Number(v).toFixed(2)
@@ -142,7 +142,7 @@ const emptyHint = computed(() => search.value.trim()
             Products on {{ platform?.name || 'Platform' }}
           </h1>
           <span class="font-mono text-[13px] text-slate-600 bg-slate-100 border border-slate-200 rounded-md px-2 py-[3px]">{{ platform?.code || '—' }}</span>
-          <span class="text-sm text-slate-500">{{ platform?.url }}</span>
+          <span class="text-sm text-slate-500">{{ platform?.domain }}</span>
         </div>
       </div>
     </div>

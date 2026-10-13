@@ -5,7 +5,6 @@ import type {
   AttributeDef,
   Category,
   Fee,
-  Platform,
   ProductStatus,
   ProductType
 } from '~/types'
@@ -135,7 +134,7 @@ const historyExpanded = ref<Record<string, boolean>>({})
 const historyEntries = ref<HistoryEntry[]>([])
 
 const categories = ref<Category[]>([])
-const platforms = ref<Platform[]>([])
+const platforms = ref<VertexPlatform[]>([])
 const attributeDefs = ref<AttributeDef[]>([])
 
 const isStored = ref(false)
@@ -176,7 +175,7 @@ async function loadRecordById(rawId: unknown): Promise<DetailProduct | null> {
 
 const productsApi = useApiProducts()
 const categoriesApi = useApiCategories()
-const platformsApi = useApiPlatforms()
+const platformsApi = useApiPlatformsV2()
 const attributesApi = useApiAttributes()
 const feesApi = useApiFees()
 
@@ -298,7 +297,7 @@ const viewPlatformNames = computed(() => {
   return names
 })
 const editPlatformChips = computed(() =>
-  (draft.value.platformIds || []).map(id => platformById(platforms.value, id)).filter((p): p is Platform => !!p)
+  (draft.value.platformIds || []).map(id => platformById(platforms.value, id)).filter((p): p is VertexPlatform => !!p)
 )
 const availablePlatforms = computed(() =>
   platforms.value.filter(p => (draft.value.platformIds || []).indexOf(p.id) === -1)
@@ -316,7 +315,7 @@ function removeDraftPlatform(id: string) {
 
 // ── scope ──
 const assignedScopePlatforms = computed(() =>
-  (draft.value.platformIds || []).map(id => platformById(platforms.value, id)).filter((p): p is Platform => !!p)
+  (draft.value.platformIds || []).map(id => platformById(platforms.value, id)).filter((p): p is VertexPlatform => !!p)
 )
 // variant products get no scope UI at all (per-variant pricing makes it moot)
 const showScopeCard = computed(() => assignedScopePlatforms.value.length > 0 && product.value.productType !== 'variant')

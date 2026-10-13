@@ -15,22 +15,30 @@ describe('platformById', () => {
 })
 
 describe('platformSlug', () => {
-  it('lowercases and joins words with underscores', () => {
-    expect(platformSlug('SIM Point')).toBe('sim_point')
-    expect(platformSlug('SK-SIM')).toBe('sk_sim')
+  it('writes the code the way the API does: uppercase, no separators', () => {
+    // `SKSIM`, `SIMPOINT`, `OLDSTORE` upstream — not the `sim_point` the
+    // placeholder used
+    expect(platformSlug('SIM Point')).toBe('SIMPOINT')
+    expect(platformSlug('SK-SIM')).toBe('SKSIM')
+    expect(platformSlug('Old Store')).toBe('OLDSTORE')
   })
 
-  it('collapses runs of punctuation rather than leaving doubles', () => {
-    expect(platformSlug('Vertex  --  Digital')).toBe('vertex_digital')
+  it('drops punctuation rather than turning it into separators', () => {
+    expect(platformSlug('Vertex  --  Digital')).toBe('VERTEXDIGITAL')
+    expect(platformSlug('  Hello World!  ')).toBe('HELLOWORLD')
   })
 
-  it('trims the separators it would otherwise leave at the ends', () => {
-    expect(platformSlug('  Hello World!  ')).toBe('hello_world')
+  it('keeps digits', () => {
+    expect(platformSlug('Store 2')).toBe('STORE2')
+  })
+
+  it('survives a name with nothing usable in it', () => {
+    expect(platformSlug('')).toBe('')
     expect(platformSlug('---')).toBe('')
   })
 
-  it('survives an empty name', () => {
-    expect(platformSlug('')).toBe('')
+  it('stays within a length the API will accept', () => {
+    expect(platformSlug('x'.repeat(100))).toHaveLength(32)
   })
 })
 

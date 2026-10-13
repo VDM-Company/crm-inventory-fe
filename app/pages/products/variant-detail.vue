@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Fee, Platform } from '~/types'
+import type { Fee, VertexPlatform } from '~/types'
 
 useHead({ title: 'Variant Detail — Vertex' })
 
@@ -74,12 +74,12 @@ const { message: toast, show: showToast } = usePageToast()
 const saveError = ref('')
 const loading = ref(true)
 
-const platforms = ref<Platform[]>([])
+const platforms = ref<VertexPlatform[]>([])
 const fees = ref<Fee[]>([])
 const imageInput = ref<HTMLInputElement | null>(null)
 
 const productsApi = useApiProducts()
-const platformsApi = useApiPlatforms()
+const platformsApi = useApiPlatformsV2()
 const feesApi = useApiFees()
 
 onMounted(async () => {
@@ -180,7 +180,7 @@ const BADGE_UNPUBLISHED = 'font-size:11px;font-weight:600;color:#b45309;backgrou
 
 // ── scope (Default / one of the parent's assigned platforms) ──
 const assignedPlatforms = computed(() =>
-  (product.value.platformIds || []).map(id => platformById(platforms.value, id)).filter((p): p is Platform => !!p)
+  (product.value.platformIds || []).map(id => platformById(platforms.value, id)).filter((p): p is VertexPlatform => !!p)
 )
 const scopeChoices = computed(() =>
   [{ id: 'default', name: 'Default (All Platforms)' }]
@@ -272,13 +272,13 @@ const platformDropdownOpen = ref(false)
 const editPlatformChips = computed(() =>
   variantPlatformIds.value
     .map(id => platformById(platforms.value, id))
-    .filter((p): p is Platform => !!p)
+    .filter((p): p is VertexPlatform => !!p)
 )
 const platformAddItems = computed(() =>
   parentPlatformIds.value
     .filter(id => variantPlatformIds.value.indexOf(id) === -1)
     .map(id => platformById(platforms.value, id))
-    .filter((p): p is Platform => !!p)
+    .filter((p): p is VertexPlatform => !!p)
 )
 const platformAllAssigned = computed(() => platformAddItems.value.length === 0 && variantPlatformIds.value.length > 0)
 const platformAddLabel = computed(() => editPlatformChips.value.length ? 'Add another platform' : 'Add platform')

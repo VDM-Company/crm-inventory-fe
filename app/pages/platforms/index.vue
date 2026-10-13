@@ -1,22 +1,23 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
-import type { Platform, StoredProduct } from '~/types'
+import type { VertexPlatform } from '~/types'
 
 useHead({ title: 'Platforms — Vertex' })
 
 // ── state (mirrors the design's DCLogic state) ──
-const platforms = ref<Platform[]>([])
+const platforms = ref<VertexPlatform[]>([])
 const loading = ref(true)
 const loadError = ref('')
 const { message: toast, show: showToast } = usePageToast(3000)
-const products = ref<StoredProduct[]>([])
 
-const productsApi = useApiProducts()
-const platformsApi = useApiPlatforms()
+const platformsApi = useApiPlatformsV2()
 
+// No product fetch any more. It was here to block deleting a platform that
+// still had products, and the API has no delete — a platform is switched off
+// instead, which is safe whatever is assigned to it.
 onMounted(async () => {
   try {
-    ;[platforms.value, products.value] = await Promise.all([platformsApi.list(), productsApi.list()])
+    platforms.value = await platformsApi.list()
   } catch (err) {
     loadError.value = apiErrorMessage(err, 'Could not load platforms.')
   } finally {
@@ -34,10 +35,10 @@ onMounted(async () => {
   }
 })
 
-const columns: TableColumn<Platform>[] = [
+const columns: TableColumn<VertexPlatform>[] = [
   { accessorKey: 'name', header: 'Platform Name', meta: { class: { th: 'px-5', td: TABLE_EDGE.td } } },
   { accessorKey: 'code', header: 'Code' },
-  { accessorKey: 'url', header: 'URL / Path' },
+  { accessorKey: 'domain', header: 'Domain' },
   { id: 'action', header: 'Action', meta: { class: { th: 'px-5 text-right', td: TABLE_EDGE.td } } }
 ]
 
@@ -45,26 +46,29 @@ function editHref(id: string) {
   return { path: '/platforms/config', query: { id } }
 }
 
-// ── delete ──
-const {
-  target: deleteTarget,
-  blocked: deleteBlocked,
-  icon: deleteIcon,
-  title: deleteTitle,
-  message: deleteMessage,
-  cancelLabel: deleteCancelLabel,
-  confirm: confirmDelete,
-  cancel: cancelDelete
-} = useResourceDelete<Platform>({
-  remove: platformsApi.remove,
-  noun: 'platform',
-  usageCount: t => platformAssignedCount(products.value, t.id),
-  blockedMessage: u => `This platform is assigned to ${u} product${u === 1 ? '' : 's'}. Unassign it first.`,
-  onDeleted: (t) => {
-    platforms.value = platforms.value.filter(x => x.id !== t.id)
-  },
-  notify: showToast
-})
+// ── activate / deactivate ──
+// There is no delete: the API switches a platform off and back on, and the
+// record keeps its `isActive`. Switching off is the one that needs a
+// confirmation, because it is what takes a channel off the storefront.
+const pendingOff = ref<VertexPlatform | null>(null)
+const busyId = ref('')
+
+function replaceRow(next: VertexPlatform) {
+  platforms.value = platforms.value.map(p => p.id === next.id ? next : p)
+}
+
+async function setActive(p: VertexPlatform, active: boolean) {
+  busyId.value = p.id
+  try {
+    replaceRow(active ? await platformsApi.activate(p.id) : await platformsApi.deactivate(p.id))
+    showToast(active ? `${p.name} is active again` : `${p.name} is no longer active`)
+  } catch (err) {
+    showToast(apiErrorMessage(err, `Could not ${active ? 'activate' : 'deactivate'} the platform.`))
+  } finally {
+    busyId.value = ''
+    pendingOff.value = null
+  }
+}
 </script>
 
 <template>
@@ -112,6 +116,10 @@ const {
                 <UIcon name="i-lucide-globe" class="w-[17px] h-[17px]" />
               </div>
               <span class="text-base font-semibold text-slate-900">{{ row.original.name }}</span>
+              <span
+                v-if="!row.original.isActive"
+                class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200"
+              >Inactive</span>
             </div>
           </template>
 
@@ -119,8 +127,8 @@ const {
             <span class="font-mono text-[13px] text-slate-600 bg-slate-100 border border-slate-200 rounded-md px-2 py-[3px]">{{ row.original.code }}</span>
           </template>
 
-          <template #url-cell="{ row }">
-            <span class="text-[15px] text-slate-700">{{ row.original.url }}</span>
+          <template #domain-cell="{ row }">
+            <span class="text-[15px] text-slate-700">{{ row.original.domain }}</span>
           </template>
 
           <template #action-cell="{ row }">
@@ -133,13 +141,12 @@ const {
               </NuxtLink>
               <UButton
                 variant="ghost"
-
-                title="Delete platform"
-
-                :ui="{ base: 'hover:bg-slate-100 border border-slate-200 bg-white text-red-600 w-[34px] h-[34px] rounded-lg cursor-pointer inline-flex items-center justify-center' }"
-                @click="deleteTarget = row.original"
+                :disabled="busyId === row.original.id"
+                :title="row.original.isActive ? 'Deactivate platform' : 'Activate platform'"
+                :ui="{ base: ['hover:bg-slate-100 border border-slate-200 bg-white w-[34px] h-[34px] rounded-lg cursor-pointer inline-flex items-center justify-center', row.original.isActive ? 'text-slate-600' : 'text-green-600'] }"
+                @click="row.original.isActive ? (pendingOff = row.original) : setActive(row.original, true)"
               >
-                <UIcon name="i-lucide-trash-2" class="w-[15px] h-[15px]" />
+                <UIcon :name="row.original.isActive ? 'i-lucide-power-off' : 'i-lucide-power'" class="w-[15px] h-[15px]" />
               </UButton>
             </div>
           </template>
@@ -161,17 +168,16 @@ const {
       </VertexEmptyState>
     </UCard>
 
-    <!-- delete modal -->
+    <!-- deactivate confirmation -->
     <VertexConfirmModal
-      :open="!!deleteTarget"
-      :title="deleteTitle"
-      :message="deleteMessage"
-      :icon="deleteIcon"
-      :tone="deleteBlocked ? 'warning' : 'danger'"
-      :cancel-label="deleteCancelLabel"
-      :show-confirm="!deleteBlocked"
-      @cancel="cancelDelete"
-      @confirm="confirmDelete"
+      :open="!!pendingOff"
+      :title="pendingOff ? `Deactivate ${pendingOff.name}?` : ''"
+      message="Products stay assigned to it, but the platform stops serving them. You can switch it back on at any time."
+      icon="power-off"
+      tone="warning"
+      confirm-label="Deactivate"
+      @cancel="pendingOff = null"
+      @confirm="pendingOff && setActive(pendingOff, false)"
     />
 
     <!-- toast -->

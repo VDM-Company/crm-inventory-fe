@@ -3,7 +3,6 @@ import type { TableColumn } from '@nuxt/ui'
 import type {
   Category,
   DashStat,
-  Platform,
   ProductType,
   StoredProduct
 } from '~/types'
@@ -24,7 +23,7 @@ const typeFilter = ref('')
 const statusFilter = ref('')
 
 const categories = ref<Category[]>([])
-const platforms = ref<Platform[]>([])
+const platforms = ref<VertexPlatform[]>([])
 // Seeded so SSR and the first client render agree; replaced with the real
 // store on mount.
 const storedProducts = ref<StoredProduct[]>([])
@@ -36,7 +35,7 @@ const loadError = ref('')
 
 const productsApi = useApiProducts()
 const categoriesApi = useApiCategories()
-const platformsApi = useApiPlatforms()
+const platformsApi = useApiPlatformsV2()
 
 onMounted(async () => {
   nowTs.value = Date.now()
