@@ -1,37 +1,19 @@
 /**
  * Typed client for `server/api`.
  *
- * What is left here after the resource bindings took over CRUD: the two error
- * readers every screen uses, the `*Raw` helpers for the sub-resources that are
- * not CRUD (`platforms/:id/config`, `categories/:id/products`), and the
- * SSR-aware `useApiList` / `useApiItem`, which nothing calls yet.
+ * What is left after the resource bindings took over CRUD and the dead
+ * helpers were removed: the error readers the screens share, and `apiPutRaw`
+ * for the two sub-resources that are not CRUD (`platforms/:id/config`,
+ * `categories/:id/products`).
  *
- * Every resource now reads and writes through its own `useApiX()` — see
- * `useApiResource.ts` and the bindings beside it. Reads happen in `onMounted`
- * via `$fetch`, which keeps the render-then-fill behaviour and avoids a
- * hydration mismatch.
+ * `apiFieldErrors` currently has no caller. It stays because the server still
+ * shapes 422s for it — `unprocessable()` in `server/utils/errors.ts`, the
+ * Vertex seam's `fieldErrors`, and `server/README.md` all point at it. A form
+ * that wires 422s into UForm's `errors` prop is the next thing that needs it;
+ * if the cutovers end without one, the reader and the producers should go
+ * together.
  */
-import type { ApiList, FieldErrors, ListQuery } from '#shared/types'
-
-type MaybeRefDeep<T> = T | Ref<T> | (() => T)
-
-/** GET a collection. Pass a getter or ref for `query` to make it reactive. */
-export function useApiList<T>(resource: string, query?: MaybeRefDeep<ListQuery>) {
-  return useFetch<ApiList<T>>(() => `/api/${resource}`, {
-    query: query as Record<string, unknown>,
-    default: () => ({ data: [], meta: null })
-  })
-}
-
-/** GET one record. */
-export function useApiItem<T>(resource: string, id: MaybeRefDeep<string>) {
-  return useFetch<T>(() => `/api/${resource}/${toValue(id as Ref<string>)}`)
-}
-
-/** Read a singleton sub-resource, e.g. `platforms/p_sp/config`. */
-export function apiGetRaw<T>(path: string) {
-  return $fetch<T>(`/api/${path}`)
-}
+import type { FieldErrors } from '#shared/types'
 
 export function apiPutRaw<T>(path: string, body: unknown) {
   return $fetch<T>(`/api/${path}`, { method: 'PUT', body: body as Record<string, unknown> })
@@ -62,13 +44,4 @@ export function apiErrorMessage(err: unknown, fallback = 'Something went wrong.'
 export function apiErrorCode(err: unknown): string | undefined {
   const data = (err as { data?: { data?: { code?: string }, code?: string } })?.data
   return data?.data?.code ?? data?.code
-}
-
-/**
- * Whatever the upstream attached to the error: `usageCount` on a 409
- * `in_use`, `lockVersion` on a `stale_version`.
- */
-export function apiErrorDetails(err: unknown): Record<string, unknown> {
-  const data = (err as { data?: { data?: { details?: Record<string, unknown> }, details?: Record<string, unknown> } })?.data
-  return data?.data?.details ?? data?.details ?? {}
 }
