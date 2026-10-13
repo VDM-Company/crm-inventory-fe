@@ -79,11 +79,13 @@ const fees = ref<Fee[]>([])
 const imageInput = ref<HTMLInputElement | null>(null)
 
 const productsApi = useApiProducts()
+const platformsApi = useApiPlatforms()
+const feesApi = useApiFees()
 
 onMounted(async () => {
   try {
     try {
-      ;[platforms.value, fees.value] = await Promise.all([loadPlatforms(), loadFees()])
+      ;[platforms.value, fees.value] = await Promise.all([platformsApi.list(), feesApi.list()])
     } catch (err) {
       saveError.value = apiErrorMessage(err, 'Could not load this variant.')
     }

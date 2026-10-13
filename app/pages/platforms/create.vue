@@ -7,6 +7,8 @@ const route = useRoute()
 const router = useRouter()
 
 // ── state (mirrors the design's DCLogic state) ──
+const platformsApi = useApiPlatforms()
+
 const editId = ref<string | null>(null)
 // derived from the route so the title is right before the record arrives
 const routeEditId = computed(() => {
@@ -30,7 +32,7 @@ const cfg = ref<ConfigValues>({ ...GENERIC_CONFIG_SEED })
 // server + first client paint both render the empty "Create" form.
 onMounted(async () => {
   try {
-    allPlatforms.value = await loadPlatforms()
+    allPlatforms.value = await platformsApi.list()
   } catch {
     // leave the list empty; the duplicate-code check simply cannot run
   } finally {
@@ -97,9 +99,9 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
   let savedId = editId.value
   try {
     if (editId.value) {
-      await apiUpdate<Platform>('platforms', editId.value, { name: f.name.trim(), url: f.url.trim() })
+      await platformsApi.update(editId.value, { name: f.name.trim(), url: f.url.trim() })
     } else {
-      const created = await apiCreate<Platform>('platforms', {
+      const created = await platformsApi.create({
         name: f.name.trim(), code: f.code.trim(), url: f.url.trim()
       })
       savedId = created.id

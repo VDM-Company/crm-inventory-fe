@@ -37,11 +37,12 @@ const modal = ref<ModalState | null>(null)
 const { message: toast, show: showToast } = usePageToast()
 const products = ref<StoredProduct[]>([])
 
+const feesApi = useApiFees()
 const productsApi = useApiProducts()
 
 onMounted(async () => {
   try {
-    ;[fees.value, products.value] = await Promise.all([loadFees(), productsApi.list()])
+    ;[fees.value, products.value] = await Promise.all([feesApi.list(), productsApi.list()])
   } catch (err) {
     loadError.value = apiErrorMessage(err, 'Could not load pricing components.')
   } finally {
@@ -95,10 +96,10 @@ async function onModalSubmit(event: FormSubmitEvent<ModalSchema>) {
   const name = event.data.name
   try {
     if (m.id) {
-      const saved = await apiUpdate<Fee>('fees', m.id, { name, description: m.desc, icon: m.icon })
+      const saved = await feesApi.update(m.id, { name, description: m.desc, icon: m.icon })
       fees.value = fees.value.map(f => f.id === m.id ? saved : f)
     } else {
-      const saved = await apiCreate<Fee>('fees', {
+      const saved = await feesApi.create({
         name, description: m.desc, icon: m.icon || DEFAULT_ICON, system: false
       })
       fees.value = [...fees.value, saved]
@@ -122,7 +123,7 @@ const {
   confirm: confirmDelete,
   cancel: cancelDelete
 } = useResourceDelete<Fee>({
-  resource: 'fees',
+  remove: feesApi.remove,
   noun: 'component',
   usageCount: t => feeUsageCount(products.value, t.id),
   blockedMessage: u => `This component is used by ${u} product${u === 1 ? '' : 's'}. Remove it from them first.`,

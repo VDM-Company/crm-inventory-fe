@@ -1,23 +1,10 @@
-import type { ApiList, Platform, StoredProduct } from '~/types'
+import type { Platform, StoredProduct } from '~/types'
 
-// Sales platforms, served by `server/api`.
-//
-// Reads are async now and can throw — call them from an async `onMounted`
-// (or an event handler) and handle the failure there. Writes go through
-// `apiCreate` / `apiUpdate` / `apiRemove` at the call site, because the API is
-// per-record while this module used to replace the whole list at once.
+// Pure helpers over an already-loaded platform list. Reads and writes go
+// through `useApiPlatforms()`.
 
 // re-exported so the existing auto-imported call sites keep working
 export { PLATFORM_SEED } from '#shared/seeds'
-
-function clone(p: Platform): Platform {
-  return { id: p.id, name: p.name, code: p.code, url: p.url }
-}
-
-export async function loadPlatforms(): Promise<Platform[]> {
-  const res = await $fetch<ApiList<Platform>>('/api/platforms')
-  return (res.data || []).map(clone)
-}
 
 export function platformById(list: Platform[], id: string): Platform | null {
   return list.find(p => p.id === id) || null

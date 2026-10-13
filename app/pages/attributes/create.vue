@@ -16,6 +16,8 @@ const editId = computed(() => {
 })
 
 // ── state ──
+const attributesApi = useApiAttributes()
+
 const attrs = ref<AttributeDef[]>([])
 // UForm drives validation off a single reactive state object; `name`/`type`
 // stay as computed refs so the rest of the page (preview, option rows) is
@@ -37,7 +39,7 @@ useHead({ title: () => pageTitle.value + ' — Vertex' })
 // The list is fetched on mount, then the edited attribute seeds the form.
 onMounted(async () => {
   try {
-    attrs.value = await loadAttributeDefs()
+    attrs.value = await attributesApi.list()
   } catch (err) {
     saveError.value = apiErrorMessage(err, 'Could not load attributes.')
     return
@@ -127,8 +129,8 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
   const built = { name: event.data.name, type: event.data.type, values: cleanedOptions.value }
   saving.value = true
   try {
-    if (editId.value) await apiUpdate<AttributeDef>('attributes', editId.value, built)
-    else await apiCreate<AttributeDef>('attributes', built)
+    if (editId.value) await attributesApi.update(editId.value, built)
+    else await attributesApi.create(built)
   } catch (err) {
     saving.value = false
     saveError.value = apiErrorMessage(err, 'Could not save the attribute.')

@@ -1,17 +1,8 @@
-import type { ApiList, AttributeDef, StoredProduct } from '~/types'
+import type { AttributeDef, StoredProduct } from '~/types'
 
-// Master list of variant attribute names + their preset values, served by
-// `server/api`. Used by the Create form's variant builder and the Attributes
-// master page. The read is async; the helpers below stay pure.
-
-function clone(a: AttributeDef): AttributeDef {
-  return { id: a.id, name: a.name, type: a.type, values: (a.values || []).slice() }
-}
-
-export async function loadAttributeDefs(): Promise<AttributeDef[]> {
-  const res = await $fetch<ApiList<AttributeDef>>('/api/attributes')
-  return (res.data || []).map(clone)
-}
+// Pure helpers over an already-loaded attribute list — the Create form's
+// variant builder and the Attributes master page both read it through
+// `useApiAttributes()`.
 
 // How many stored products reference this attribute name (delete-protection).
 // How many products use this attribute (delete-protection).

@@ -21,10 +21,11 @@ const columns: TableColumn<AttributeDef>[] = [
 ]
 
 const productsApi = useApiProducts()
+const attributesApi = useApiAttributes()
 
 onMounted(async () => {
   try {
-    ;[attrs.value, products.value] = await Promise.all([loadAttributeDefs(), productsApi.list()])
+    ;[attrs.value, products.value] = await Promise.all([attributesApi.list(), productsApi.list()])
   } catch (err) {
     loadError.value = apiErrorMessage(err, 'Could not load attributes.')
   } finally {
@@ -51,7 +52,7 @@ const {
   confirm: confirmDelete,
   cancel: cancelDelete
 } = useResourceDelete<AttributeDef>({
-  resource: 'attributes',
+  remove: attributesApi.remove,
   noun: 'attribute',
   usageCount: t => attributeUsageCount(products.value, t.name),
   blockedMessage: u => `This attribute is used by ${u} product${u === 1 ? '' : 's'}. Remove it from them first.`,

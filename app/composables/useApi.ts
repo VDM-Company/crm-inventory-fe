@@ -1,14 +1,15 @@
 /**
  * Typed client for `server/api`.
  *
- * Products go through `useApiProducts()` (see `useApiProducts.ts`). The other
- * resources still call the `app/utils/*` stores for reads (`loadCategories()`,
- * `loadPlatforms()`, …) and the mutation helpers here for writes. Both go
- * through `/api`; no page touches localStorage any more.
+ * What is left here after the resource bindings took over CRUD: the two error
+ * readers every screen uses, the `*Raw` helpers for the sub-resources that are
+ * not CRUD (`platforms/:id/config`, `categories/:id/products`), and the
+ * SSR-aware `useApiList` / `useApiItem`, which nothing calls yet.
  *
- * Reads happen in `onMounted` via `$fetch`, which keeps the existing
- * render-then-fill behaviour and avoids a hydration mismatch. `useApiList` /
- * `useApiItem` are the SSR-aware alternative, unused so far.
+ * Every resource now reads and writes through its own `useApiX()` — see
+ * `useApiResource.ts` and the bindings beside it. Reads happen in `onMounted`
+ * via `$fetch`, which keeps the render-then-fill behaviour and avoids a
+ * hydration mismatch.
  */
 import type { ApiList, FieldErrors, ListQuery } from '#shared/types'
 
@@ -25,18 +26,6 @@ export function useApiList<T>(resource: string, query?: MaybeRefDeep<ListQuery>)
 /** GET one record. */
 export function useApiItem<T>(resource: string, id: MaybeRefDeep<string>) {
   return useFetch<T>(() => `/api/${resource}/${toValue(id as Ref<string>)}`)
-}
-
-export function apiCreate<T>(resource: string, body: unknown) {
-  return $fetch<T>(`/api/${resource}`, { method: 'POST', body: body as Record<string, unknown> })
-}
-
-export function apiUpdate<T>(resource: string, id: string, body: unknown) {
-  return $fetch<T>(`/api/${resource}/${id}`, { method: 'PUT', body: body as Record<string, unknown> })
-}
-
-export function apiRemove(resource: string, id: string) {
-  return $fetch(`/api/${resource}/${id}`, { method: 'DELETE' })
 }
 
 /** Read a singleton sub-resource, e.g. `platforms/p_sp/config`. */

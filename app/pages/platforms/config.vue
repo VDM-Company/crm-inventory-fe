@@ -9,6 +9,8 @@ const route = useRoute()
 const router = useRouter()
 
 // ── platform + identity ──
+const platformsApi = useApiPlatforms()
+
 const platforms = ref<Platform[]>([])
 const loading = ref(true)
 
@@ -41,7 +43,7 @@ hydrateIdentity()
 
 onMounted(async () => {
   try {
-    platforms.value = await loadPlatforms()
+    platforms.value = await platformsApi.list()
     hydrateIdentity()
     const p = platform.value
     cfg.value = p ? await loadPlatformConfig(p.id) : { ...GENERIC_CONFIG_SEED }
@@ -72,7 +74,7 @@ async function onSubmit(_event: FormSubmitEvent<Schema>) {
   if (p) {
     saving.value = true
     try {
-      await apiUpdate<Platform>('platforms', p.id, { name: identity.name.trim(), url: identity.url.trim() })
+      await platformsApi.update(p.id, { name: identity.name.trim(), url: identity.url.trim() })
       await savePlatformConfig(p.id, { ...cfg.value, baseUrl: identity.url.trim() })
     } catch (err) {
       saving.value = false

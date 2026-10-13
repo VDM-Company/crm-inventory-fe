@@ -12,10 +12,11 @@ const { message: toast, show: showToast } = usePageToast(3000)
 const products = ref<StoredProduct[]>([])
 
 const productsApi = useApiProducts()
+const platformsApi = useApiPlatforms()
 
 onMounted(async () => {
   try {
-    ;[platforms.value, products.value] = await Promise.all([loadPlatforms(), productsApi.list()])
+    ;[platforms.value, products.value] = await Promise.all([platformsApi.list(), productsApi.list()])
   } catch (err) {
     loadError.value = apiErrorMessage(err, 'Could not load platforms.')
   } finally {
@@ -55,7 +56,7 @@ const {
   confirm: confirmDelete,
   cancel: cancelDelete
 } = useResourceDelete<Platform>({
-  resource: 'platforms',
+  remove: platformsApi.remove,
   noun: 'platform',
   usageCount: t => platformAssignedCount(products.value, t.id),
   blockedMessage: u => `This platform is assigned to ${u} product${u === 1 ? '' : 's'}. Unassign it first.`,

@@ -26,6 +26,9 @@ interface AddModalState {
 }
 
 // ── state (mirrors the design's DCLogic state) ──
+const categoriesApi = useApiCategories()
+const platformsApi = useApiPlatforms()
+
 const treeCollapsed = ref(false)
 const cats = ref<Category[]>([])
 const platforms = ref<Platform[]>([])
@@ -48,7 +51,7 @@ const { message: toast, show: showToast } = usePageToast(2600)
 onMounted(async () => {
   let list: Category[] = []
   try {
-    ;[list, platforms.value] = await Promise.all([loadCategories(), loadPlatforms()])
+    ;[list, platforms.value] = await Promise.all([categoriesApi.list(), platformsApi.list()])
   } catch (err) {
     showToast(apiErrorMessage(err, 'Could not load categories.'))
     return
@@ -196,7 +199,7 @@ async function onAddSubmit(event: FormSubmitEvent<AddSchema>) {
   }
   let cat: Category
   try {
-    cat = await apiCreate<Category>('categories', {
+    cat = await categoriesApi.create({
       name, parentId: m.parentId || null, enabled: m.enabled !== false
     })
   } catch (err) {
@@ -220,7 +223,7 @@ async function confirmDelete() {
   if (!id) return
   if (categoryChildren(cats.value, id).length || members.value.length) return
   try {
-    await apiRemove('categories', id)
+    await categoriesApi.remove(id)
   } catch (err) {
     deleteOpen.value = false
     showToast(apiErrorMessage(err, 'Could not delete the category.'))
@@ -290,7 +293,7 @@ async function save() {
   })
   saving.value = true
   try {
-    await apiUpdate<Category>('categories', id, { name, enabled: draftEnabled.value })
+    await categoriesApi.update(id, { name, enabled: draftEnabled.value })
     await saveCategoryEntry(id, { members: members.value, scopes } as CatEntry)
   } catch (err) {
     saving.value = false

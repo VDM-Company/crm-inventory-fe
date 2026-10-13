@@ -7,8 +7,8 @@
  * number so it re-reads whenever the product list it counts against changes.
  */
 export interface ResourceDeleteOptions<T> {
-  /** API resource segment, e.g. `'fees'`. */
-  resource: string
+  /** Deletes the record — pass the binding's own `remove`, e.g. `useApiFees().remove`. */
+  remove: (id: string) => Promise<void>
   /** Singular noun for the modal copy, e.g. `'component'`. */
   noun: string
   /** How many records still reference the target; 0 means safe to delete. */
@@ -48,7 +48,7 @@ export function useResourceDelete<T extends { id: string, name: string }>(
     if (!t || blocked.value) return
     if (options.isLocked?.(t)) return
     try {
-      await apiRemove(options.resource, t.id)
+      await options.remove(t.id)
     } catch (err) {
       target.value = null
       options.notify(apiErrorMessage(err, `Could not delete the ${options.noun}.`))

@@ -1,17 +1,7 @@
-import type { ApiList, Category, CategoryFlatRow, CategoryTreeRow, CatEntry, CatScopeEntry } from '~/types'
+import type { Category, CategoryFlatRow, CategoryTreeRow, CatEntry, CatScopeEntry } from '~/types'
 
-// Hierarchical category tree, served by `server/api`.
-// Reads are async and can throw; the tree helpers below stay pure so they can
-// run inside computeds over an already-loaded list.
-
-function clone(c: Category): Category {
-  return { id: c.id, name: c.name, parentId: c.parentId || null, enabled: c.enabled !== false }
-}
-
-export async function loadCategories(): Promise<Category[]> {
-  const res = await $fetch<ApiList<Category>>('/api/categories')
-  return (res.data || []).map(clone)
-}
+// Pure helpers over an already-loaded category tree, so they can run inside a
+// computed. Load the list with `useApiCategories().list()`.
 
 export function categoryById(list: Category[], id: string | null): Category | null {
   return list.find(c => c.id === id) || null

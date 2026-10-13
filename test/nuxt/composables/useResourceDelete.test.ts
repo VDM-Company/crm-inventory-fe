@@ -31,7 +31,7 @@ function setup(overrides: Partial<Parameters<typeof useResourceDelete<Row>>[0]> 
     removed,
     notices,
     make: () => useResourceDelete<Row>({
-      resource: 'widgets',
+      remove: useApiResource<Row>('widgets').remove,
       noun: 'widget',
       usageCount: () => usage,
       blockedMessage: u => `This widget is used by ${u} product${u === 1 ? '' : 's'}.`,

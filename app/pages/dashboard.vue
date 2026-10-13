@@ -35,13 +35,15 @@ const loadError = ref('')
 // SSR-safe browser reads happen only after mount.
 
 const productsApi = useApiProducts()
+const categoriesApi = useApiCategories()
+const platformsApi = useApiPlatforms()
 
 onMounted(async () => {
   nowTs.value = Date.now()
 
   try {
     ;[categories.value, platforms.value, storedProducts.value] = await Promise.all([
-      loadCategories(), loadPlatforms(), productsApi.list()
+      categoriesApi.list(), platformsApi.list(), productsApi.list()
     ])
   } catch (err) {
     loadError.value = apiErrorMessage(err, 'Could not load the dashboard.')

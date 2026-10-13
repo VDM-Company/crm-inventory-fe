@@ -93,11 +93,15 @@ const hasVariants = computed(() => productType.value === 'variant')
 const isBundle = computed(() => productType.value === 'bundle')
 
 const productsApi = useApiProducts()
+const categoriesApi = useApiCategories()
+const platformsApi = useApiPlatforms()
+const attributesApi = useApiAttributes()
+const feesApi = useApiFees()
 
 onMounted(async () => {
   try {
     ;[categories.value, platforms.value, attributeDefs.value, fees.value, existingSkus.value] = await Promise.all([
-      loadCategories(), loadPlatforms(), loadAttributeDefs(), loadFees(),
+      categoriesApi.list(), platformsApi.list(), attributesApi.list(), feesApi.list(),
       // the duplicate-SKU rule runs inside a zod refine, which cannot await —
       // so the list it checks against is fetched once here
       productsApi.list().then((list) => {
