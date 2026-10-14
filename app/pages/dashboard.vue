@@ -25,6 +25,7 @@ const statusFilter = ref('')
 const productsApi = useApiProducts()
 const categoriesApi = useApiCategories()
 const platformsApi = useApiPlatforms()
+const catalogApi = useApiCatalog()
 
 /*
  * Fetched during SSR, so the table arrives with the page instead of after it.
@@ -43,12 +44,13 @@ const platformsApi = useApiPlatforms()
  * and 401 during SSR.
  */
 const { data, status, error } = await useAsyncData('dashboard', async () => {
-  const [categories, platforms, products] = await Promise.all([
+  const [categories, platforms, products, stats] = await Promise.all([
     categoriesApi.tree().then(flattenVertexTree),
     platformsApi.list(),
-    productsApi.page({ limit: 100 }).then(r => toStoredProducts(r.data))
+    productsApi.page({ limit: 100 }).then(r => toStoredProducts(r.data)),
+    catalogApi.stats()
   ])
-  return { categories, platforms, products }
+  return { categories, platforms, products, stats }
 })
 
 const categories = computed<Category[]>(() => data.value?.categories ?? [])
@@ -82,12 +84,21 @@ onMounted(() => {
 })
 
 // ── summary tiles ──
-const stats: DashStat[] = [
-  { label: 'Total Products', value: '148', delta: '+12 this month', deltaColor: '#00a155', icon: 'i-lucide-package', iconBg: '#ecfdf5', iconColor: '#00a155' },
-  { label: 'Active', value: '121', delta: '82% of catalog', deltaColor: '#64748b', icon: 'i-lucide-circle-check', iconBg: '#ecfdf5', iconColor: '#00a155' },
-  { label: 'With Variants', value: '34', delta: '+4 this month', deltaColor: '#00a155', icon: 'i-lucide-layers', iconBg: '#ecfdf5', iconColor: '#00a155' },
-  { label: 'Low Stock', value: '9', delta: 'Needs attention', deltaColor: '#dc2626', icon: 'i-lucide-triangle-alert', iconBg: '#fef2f2', iconColor: '#dc2626' }
-]
+// These were four hard-coded numbers from the design — 148 / 121 / 34 / 9 —
+// which stayed 148 / 121 / 34 / 9 whatever the catalogue held. They come from
+// `GET /admin/catalog/stats` now; the mapping is in `#shared/utils` so the
+// counting decisions (trashed excluded, empty catalogue is 0%) are tested.
+const statValues = computed(() => toDashStatValues(data.value?.stats))
+
+const stats = computed<DashStat[]>(() => {
+  const v = statValues.value
+  return [
+    { label: 'Total Products', value: String(v.total), delta: thisMonthLabel(v.createdThisMonth), deltaColor: v.createdThisMonth > 0 ? '#00a155' : '#64748b', icon: 'i-lucide-package', iconBg: '#ecfdf5', iconColor: '#00a155' },
+    { label: 'Active', value: String(v.active), delta: `${v.activePercent}% of catalog`, deltaColor: '#64748b', icon: 'i-lucide-circle-check', iconBg: '#ecfdf5', iconColor: '#00a155' },
+    { label: 'With Variants', value: String(v.withVariants), delta: thisMonthLabel(v.variantsCreatedThisMonth), deltaColor: v.variantsCreatedThisMonth > 0 ? '#00a155' : '#64748b', icon: 'i-lucide-layers', iconBg: '#ecfdf5', iconColor: '#00a155' },
+    { label: 'Low Stock', value: String(v.lowStock), delta: v.lowStock > 0 ? 'Needs attention' : 'All in stock', deltaColor: v.lowStock > 0 ? '#dc2626' : '#64748b', icon: 'i-lucide-triangle-alert', iconBg: v.lowStock > 0 ? '#fef2f2' : '#f8fafc', iconColor: v.lowStock > 0 ? '#dc2626' : '#64748b' }
+  ]
+})
 
 // ── enriched rows ──
 interface VariantRow {

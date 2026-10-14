@@ -395,6 +395,29 @@ export interface VertexCategoryProductsQuery extends CursorQuery {
   all?: boolean
 }
 
+// ── catalog stats ────────────────────────────────────────────────────────────
+
+/**
+ * `GET /admin/catalog/stats` — the dashboard's counters.
+ *
+ * Note the vocabulary: `productsByType` buckets as `single | variant |
+ * bundle`, which is NOT the `simple | configurable | bundle` every product
+ * endpoint uses. Two of the three words differ. That is the API's, not a
+ * mistake on this side, and it is on the list to confirm with its author —
+ * until then nothing here translates it, because guessing a mapping would
+ * silently mis-count.
+ *
+ * The description says "counters of other areas are served by their own
+ * endpoints; the client composes the dashboard", so this is products only.
+ */
+export interface CatalogStats {
+  productsByStatus: Record<string, number>
+  productsByType: Record<string, number>
+  createdThisMonth: number
+  createdThisMonthByType: Record<string, number>
+  outOfStockProducts: number
+}
+
 // ── authentication ──────────────────────────────────────────────────────────
 
 /** A role as the API reports it. Only the name is used on this side. */
