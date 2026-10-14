@@ -820,14 +820,34 @@ export interface VariantCandidate {
   existingProductId: string | null
 }
 
+/** What a simple → configurable conversion would drag along with it. */
+export interface VariantConversion {
+  /** The SKU that becomes the parent's and stops being sellable. */
+  oldSku: string
+  /**
+   * Subscribers on the product today. Any above zero makes
+   * `subscriptionTargetCombination` required on generate (422 `required`),
+   * because they have to land on some variant.
+   */
+  activeSubscriptions: number
+  bundlesAffected: number
+  bundles: { id: string, name?: LocalizedText }[]
+}
+
 export interface VariantPreview {
   candidates: VariantCandidate[]
-  /** Variants that regenerating would remove — they were never ordered. */
-  toDelete?: { productId: string, sku: string, name?: LocalizedText }[]
-  /** Variants that would be switched off instead, because they have orders. */
-  toDisable?: { productId: string, sku: string, name?: LocalizedText }[]
+  /**
+   * Variants regenerating would REMOVE — they were never ordered.
+   *
+   * `willDelete`, not `toDelete`: the API sends `will_delete`. The name was
+   * wrong here at first, which meant the confirmation read `undefined` and
+   * would have listed nothing while the generate deleted them anyway.
+   */
+  willDelete?: { productId: string, sku: string, name?: LocalizedText }[]
+  /** Variants switched off instead of removed, because they have orders. */
+  willDisable?: { productId: string, sku: string, name?: LocalizedText }[]
   /** Present when a simple product would become configurable. */
-  conversion?: Record<string, unknown>
+  conversion?: VariantConversion
 }
 
 /** `simulate` is the Create page's version: nothing exists yet, nothing is stored. */

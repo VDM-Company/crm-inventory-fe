@@ -145,10 +145,24 @@ export function useApiProducts() {
      * A set over 100 runs as a job and answers with a `jobId` instead of the
      * products, so a caller has to check which it got back.
      */
-    generateVariants: (id: string, axes: VariantAxis[], combinations?: VariantCombination[]) =>
+    generateVariants: (
+      id: string,
+      axes: VariantAxis[],
+      combinations?: VariantCombination[],
+      /**
+       * Where existing subscribers land when a simple product becomes
+       * configurable. Required once it has any (422 `required`), because
+       * they cannot stay on a SKU that stops being sellable.
+       */
+      subscriptionTargetCombination?: string[]
+    ) =>
       api<VariantGenerateResult>(`${base}/${id}/variants/generate`, {
         method: 'POST',
-        body: body({ axes, ...(combinations ? { combinations } : {}) })
+        body: body({
+          axes,
+          ...(combinations ? { combinations } : {}),
+          ...(subscriptionTargetCombination ? { subscriptionTargetCombination } : {})
+        })
       }),
 
     // ── bundles ─────────────────────────────────────────────────────────────

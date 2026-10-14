@@ -86,6 +86,9 @@ const historyEntries = ref<HistoryEntry[]>([])
 const categories = ref<Category[]>([])
 const platforms = ref<VertexPlatform[]>([])
 const attributeDefs = ref<AttributeDef[]>([])
+// The flat defs render the value pickers; the records keep the attribute and
+// option ids, which is what a variant axis is made of.
+const attributeRecords = ref<Attribute[]>([])
 
 // An id that resolved to nothing. Kept apart from `saveError`: it is not a
 // failure to report, it is a page with nothing to show.
@@ -253,7 +256,13 @@ async function loadHistory() {
 onMounted(async () => {
   try {
     ;[categories.value, platforms.value, attributeDefs.value, fees.value] = await Promise.all([
-      categoriesApi.tree().then(flattenVertexTree), platformsApi.list(), attributesApi.list().then(toAttributeDefs), feesApi.list()
+      categoriesApi.tree().then(flattenVertexTree),
+      platformsApi.list(),
+      attributesApi.list().then((records) => {
+        attributeRecords.value = records
+        return toAttributeDefs(records)
+      }),
+      feesApi.list()
     ])
   } catch (err) {
     saveError.value = apiErrorMessage(err, 'Could not load the form data.')
@@ -580,22 +589,90 @@ function removeEditAttr(id: string) {
 function addEditAttribute() {
   editAttributes.value = [...editAttributes.value, { id: 'ea' + Date.now(), name: '', values: [] }]
 }
-/**
- * Generating variants is disabled in this pass.
+/*
+ * Generating variants.
  *
- * The API builds the combinations itself: `previewVariants` reports what
- * generating would create, and which existing variants it would delete
- * (never ordered) or merely disable (ordered before) — a confirmation the
- * screen does not have yet — and `generateVariants` can answer 202 with a
- * job to poll. Running the old client-side generator instead would write a
- * different set of variants from the one the API would make.
+ * `generateVariants` REPLACES the whole set: a combination that drops out of
+ * the new axes is removed if it was never ordered, and switched off if it
+ * was. So the one thing this must not do is run it without saying what it is
+ * about to destroy — `previewVariants` reports exactly that, and the
+ * confirmation below is built from it.
+ *
+ * The old client-side generator that used to sit here is gone. It invented
+ * its own combinations and SKUs, which would not have matched the set the
+ * API actually writes.
  */
-const variantEditingDisabled = true
-const variantEditingReason = 'Generating variants moves to the API, which previews what would be created or removed first. Read-only until that step is built.'
-const editApplyDisabled = computed(() => true)
-function applyEditVariants() {
-  // intentionally inert; see `variantEditingReason`
+const previewDoc = ref<VariantPreview | null>(null)
+const previewSummary = computed(() => toPreviewSummary(previewDoc.value))
+const previewBlocked = computed(() => previewDoc.value ? generateBlockedReason(previewSummary.value) : null)
+const previewOpen = ref(false)
+const previewing = ref(false)
+const generating = ref(false)
+
+/** The attribute rows as axes, resolved against the real attribute records. */
+const editAxes = computed(() =>
+  resolveAxes(attributeRecords.value, editAttributes.value.map(a => ({ name: a.name, values: a.values })))
+)
+
+const editApplyDisabled = computed(() =>
+  previewing.value || generating.value || !editAxes.value.axes.length || !!editAxes.value.unresolved.length
+)
+
+/** Ask the API what generating would do, then show it. */
+async function applyEditVariants() {
+  const id = record.value?.id
+  if (!id || editApplyDisabled.value) return
+
+  const { axes, unresolved } = editAxes.value
+  if (unresolved.length) {
+    saveError.value = 'These attribute values are not in the attribute list: ' + unresolved.join(', ')
+    return
+  }
+
+  previewing.value = true
+  saveError.value = ''
+  try {
+    previewDoc.value = await productsApi.previewVariants(id, axes)
+    previewOpen.value = true
+  } catch (err) {
+    saveError.value = apiErrorMessage(err, 'Could not work out what this would change.')
+  } finally {
+    previewing.value = false
+  }
 }
+
+/** Write the set the confirmation just described. */
+async function confirmGenerateVariants() {
+  const id = record.value?.id
+  if (!id || previewBlocked.value) return
+
+  generating.value = true
+  saveError.value = ''
+  try {
+    const result = await productsApi.generateVariants(
+      id, editAxes.value.axes, combinationsFrom(previewSummary.value, previewDoc.value)
+    )
+    previewOpen.value = false
+    previewDoc.value = null
+
+    const outcome = generateOutcome(result)
+    showToast(outcome.message)
+    // a queued set is not there yet, so re-reading would show the old one
+    if (!outcome.queued) {
+      const rec = await productsApi.get(id, { include: 'children' })
+      record.value = rec
+      const norm = normalizeProduct(toDetailView(rec, pricingDoc.value) as unknown as DetailProduct)
+      product.value = norm
+      editVariants.value = seedEditState(norm).variants
+      await loadHistory()
+    }
+  } catch (err) {
+    saveError.value = apiErrorMessage(err, 'Could not generate the variants.')
+  } finally {
+    generating.value = false
+  }
+}
+
 function updateEditVariant(name: string, field: 'sku' | 'price' | 'stock' | 'image' | 'active', value: string | boolean) {
   editVariants.value = editVariants.value.map(v => v.name === name ? { ...v, [field]: value } : v)
 }
@@ -1542,11 +1619,11 @@ async function onConfirmDelete() {
                   :ui="{ base: ['inline-flex items-center gap-1.5 border-none text-[13px] font-bold px-[18px] py-[9px] rounded-lg mb-7 transition-colors', editApplyDisabled ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-green-500 text-white cursor-pointer shadow-sm hover:bg-green-600'] }"
                   @click="applyEditVariants"
                 >
-                  <UIcon name="i-lucide-check" class="w-3.5 h-3.5" />
-                  Apply
+                  <UIcon :name="previewing ? 'i-lucide-loader-circle' : 'i-lucide-check'" class="w-3.5 h-3.5" :class="previewing && 'animate-spin'" />
+                  {{ previewing ? 'Checking…' : 'Apply' }}
                 </UButton>
-                <p v-if="variantEditingDisabled" class="text-[13px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 -mt-4 mb-7">
-                  {{ variantEditingReason }}
+                <p v-if="editAxes.unresolved.length" class="text-[13px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 -mt-4 mb-7">
+                  Not in the attribute list: {{ editAxes.unresolved.join(', ') }}.
                 </p>
 
                 <div class="flex items-center justify-between mb-3.5">
@@ -1949,6 +2026,94 @@ async function onConfirmDelete() {
         @cancel="onCancelDelete"
         @confirm="onConfirmDelete"
       />
+
+      <!-- variant generation: what the API says this would do -->
+      <template v-if="previewOpen">
+        <div class="fixed inset-0 bg-slate-900/35 backdrop-blur-[2px] z-[130]" @click="previewOpen = false" />
+        <div class="fixed inset-0 z-[131] flex items-center justify-center p-4 pointer-events-none">
+          <UCard class="pointer-events-auto w-[520px] max-w-full max-h-[80vh] overflow-y-auto p-6">
+            <h2 class="text-base font-bold text-slate-900 m-0 mb-1.5">
+              Generate variants?
+            </h2>
+            <p class="text-[13px] text-slate-500 m-0 mb-5">
+              This replaces the whole set. Everything below happens at once.
+            </p>
+
+            <div
+              v-if="previewBlocked"
+              class="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3.5 py-3 text-[13px] text-red-700 mb-5"
+            >
+              <UIcon name="i-lucide-circle-alert" class="w-[15px] h-[15px] flex-shrink-0 mt-0.5" />
+              <span>{{ previewBlocked }}</span>
+            </div>
+
+            <div class="flex flex-col gap-4 mb-6">
+              <VertexPreviewGroup
+                v-if="previewSummary.creating.length"
+                tone="create"
+                icon="i-lucide-plus"
+                :title="`Create ${previewSummary.creating.length}`"
+                :rows="previewSummary.creating"
+              />
+              <VertexPreviewGroup
+                v-if="previewSummary.deleting.length"
+                tone="delete"
+                icon="i-lucide-trash-2"
+                :title="`Delete ${previewSummary.deleting.length}`"
+                subtitle="Never ordered, so they are removed outright."
+                :rows="previewSummary.deleting"
+              />
+              <VertexPreviewGroup
+                v-if="previewSummary.disabling.length"
+                tone="disable"
+                icon="i-lucide-circle-slash"
+                :title="`Switch off ${previewSummary.disabling.length}`"
+                subtitle="These have orders, so they are kept but deactivated."
+                :rows="previewSummary.disabling"
+              />
+              <VertexPreviewGroup
+                v-if="previewSummary.keeping.length"
+                tone="keep"
+                icon="i-lucide-check"
+                :title="`Keep ${previewSummary.keeping.length}`"
+                :rows="previewSummary.keeping"
+              />
+
+              <p v-if="previewSummary.noop" class="text-[13px] text-slate-500 m-0">
+                Nothing would change.
+              </p>
+              <p
+                v-if="previewSummary.conversion"
+                class="text-[13px] text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 m-0"
+              >
+                This turns a single product into one with variants. Its SKU
+                <span class="font-mono">{{ previewSummary.conversion.oldSku }}</span>
+                becomes the parent's and stops being sellable on its own.
+              </p>
+            </div>
+
+            <div class="flex justify-end gap-2.5">
+              <UButton
+                variant="ghost"
+                type="button"
+                :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-4 py-2 rounded-lg cursor-pointer' }"
+                @click="previewOpen = false"
+              >
+                Cancel
+              </UButton>
+              <UButton
+                variant="ghost"
+                type="button"
+                :disabled="!!previewBlocked || previewSummary.noop || generating"
+                :ui="{ base: ['text-sm font-bold px-4 py-2 rounded-lg', (previewBlocked || previewSummary.noop || generating) ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-green-500 text-white cursor-pointer hover:bg-green-600'] }"
+                @click="confirmGenerateVariants"
+              >
+                {{ generating ? 'Generating…' : 'Generate' }}
+              </UButton>
+            </div>
+          </UCard>
+        </div>
+      </template>
 
       <!-- toast -->
       <VertexToast :message="toastMessage" variant="dark" />

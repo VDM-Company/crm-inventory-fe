@@ -3,6 +3,7 @@ import { mountSuspended } from '@nuxt/test-utils/runtime'
 import VertexEmptyState from '~/components/vertex/EmptyState.vue'
 import VertexErrorBanner from '~/components/vertex/ErrorBanner.vue'
 import VertexLoadingPanel from '~/components/vertex/LoadingPanel.vue'
+import VertexPreviewGroup from '~/components/vertex/PreviewGroup.vue'
 import VertexStatusBadge from '~/components/vertex/StatusBadge.vue'
 import VertexTableSkeleton from '~/components/vertex/TableSkeleton.vue'
 import VertexToast from '~/components/vertex/Toast.vue'
@@ -70,5 +71,47 @@ describe('VertexToast', () => {
 
     const shown = await mountSuspended(VertexToast, { props: { message: 'Product created' } })
     expect(shown.text()).toContain('Product created')
+  })
+})
+
+describe('VertexPreviewGroup', () => {
+  const rows = [
+    { id: 'a', label: 'Black / 8 Days', sku: 'X1-BLK-8D' },
+    { id: 'b', label: 'White / 8 Days', sku: 'X1-WHT-8D' }
+  ]
+
+  it('lists every row with its label and SKU', async () => {
+    const c = await mountSuspended(VertexPreviewGroup, {
+      props: { tone: 'create', icon: 'i-lucide-plus', title: 'Create 2', rows }
+    })
+    expect(c.text()).toContain('Create 2')
+    expect(c.text()).toContain('Black / 8 Days')
+    expect(c.text()).toContain('X1-WHT-8D')
+    expect(c.findAll('li')).toHaveLength(2)
+  })
+
+  it('colours a destructive group differently from an additive one', async () => {
+    // the dialog's whole job is that "create 4" and "delete 2" cannot be
+    // mistaken for each other at a glance
+    const create = await mountSuspended(VertexPreviewGroup, {
+      props: { tone: 'create', icon: 'i-lucide-plus', title: 'Create', rows }
+    })
+    const del = await mountSuspended(VertexPreviewGroup, {
+      props: { tone: 'delete', icon: 'i-lucide-trash-2', title: 'Delete', rows }
+    })
+    expect(create.classes().join(' ')).toContain('emerald')
+    expect(del.classes().join(' ')).toContain('red')
+  })
+
+  it('explains itself when given a subtitle, and stays quiet without one', async () => {
+    const withSub = await mountSuspended(VertexPreviewGroup, {
+      props: { tone: 'disable', icon: 'i-lucide-circle-slash', title: 'Switch off', subtitle: 'These have orders.', rows }
+    })
+    expect(withSub.text()).toContain('These have orders.')
+
+    const without = await mountSuspended(VertexPreviewGroup, {
+      props: { tone: 'keep', icon: 'i-lucide-check', title: 'Keep', rows }
+    })
+    expect(without.findAll('p')).toHaveLength(0)
   })
 })

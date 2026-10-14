@@ -424,7 +424,9 @@ export const vertexVariantAxesSchema = z.object({ axes: axesSchema }).loose()
  */
 export const vertexVariantGenerateSchema = z.object({
   axes: axesSchema,
-  combinations: combinationsSchema.optional()
+  combinations: combinationsSchema.optional(),
+  /** One combination, as option ids — where existing subscribers land. */
+  subscriptionTargetCombination: z.array(z.string().trim().min(1)).min(1).optional()
 }).loose()
 
 /** The Create page's dry run: the product does not exist yet, so it sends its own sku and name. */
