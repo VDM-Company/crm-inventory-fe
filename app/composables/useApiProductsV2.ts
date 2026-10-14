@@ -208,10 +208,13 @@ export function useApiProductsV2() {
  * not exist yet, so the caller supplies the SKU and name it is about to have.
  */
 export const simulateVariants = (sku: string, name: Record<string, string>, axes: VariantAxis[]) =>
-  // plain `$fetch`, not `useApiFetch()`: this is not a composable and is only
-  // ever reached from a click, so there is no setup context to read the
-  // request from and nothing to server-render
-  $fetch<VariantSimulation>('/api/products-v2/variants/simulate', {
+  // `globalThis.$fetch`, read at call time, rather than the auto-imported
+  // one. This is not a composable, so there is no setup context for
+  // `useApiFetch()` — but the auto-import is a SNAPSHOT of the global taken
+  // before plugins run (`export const $fetch = globalThis.$fetch` in
+  // `#build/fetch.mjs`), so it is not the instance `auth-401.client.ts`
+  // installs and a dead session here would go unnoticed.
+  globalThis.$fetch<VariantSimulation>('/api/products-v2/variants/simulate', {
     method: 'POST',
     body: { sku, name, axes } as unknown as Record<string, unknown>
   })
