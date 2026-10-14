@@ -60,28 +60,6 @@ interface HistoryRow {
   toggleIcon: string
 }
 
-const DEMO_PRODUCT: DetailProduct = {
-  id: null,
-  name: 'Tourist SIM 15GB',
-  sku: 'SKU-2000',
-  productType: 'variant',
-  notes: 'Best seller for inbound travelers. Restocked every 6 weeks.',
-  category: 'SIM Card',
-  platform: 'SK SIM',
-  platformIds: [SKSIM_ID],
-  status: 'Active',
-  image: null,
-  attributes: [
-    { name: 'Data', values: ['15GB'] },
-    { name: 'Duration', values: ['8 Days', '16 Days', '31 Days'] }
-  ],
-  variants: [
-    { name: '15GB / 8 Days', sku: 'SKU-2000-01', price: 24, stock: 42, active: true },
-    { name: '15GB / 16 Days', sku: 'SKU-2000-02', price: 32, stock: 28, active: true },
-    { name: '15GB / 31 Days', sku: 'SKU-2000-03', price: 44, stock: 12, active: false }
-  ]
-}
-
 // ── state (mirrors the design's DCLogic state) ──
 const mode = ref<'view' | 'edit'>('view')
 const openDropdown = ref<string | null>(null)
@@ -109,7 +87,9 @@ const categories = ref<Category[]>([])
 const platforms = ref<VertexPlatform[]>([])
 const attributeDefs = ref<AttributeDef[]>([])
 
-const isStored = ref(false)
+// An id that resolved to nothing. Kept apart from `saveError`: it is not a
+// failure to report, it is a page with nothing to show.
+const notFound = ref(false)
 let editSnapshot: string | null = null
 let deleteTimer: number | null = null
 
@@ -124,20 +104,24 @@ const EMPTY_PRODUCT: Partial<DetailProduct> = {
   variants: []
 }
 
-function normalizeProduct(rec: DetailProduct | null): { product: DetailProduct, stored: boolean } {
-  // A record that was found supplies its own content. Spreading DEMO_PRODUCT
-  // under it filled every gap with the demo's — which showed one product's
-  // notes, category and variants on another's page.
-  const base: DetailProduct = rec
-    ? { ...EMPTY_PRODUCT, ...rec } as DetailProduct
-    : { ...DEMO_PRODUCT }
+/**
+ * A found record, filled out with the shapes the template indexes into.
+ *
+ * It takes a record rather than a nullable one on purpose. An id that does
+ * not resolve used to fall through to a fabricated product — `Tourist SIM
+ * 15GB`, its notes, its variants and its prices — rendered under whatever URL
+ * the reader had opened, with nothing to say it was invented. There is
+ * nothing to fall back TO now; the caller shows "not found" instead.
+ */
+function normalizeProduct(rec: DetailProduct): DetailProduct {
+  const base: DetailProduct = { ...EMPTY_PRODUCT, ...rec } as DetailProduct
   if (!base.platformIds) base.platformIds = []
   if (base.productType !== 'bundle') {
     const hv = base.productType === 'variant' || !!base.hasVariants || !!(base.variants && base.variants.length)
     base.productType = hv ? 'variant' : 'single'
     base.hasVariants = hv
   }
-  return { product: base, stored: !!rec }
+  return base
 }
 
 // Empty until the record arrives, behind the loading panel. It used to start
@@ -252,12 +236,15 @@ onMounted(async () => {
   }
   try {
     const rec = await loadRecordById(route.query.id)
-    const norm = normalizeProduct(rec)
-    product.value = norm.product
-    draft.value = { ...norm.product }
-    isStored.value = norm.stored
-    // after the record, so it has an id to ask about
-    await loadHistory()
+    if (!rec) {
+      notFound.value = true
+    } else {
+      const norm = normalizeProduct(rec)
+      product.value = norm
+      draft.value = { ...norm }
+      // after the record, so it has an id to ask about
+      await loadHistory()
+    }
   } catch {
     // the error is already on screen; don't present the demo record
   } finally {
@@ -488,7 +475,9 @@ const bundleComponentRows = computed(() =>
     products: c.products || []
   }))
 )
-const variantParentKey = computed(() => (isStored.value && product.value.id) ? product.value.id : 'demo')
+// The id the variant screen loads its parent by. It used to fall back to the
+// string 'demo', which that screen understood as "render the demo variant".
+const variantParentKey = computed(() => product.value.id || '')
 // Shape produced by `viewVariantRows` below.
 interface ViewVariantRow {
   name: string
@@ -938,14 +927,19 @@ function onCancelDelete() {
   deleteConfirmOpen.value = false
 }
 async function onConfirmDelete() {
-  if (isStored.value && product.value.id) {
-    try {
-      await productsApi.remove(product.value.id)
-    } catch (err) {
-      deleteConfirmOpen.value = false
-      saveError.value = apiErrorMessage(err, 'Could not delete the product.')
-      return
-    }
+  // Without an id there is nothing to delete, and saying "Product deleted"
+  // anyway — which is what the demo-era branch did — is a lie.
+  if (!product.value.id) {
+    deleteConfirmOpen.value = false
+    saveError.value = 'This product has no id, so it cannot be deleted.'
+    return
+  }
+  try {
+    await productsApi.remove(product.value.id)
+  } catch (err) {
+    deleteConfirmOpen.value = false
+    saveError.value = apiErrorMessage(err, 'Could not delete the product.')
+    return
   }
   deleteConfirmOpen.value = false
   toastMessage.value = 'Product deleted'
@@ -957,6 +951,23 @@ async function onConfirmDelete() {
   <div class="form-compact mx-auto max-w-[1280px] px-8 pt-8 pb-20">
     <VertexErrorBanner :message="saveError" class="mb-4" />
     <VertexLoadingPanel v-if="loading" label="Loading product…" />
+
+    <!-- An id that resolved to nothing. This used to render a fabricated
+         product instead, under whatever URL the reader had opened. -->
+    <UCard v-else-if="notFound" class="text-center px-6 py-12">
+      <div class="text-base font-bold text-slate-900 mb-1.5">
+        Product not found
+      </div>
+      <div class="text-sm text-slate-400 mb-4">
+        It may have been deleted, or the link may be wrong.
+      </div>
+      <NuxtLink
+        to="/dashboard"
+        class="border-none bg-green-500 text-white text-sm font-bold px-[18px] py-[9px] rounded-lg inline-flex items-center gap-1.5 no-underline hover:bg-green-600 transition-colors"
+      >
+        Back to products
+      </NuxtLink>
+    </UCard>
 
     <template v-else>
       <!-- header -->

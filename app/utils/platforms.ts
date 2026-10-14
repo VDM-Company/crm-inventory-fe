@@ -1,13 +1,10 @@
 // Pure helpers over an already-loaded platform list. Reads and writes go
 // through `useApiPlatforms()`.
 
-// re-exported so the existing auto-imported call sites keep working
-export { PLATFORM_SEED, SKSIM_ID, SIMPOINT_ID, OLDSTORE_ID } from '#shared/seeds'
-
 /**
- * Generic over the record so it serves both seams while the screens migrate:
- * the older `Platform` and the API's `VertexPlatform` differ in their fields
- * but not in having an `id`.
+ * Generic over the record because the callers hold different shapes — a
+ * `VertexPlatform` from the API, or a row a screen has already folded — and
+ * all they share is an `id`.
  */
 export function platformById<T extends { id: string }>(list: T[], id: string): T | null {
   return list.find(p => p.id === id) || null

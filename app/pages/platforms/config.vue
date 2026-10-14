@@ -58,7 +58,7 @@ onMounted(async () => {
       settingsVersion.value = settings.lockVersion
       cfg.value = settingsToConfigValues(settings)
     } else {
-      cfg.value = { ...GENERIC_CONFIG_SEED }
+      cfg.value = { ...EMPTY_CONFIG }
     }
   } catch (err) {
     saveError.value = apiErrorMessage(err, 'Could not load this platform.')

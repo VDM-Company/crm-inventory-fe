@@ -1,10 +1,9 @@
 import type { ConfigGroup, ConfigValues } from '~/types'
-import { PLATFORM_CONFIG_SEED, GENERIC_CONFIG_SEED } from '#shared/seeds'
 
-// The field groups the platform Configuration form renders, and the seed that
-// fills a new platform's form.
+// The field groups the platform Configuration form renders, and the blank it
+// starts from.
 //
-// Reads and writes moved to `useApiPlatforms().settings` / `saveSettings`,
+// Reads and writes go through `useApiPlatforms().settings` / `saveSettings`,
 // which speak the API's grouped shape; `shared/utils/platform-settings.ts`
 // maps between that and the flat keys below.
 
@@ -27,12 +26,21 @@ export const CONFIG_GROUPS: ConfigGroup[] = [
   ] }
 ]
 
-// Independent seed per platform — no base, each platform owns its full values.
-
-export { PLATFORM_CONFIG_SEED, GENERIC_CONFIG_SEED } from '#shared/seeds'
-
-// Deterministic — safe to call during SSR so a ref can be initialised with the
-// same value the first client paint produces.
-export function platformConfigSeed(platformId: string): ConfigValues {
-  return { ...(PLATFORM_CONFIG_SEED[platformId] || GENERIC_CONFIG_SEED) }
+/**
+ * An unfilled configuration form.
+ *
+ * It lived in `shared/seeds/` and was called a seed, which it never was —
+ * every value is blank. The real seeds beside it held invented store names,
+ * phone numbers and addresses for three platforms; they went when the last
+ * thing reading them did. Spread it, never bind it, so a form cannot write
+ * through to the constant.
+ */
+export const EMPTY_CONFIG: ConfigValues = {
+  storeName: '',
+  phone: '',
+  address: '',
+  senderName: '',
+  senderEmail: '',
+  contactEnabled: true,
+  contactEmail: ''
 }

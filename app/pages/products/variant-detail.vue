@@ -27,7 +27,9 @@ function qParam(v: unknown): string {
   if (Array.isArray(v)) return typeof v[0] === 'string' ? v[0] : ''
   return typeof v === 'string' ? v : ''
 }
-const productKey = qParam(route.query.product) || 'demo'
+// '' rather than the old 'demo' sentinel, which this page understood as
+// "render the demo variant" and the product page used to send.
+const productKey = qParam(route.query.product) || ''
 const variantNameQuery = qParam(route.query.variant)
 
 // ── state ──
@@ -85,7 +87,8 @@ onMounted(async () => {
     saveError.value = apiErrorMessage(err, 'Could not load this variant.')
   }
 
-  if (!productKey || productKey === 'demo') {
+  if (!productKey) {
+    // nothing to look up; `found` stays false and the not-found card renders
     loading.value = false
     return
   }

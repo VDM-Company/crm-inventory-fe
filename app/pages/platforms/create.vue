@@ -29,7 +29,7 @@ const platformVersion = ref(0)
 const discardOpen = ref(false)
 // Config starts blank on this screen (the design does not preload an existing
 // platform's saved values here) and is written on save.
-const cfg = ref<ConfigValues>({ ...GENERIC_CONFIG_SEED })
+const cfg = ref<ConfigValues>({ ...EMPTY_CONFIG })
 
 // SSR-safe: resolve the edit target from localStorage only after mount, so
 // server + first client paint both render the empty "Create" form.
