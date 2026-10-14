@@ -4,7 +4,6 @@ import type { FormSubmitEvent, TableColumn } from '@nuxt/ui'
 import type {
   AttributeDef,
   Category,
-  Fee,
   ProductStatus,
   ProductType
 } from '~/types'
@@ -117,7 +116,7 @@ const scope = ref('default')
 const draftOverrides = ref<Overrides>({})
 
 // ── pricing (re-added in Master v3 for non-variant products) ──
-const fees = ref<Fee[]>([])
+const fees = ref<FeeItem[]>([])
 const editIsSubscription = ref(true)
 const editMonthly = ref<string | number>('')
 const editInitialComponents = ref<PricingComponent[]>([])
@@ -168,32 +167,71 @@ function normalizeProduct(rec: DetailProduct | null): { product: DetailProduct, 
   return { product: base, stored: !!rec }
 }
 
-// SSR-safe: both server and first client paint render the DEMO product
-// (deterministic); the real record is swapped in on mount.
-const seededDemo = normalizeProduct(null).product
-const product = ref<DetailProduct>({ ...seededDemo })
-const draft = ref<DetailProduct>({ ...seededDemo })
+// Empty until the record arrives, behind the loading panel. It used to start
+// as the DEMO product, so the first paint showed one product's name, SKU and
+// prices under another's URL before the fetch replaced them.
+const EMPTY: DetailProduct = {
+  id: null, name: '', sku: '', productType: 'single', status: 'Active', platformIds: []
+}
+const product = ref<DetailProduct>({ ...EMPTY })
+const draft = ref<DetailProduct>({ ...EMPTY })
+
+/**
+ * The API documents this screen folds together: the product itself (with its
+ * variants), its pricing, and — for a bundle — its contents.
+ *
+ * `record` is kept beside the view model because the writes need what the
+ * flat shape drops: the `lockVersion` every PATCH carries, the `lockedFields`
+ * the form disables, and the real `status` the status endpoint moves.
+ */
+const record = ref<VertexProduct | null>(null)
+const pricingDoc = ref<ProductPricing | null>(null)
+const bundleOpts = ref<BundleOption[]>([])
+
+const baseFeeId = computed(() => fees.value.find(f => f.kind === 'base')?.id || '')
+const canPrice = computed(() => isSellable(record.value))
+
+async function loadPricing(id: string) {
+  // A configurable parent has no price of its own — the API answers 422
+  // `not_sellable`, because the prices belong to its variants. That is not an
+  // error the reader can act on, so it is not shown as one.
+  try {
+    pricingDoc.value = await productsApi.pricing(id)
+  } catch (err) {
+    pricingDoc.value = null
+    if ((err as { statusCode?: number })?.statusCode !== 422) {
+      saveError.value = apiErrorMessage(err, 'Could not load this product’s prices.')
+    }
+  }
+}
 
 async function loadRecordById(rawId: unknown): Promise<DetailProduct | null> {
   const id = Array.isArray(rawId) ? rawId[0] : rawId
   if (!id) return null
   try {
-    return await productsApi.get<DetailProduct>(id)
+    const rec = await productsApi.get(id, { include: 'children' })
+    record.value = rec
+    await loadPricing(rec.id)
+    if (rec.type === 'bundle') {
+      try {
+        bundleOpts.value = await productsApi.bundleOptions(rec.id)
+      } catch {
+        bundleOpts.value = []
+      }
+    }
+    return toDetailView(rec, pricingDoc.value) as unknown as DetailProduct
   } catch (err) {
-    // Only an unknown id falls back to the demo record. Any other failure has
-    // to surface: showing demo data for a real id would let someone edit it
-    // and get a success toast while `persist` quietly skips the write.
     if ((err as { statusCode?: number })?.statusCode === 404) return null
     saveError.value = apiErrorMessage(err, 'Could not load this product.')
     throw err
   }
 }
 
-const productsApi = useApiProducts()
+const productsApi = useApiProductsV2()
 const categoriesApi = useApiCategoriesV2()
 const platformsApi = useApiPlatformsV2()
 const attributesApi = useApiAttributesV2()
-const feesApi = useApiFees()
+const feesApi = useApiFeeItems()
 
 onMounted(async () => {
   try {
@@ -521,14 +559,21 @@ function removeEditAttr(id: string) {
 function addEditAttribute() {
   editAttributes.value = [...editAttributes.value, { id: 'ea' + Date.now(), name: '', values: [] }]
 }
-const editApplyDisabled = computed(() => {
-  const valid = editAttributes.value.some(a => a.name && a.name.trim() && a.values.length > 0)
-  if (!valid) return true
-  return attrKey(editAttributes.value) === editAppliedKey.value
-})
+/**
+ * Generating variants is disabled in this pass.
+ *
+ * The API builds the combinations itself: `previewVariants` reports what
+ * generating would create, and which existing variants it would delete
+ * (never ordered) or merely disable (ordered before) — a confirmation the
+ * screen does not have yet — and `generateVariants` can answer 202 with a
+ * job to poll. Running the old client-side generator instead would write a
+ * different set of variants from the one the API would make.
+ */
+const variantEditingDisabled = true
+const variantEditingReason = 'Generating variants moves to the API, which previews what would be created or removed first. Read-only until that step is built.'
+const editApplyDisabled = computed(() => true)
 function applyEditVariants() {
-  editVariants.value = regenerateVariants(editAttributes.value, editVariants.value)
-  editAppliedKey.value = attrKey(editAttributes.value)
+  // intentionally inert; see `variantEditingReason`
 }
 function updateEditVariant(name: string, field: 'sku' | 'price' | 'stock' | 'image' | 'active', value: string | boolean) {
   editVariants.value = editVariants.value.map(v => v.name === name ? { ...v, [field]: value } : v)
@@ -547,7 +592,7 @@ const isSinglePricing = computed(() => !isVariantProduct.value)
 const basePricingVersion = computed<PricingVersion>(() => product.value.pricing?.[0] || {})
 
 function feeNameOf(feeId: string) {
-  return feeById(fees.value, feeId)?.name || 'Component'
+  return localized(fees.value.find(f => f.id === feeId)?.name) || 'Component'
 }
 function yen(n: number) {
   return '¥' + Math.round(n).toLocaleString('en-US')
@@ -605,7 +650,7 @@ const editComponentRows = computed(() => {
     return {
       index: i,
       feeId: c.feeId,
-      name: feeById(fees.value, c.feeId)?.name || 'Select component...',
+      name: localized(fees.value.find(f => f.id === c.feeId)?.name) || 'Select component...',
       locked: isBase,
       selectable: !isBase,
       selectDisabled: locked,
@@ -779,9 +824,55 @@ function onConfirmDiscard() {
   mode.value = 'view'
 }
 
+/**
+ * Saving is three requests, and only the ones that have something to say.
+ *
+ *   1. PATCH the product — with ONLY the fields that changed. `sku` is
+ *      refused once the product leaves Draft, so a patch that resent every
+ *      field would fail a save that only edited the notes.
+ *   2. A price plan, if the prices moved. Every POST supersedes the active
+ *      plan and adds to the product's price history, so an unchanged price
+ *      must not create one. A configurable parent is skipped entirely: its
+ *      prices live on its variants.
+ *   3. The status LAST. Activating validates the product is complete, so
+ *      doing it before the plan exists answers 422 `base_price_required`.
+ *
+ * Not a transaction. The record is re-read before any failure is reported.
+ */
 async function persist(merged: DetailProduct) {
-  if (!isStored.value || !merged.id) return
-  await productsApi.update<DetailProduct>(merged.id, merged)
+  const rec = record.value
+  if (!rec) return
+
+  const patch = detailPatch(toDetailEditable(rec), {
+    name: merged.name,
+    sku: merged.sku,
+    notes: merged.notes ?? '',
+    description: merged.description ?? '',
+    categoryId: merged.categoryId ?? '',
+    platformIds: merged.platformIds || [],
+    notForSale: !!merged.notForSale
+  })
+  if (hasChanges(patch)) {
+    record.value = await productsApi.update(rec.id, patch, rec.lockVersion)
+  }
+
+  if (canPrice.value && isSinglePricing.value) {
+    const lines = componentsToLines(
+      editInitialComponents.value
+        .filter(c => c.feeId)
+        .map(c => ({ feeItemId: c.feeId, amount: String(c.amount ?? ''), isPublished: !!c.published })),
+      baseFeeId.value
+    )
+    if (!pricePlanUnchanged(pricingDoc.value?.default?.activePlan?.lines, lines)) {
+      await productsApi.createPricePlan(rec.id, { scope: 'default', effectiveAt: null, lines })
+      await loadPricing(rec.id)
+    }
+  }
+
+  const wantActive = merged.status === 'Active'
+  if (record.value && wantActive !== (record.value.status === 'active')) {
+    record.value = await productsApi.setStatus(rec.id, wantActive ? 'active' : 'inactive')
+  }
 }
 async function onSaveClick(_event: FormSubmitEvent<ProductSchema>) {
   const d = draft.value
@@ -811,20 +902,28 @@ async function onSaveClick(_event: FormSubmitEvent<ProductSchema>) {
   })
   merged.overrides = cleanOv
   merged.categoryPath = d.categoryId ? categoryPathById(categories.value, d.categoryId) : d.category
-  if (product.value.hasVariants) {
-    const cleanAttrs = editAttributes.value
-      .filter(a => a.name.trim() && a.values.length > 0)
-      .map(a => ({ name: a.name.trim(), values: [...a.values] }))
-    merged.attributes = cleanAttrs
-    merged.variants = regenerateVariants(editAttributes.value, editVariants.value)
-      .map(v => ({ name: v.name, sku: v.sku, price: v.price, stock: v.stock, active: !!v.active, image: v.image || null }))
-    // deviation from source: keep the denormalised count the Dashboard reads
-    merged.variantCount = merged.variants.length
-  }
+  // Variants are NOT written here. Generating them is its own flow —
+  // `previewVariants` shows what would be deleted or disabled, and
+  // `generateVariants` can answer 202 with a job — so the editor is read-only
+  // this pass and the existing variants come from the API's `children`.
+  merged.variants = product.value.variants
+  merged.variantCount = product.value.variantCount
   try {
     await persist(merged)
   } catch (err) {
-    saveError.value = apiErrorMessage(err, 'Could not save the product.')
+    // the three steps above are not atomic, so re-read before reporting
+    const id = record.value?.id
+    if (id) {
+      try {
+        record.value = await productsApi.get(id, { include: 'children' })
+        await loadPricing(id)
+      } catch {
+        // leave what is on screen; the message below is the useful part
+      }
+    }
+    saveError.value = apiErrorCode(err) === 'stale_version'
+      ? 'Someone else changed this product. Reload the page before saving again.'
+      : apiErrorMessage(err, 'Could not save the product.')
     return
   }
   const changes = diffChanges(product.value, merged)
@@ -1365,6 +1464,9 @@ async function onConfirmDelete() {
                   <UIcon name="i-lucide-check" class="w-3.5 h-3.5" />
                   Apply
                 </UButton>
+                <p v-if="variantEditingDisabled" class="text-[13px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 -mt-4 mb-7">
+                  {{ variantEditingReason }}
+                </p>
 
                 <div class="flex items-center justify-between mb-3.5">
                   <div class="flex items-center gap-2">
