@@ -52,8 +52,6 @@ export interface DashStat {
   iconColor: string
 }
 
-export type FilterField = 'name' | 'variants' | 'sku' | 'category' | 'productType' | 'platform' | 'status'
-
 export interface FilterRule {
   id: string
   field: FilterField

@@ -32,7 +32,7 @@ export const vertexLoginSchema = z.object({
 const localizedText = z.record(z.string(), z.string().trim().min(1))
   .refine(v => Object.keys(v).length > 0, 'Give the text in at least one language.')
 
-export const feeItemKindSchema = z.enum(['base', 'tax', 'shipping', 'other'])
+const feeItemKindSchema = z.enum(['base', 'tax', 'shipping', 'other'])
 
 export const feeItemCreateSchema = z.object({
   // the API answers 422 `regex` / `code_taken`; match it here so an obvious
@@ -124,7 +124,7 @@ export const vertexPlatformQuerySchema = z.object({
   includeTotal: z.stringbool().optional()
 }).loose()
 
-export const attributeInputTypeSchema = z.enum(['dropdown', 'swatch', 'radio', 'text'])
+const attributeInputTypeSchema = z.enum(['dropdown', 'swatch', 'radio', 'text'])
 
 const attributeOptionBody = z.object({
   label: localizedText,
@@ -257,7 +257,7 @@ export const vertexCategoryProductsOrderSchema = z.object({
   platformId: z.string().trim().min(1).optional()
 }).loose()
 
-export const vertexProductTypeSchema = z.enum(['simple', 'configurable', 'bundle'])
+const vertexProductTypeSchema = z.enum(['simple', 'configurable', 'bundle'])
 
 const productAttributeValue = z.object({
   attributeId: z.string().trim().min(1),
@@ -302,7 +302,7 @@ const productBody = z.object({
 }).loose()
 
 /** The same block as it goes inline on create, at most 100 combinations. */
-export const vertexInlineVariantsSchema = z.object({
+const vertexInlineVariantsSchema = z.object({
   axes: axesSchema,
   combinations: combinationsSchema.max(100, 'At most 100 variants can be created in one call.').optional()
 }).loose()

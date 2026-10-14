@@ -20,10 +20,6 @@
 /** Text keyed by locale, e.g. `{ en: 'Base Price' }`. */
 export type LocalizedText = Record<string, string>
 
-export interface VertexEnvelope<T> {
-  data: T
-}
-
 export interface VertexListMeta {
   /** Pass back as `cursor` to get the next page. Null on the last one. */
   nextCursor: string | null
@@ -71,12 +67,6 @@ export interface VertexErrorBody {
   errors?: Record<string, VertexFieldError[]>
 }
 
-/** 409 codes this app acts on. The API defines more. */
-export type VertexConflictCode
-  = | 'stale_version'
-    | 'in_use'
-    | 'system_fee_item'
-
 // ── fee items ───────────────────────────────────────────────────────────────
 
 /** `base` is seeded and exists once. `tax` and `shipping` are system rows too. */
@@ -116,10 +106,6 @@ export interface FeeItemPatch {
   name?: LocalizedText
   description?: LocalizedText | null
   icon?: string | null
-}
-
-export interface FeeItemQuery extends CursorQuery {
-  kind?: FeeItemKind
 }
 
 // ── platforms ───────────────────────────────────────────────────────────────
@@ -177,11 +163,6 @@ export interface VertexPlatformPatch {
   domain?: string
   defaultLocale?: string
   locales?: string[]
-}
-
-export interface VertexPlatformQuery extends CursorQuery {
-  status?: 'active' | 'inactive'
-  q?: string
 }
 
 // ── attributes ──────────────────────────────────────────────────────────────
@@ -256,15 +237,6 @@ export interface AttributeOptionDraft {
 }
 
 export type AttributeOptionPatch = Partial<AttributeOptionDraft>
-
-export interface AttributeQuery extends CursorQuery {
-  q?: string
-  /** Comma list; an unknown value is 422 `in`. */
-  inputType?: string
-  /** True narrows to the types that can be a variant axis. */
-  variantAxis?: boolean
-  isFilterable?: boolean
-}
 
 // ── categories ──────────────────────────────────────────────────────────────
 

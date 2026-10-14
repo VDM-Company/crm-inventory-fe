@@ -9,6 +9,9 @@
  *
  *   <UButton variant="ghost" :ui="{ base: [BTN_PRIMARY, 'px-[18px] py-[9px] text-[15px]'] }" />
  *
+ * Only the three families below earned their place. Icon and dashed buttons
+ * were presets too, and every call site wrote the classes inline anyway.
+ *
  * `variant="ghost"` matters: UButton's `outline` variant draws a **ring** in
  * its own accent colour, not the design's `slate-200` border.
  */
@@ -21,12 +24,3 @@ export const BTN_OUTLINE = 'border border-slate-200 bg-white text-slate-700 font
 
 /** Destructive confirm. */
 export const BTN_DANGER = 'bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition-colors'
-
-/** Square icon button sitting on a card (bordered). */
-export const BTN_ICON = 'hover:bg-slate-100 border border-slate-200 bg-white rounded-lg inline-flex items-center justify-center'
-
-/** Square icon button with no chrome until hover. */
-export const BTN_ICON_GHOST = 'hover:bg-slate-100 border-none bg-transparent rounded-lg inline-flex items-center justify-center'
-
-/** Dashed "add another…" affordance. */
-export const BTN_DASHED = 'inline-flex items-center gap-1.5 border border-dashed border-green-500 bg-emerald-50 text-green-600 font-semibold rounded-lg'
