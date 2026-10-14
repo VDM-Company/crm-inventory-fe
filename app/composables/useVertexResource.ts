@@ -24,33 +24,34 @@ import type { CursorQuery, VertexList } from '#shared/types'
  */
 export function useVertexResource<T, Draft, Patch>(resource: string) {
   const base = `/api/${resource}`
+  const api = useApiFetch()
   const body = (v: unknown) => v as Record<string, unknown>
 
   return {
     /** Every row; the server follows the cursors. Master data only. */
     list: (query?: CursorQuery & Record<string, unknown>) =>
-      $fetch<VertexList<T>>(base, { query: { ...query, all: true } }).then(r => r.data ?? []),
+      api<VertexList<T>>(base, { query: { ...query, all: true } }).then(r => r.data ?? []),
 
     /** One page plus its cursors. */
     page: (query?: CursorQuery & Record<string, unknown>) =>
-      $fetch<VertexList<T>>(base, { query: query as Record<string, unknown> }),
+      api<VertexList<T>>(base, { query: query as Record<string, unknown> }),
 
     /** Throws 404 for an unknown id; the caller decides what that means. */
-    get: (id: string) => $fetch<T>(`${base}/${id}`),
+    get: (id: string) => api<T>(`${base}/${id}`),
 
-    create: (draft: Draft) => $fetch<T>(base, { method: 'POST', body: body(draft) }),
+    create: (draft: Draft) => api<T>(base, { method: 'POST', body: body(draft) }),
 
     /** `lockVersion` is the one the record carried when it was read. */
     update: (id: string, patch: Patch, lockVersion: number) =>
-      $fetch<T>(`${base}/${id}`, { method: 'PATCH', body: body({ ...patch, lockVersion }) }),
+      api<T>(`${base}/${id}`, { method: 'PATCH', body: body({ ...patch, lockVersion }) }),
 
     /** Only for resources that actually have a DELETE. */
     remove: async (id: string): Promise<void> => {
-      await $fetch(`${base}/${id}`, { method: 'DELETE' })
+      await api(`${base}/${id}`, { method: 'DELETE' })
     },
 
     /** A POST that acts on one record and returns it — `activate`, `restore`, … */
     action: (id: string, name: string) =>
-      $fetch<T>(`${base}/${id}/${name}`, { method: 'POST' })
+      api<T>(`${base}/${id}/${name}`, { method: 'POST' })
   }
 }

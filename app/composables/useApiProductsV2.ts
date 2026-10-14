@@ -50,34 +50,35 @@ import type {
  */
 export function useApiProductsV2() {
   const base = '/api/products-v2'
+  const api = useApiFetch()
   const body = (v: unknown) => v as Record<string, unknown>
 
   return {
     /** One page plus its cursors. There is no whole-list call by design. */
     page: (query?: VertexProductQuery) =>
-      $fetch<VertexList<VertexProductRow>>(base, { query: query as Record<string, unknown> }),
+      api<VertexList<VertexProductRow>>(base, { query: query as Record<string, unknown> }),
 
     /**
      * The Default values of one product. `include: 'children'` adds a
      * configurable's variants, as list rows carrying their axis values.
      */
     get: (id: string, options?: { include?: 'children' }) =>
-      $fetch<VertexProduct>(`${base}/${id}`, { query: options?.include ? { include: options.include } : undefined }),
+      api<VertexProduct>(`${base}/${id}`, { query: options?.include ? { include: options.include } : undefined }),
 
     /** Creates product data only; prices come from the price-plan endpoints. */
     create: (draft: VertexProductDraft) =>
-      $fetch<VertexProduct>(base, { method: 'POST', body: body(draft) }),
+      api<VertexProduct>(base, { method: 'POST', body: body(draft) }),
 
     /**
      * Neither `type` nor `status` can be changed here — the API moves a type
      * only through variant generation and a status only through `setStatus`.
      */
     update: (id: string, patch: VertexProductPatch, lockVersion: number) =>
-      $fetch<VertexProduct>(`${base}/${id}`, { method: 'PATCH', body: body({ ...patch, lockVersion }) }),
+      api<VertexProduct>(`${base}/${id}`, { method: 'PATCH', body: body({ ...patch, lockVersion }) }),
 
     /** Soft delete. 409 when subscriptions are active, or for a variant. */
     remove: async (id: string): Promise<void> => {
-      await $fetch(`${base}/${id}`, { method: 'DELETE' })
+      await api(`${base}/${id}`, { method: 'DELETE' })
     },
 
     /**
@@ -86,14 +87,14 @@ export function useApiProductsV2() {
      * `bundle_incomplete` surface.
      */
     setStatus: (id: string, status: 'draft' | 'active' | 'inactive') =>
-      $fetch<VertexProduct>(`${base}/${id}/status`, { method: 'POST', body: body({ status }) }),
+      api<VertexProduct>(`${base}/${id}/status`, { method: 'POST', body: body({ status }) }),
 
     /** Back as Draft if it never left Draft, else Inactive. */
-    restore: (id: string) => $fetch<VertexProduct>(`${base}/${id}/restore`, { method: 'POST' }),
+    restore: (id: string) => api<VertexProduct>(`${base}/${id}/restore`, { method: 'POST' }),
 
     /** Copies everything into a new Draft and returns it. */
     duplicate: (id: string, options?: { name?: Record<string, string>, skuPrefix?: string }) =>
-      $fetch<VertexProduct>(`${base}/${id}/duplicate`, { method: 'POST', body: body(options || {}) }),
+      api<VertexProduct>(`${base}/${id}/duplicate`, { method: 'POST', body: body(options || {}) }),
 
     // ── pricing ─────────────────────────────────────────────────────────────
 
@@ -102,11 +103,11 @@ export function useApiProductsV2() {
      * configurable parent answers 422 `not_sellable`, because the prices live
      * on its variants.
      */
-    pricing: (id: string) => $fetch<ProductPricing>(`${base}/${id}/pricing`),
+    pricing: (id: string) => api<ProductPricing>(`${base}/${id}/pricing`),
 
     /** Every plan for one scope, scheduled and superseded ones included. */
     pricePlans: (id: string, scope?: string) =>
-      $fetch<{ data: PricePlan[] }>(`${base}/${id}/price-plans`, { query: scope ? { scope } : undefined })
+      api<{ data: PricePlan[] }>(`${base}/${id}/price-plans`, { query: scope ? { scope } : undefined })
         .then(r => r.data ?? []),
 
     /**
@@ -115,21 +116,21 @@ export function useApiProductsV2() {
      * exactly then. Exactly one Base Price line, or 422 `base_price_required`.
      */
     createPricePlan: (id: string, draft: PricePlanDraft) =>
-      $fetch<PricePlan>(`${base}/${id}/price-plans`, { method: 'POST', body: body(draft) }),
+      api<PricePlan>(`${base}/${id}/price-plans`, { method: 'POST', body: body(draft) }),
 
     /** Start pricing separately on one platform, copying the Default plan. */
     overridePlatformPrice: (id: string, platformId: string) =>
-      $fetch<ProductPricing>(`${base}/${id}/pricing/platforms/${platformId}/override`, { method: 'POST' }),
+      api<ProductPricing>(`${base}/${id}/pricing/platforms/${platformId}/override`, { method: 'POST' }),
 
     /** Put a platform back on the Default price; history is kept. */
     resetPlatformPrice: (id: string, platformId: string) =>
-      $fetch<ProductPricing>(`${base}/${id}/pricing/platforms/${platformId}/reset`, { method: 'POST' }),
+      api<ProductPricing>(`${base}/${id}/pricing/platforms/${platformId}/reset`, { method: 'POST' }),
 
     // ── variants ────────────────────────────────────────────────────────────
 
     /** What generating these axes would do, without doing it. */
     previewVariants: (id: string, axes: VariantAxis[]) =>
-      $fetch<VariantPreview>(`${base}/${id}/variants/preview`, { method: 'POST', body: body({ axes }) }),
+      api<VariantPreview>(`${base}/${id}/variants/preview`, { method: 'POST', body: body({ axes }) }),
 
     /**
      * Creates the variants, replacing the existing set. Prices are not set
@@ -148,7 +149,7 @@ export function useApiProductsV2() {
      * products, so a caller has to check which it got back.
      */
     generateVariants: (id: string, axes: VariantAxis[], combinations?: VariantCombination[]) =>
-      $fetch<VariantGenerateResult>(`${base}/${id}/variants/generate`, {
+      api<VariantGenerateResult>(`${base}/${id}/variants/generate`, {
         method: 'POST',
         body: body({ axes, ...(combinations ? { combinations } : {}) })
       }),
@@ -156,7 +157,7 @@ export function useApiProductsV2() {
     // ── bundles ─────────────────────────────────────────────────────────────
 
     bundleOptions: (id: string) =>
-      $fetch<{ data: BundleOption[] }>(`${base}/${id}/bundle-options`).then(r => r.data ?? []),
+      api<{ data: BundleOption[] }>(`${base}/${id}/bundle-options`).then(r => r.data ?? []),
 
     /**
      * Replaces the contents. Send a selection back WITH its id to keep the
@@ -164,7 +165,7 @@ export function useApiProductsV2() {
      * the price does not follow.
      */
     saveBundleOptions: (id: string, draft: BundleOptionsDraft) =>
-      $fetch<{ data: BundleOption[] }>(`${base}/${id}/bundle-options`, { method: 'PUT', body: body(draft) })
+      api<{ data: BundleOption[] }>(`${base}/${id}/bundle-options`, { method: 'PUT', body: body(draft) })
         .then(r => r.data ?? []),
 
     /** What one set of choices costs. */
@@ -173,7 +174,7 @@ export function useApiProductsV2() {
       choices: { optionId: string, selectionId: string, qty?: number }[],
       platformId?: string
     ) =>
-      $fetch<BundleQuote>(`${base}/${id}/bundle-price`, {
+      api<BundleQuote>(`${base}/${id}/bundle-price`, {
         method: 'POST',
         body: body({ choices, ...(platformId ? { platformId } : {}) })
       }),
@@ -181,7 +182,7 @@ export function useApiProductsV2() {
     // ── per-platform content ────────────────────────────────────────────────
 
     /** Default content plus what each platform overrides. */
-    platformContent: (id: string) => $fetch<ProductContent>(`${base}/${id}/platform-content`),
+    platformContent: (id: string) => api<ProductContent>(`${base}/${id}/platform-content`),
 
     /**
      * `lockVersion` is the override's own — from the platform entry in
@@ -193,7 +194,7 @@ export function useApiProductsV2() {
       patch: ProductPlatformContentPatch,
       lockVersion: number
     ) =>
-      $fetch<ProductContent>(`${base}/${id}/platform-content/${platformId}`, {
+      api<ProductContent>(`${base}/${id}/platform-content/${platformId}`, {
         method: 'PATCH',
         body: body({ ...patch, lockVersion })
       })
@@ -207,6 +208,9 @@ export function useApiProductsV2() {
  * not exist yet, so the caller supplies the SKU and name it is about to have.
  */
 export const simulateVariants = (sku: string, name: Record<string, string>, axes: VariantAxis[]) =>
+  // plain `$fetch`, not `useApiFetch()`: this is not a composable and is only
+  // ever reached from a click, so there is no setup context to read the
+  // request from and nothing to server-render
   $fetch<VariantSimulation>('/api/products-v2/variants/simulate', {
     method: 'POST',
     body: { sku, name, axes } as unknown as Record<string, unknown>

@@ -22,33 +22,53 @@ const platFilter = ref('')
 const typeFilter = ref('')
 const statusFilter = ref('')
 
-const categories = ref<Category[]>([])
-const platforms = ref<VertexPlatform[]>([])
-// Seeded so SSR and the first client render agree; replaced with the real
-// store on mount.
-const storedProducts = ref<StoredProduct[]>([])
-const loading = ref(true)
-const nowTs = ref(0)
-const loadError = ref('')
-
-// SSR-safe browser reads happen only after mount.
-
 const productsApi = useApiProductsV2()
 const categoriesApi = useApiCategoriesV2()
 const platformsApi = useApiPlatformsV2()
 
-onMounted(async () => {
-  nowTs.value = Date.now()
+/*
+ * Fetched during SSR, so the table arrives with the page instead of after it.
+ *
+ * The screens were ported from a design whose logic was client-side, so every
+ * one of them loads in `onMounted` — which only ever runs in the browser,
+ * leaving the server to render a skeleton it had everything it needed to
+ * fill. This is the first converted; the rest follow if it proves out.
+ *
+ * The three calls stay in one `useAsyncData` rather than three: they are one
+ * screen's worth of data, and splitting them would make the page paint in
+ * three stages for no gain.
+ *
+ * The bindings reach `/api` through `useApiFetch()`, which forwards the
+ * incoming cookie on the server — without that these arrive unauthenticated
+ * and 401 during SSR.
+ */
+const { data, status, error } = await useAsyncData('dashboard', async () => {
+  const [categories, platforms, products] = await Promise.all([
+    categoriesApi.tree().then(flattenVertexTree),
+    platformsApi.list(),
+    productsApi.page({ limit: 100 }).then(r => toStoredProducts(r.data))
+  ])
+  return { categories, platforms, products }
+})
 
-  try {
-    ;[categories.value, platforms.value, storedProducts.value] = await Promise.all([
-      categoriesApi.tree().then(flattenVertexTree), platformsApi.list(), productsApi.page({ limit: 100 }).then(r => toStoredProducts(r.data))
-    ])
-  } catch (err) {
-    loadError.value = apiErrorMessage(err, 'Could not load the dashboard.')
-  } finally {
-    loading.value = false
-  }
+const categories = computed<Category[]>(() => data.value?.categories ?? [])
+const platforms = computed<VertexPlatform[]>(() => data.value?.platforms ?? [])
+const storedProducts = computed<StoredProduct[]>(() => data.value?.products ?? [])
+const loading = computed(() => status.value === 'pending')
+const loadError = computed(() => error.value ? apiErrorMessage(error.value, 'Could not load the dashboard.') : '')
+
+/*
+ * `Date.now()` only after mount.
+ *
+ * It drives the "New" badge, and a server clock and a browser clock do not
+ * agree — reading it during render would make the server HTML and the first
+ * client render disagree, which is a hydration mismatch. Zero until mounted
+ * means no row is New for one tick, which is the harmless direction.
+ */
+const nowTs = ref(0)
+
+onMounted(() => {
+  nowTs.value = Date.now()
 
   try {
     const msg = sessionStorage.getItem('vertex_toast')

@@ -37,6 +37,7 @@ import type {
 export function useApiAttributesV2() {
   const api = useVertexResource<Attribute, AttributeDraft, AttributePatch>('attributes-v2')
   const base = '/api/attributes-v2'
+  const http = useApiFetch()
   const body = (v: unknown) => v as Record<string, unknown>
 
   return {
@@ -44,20 +45,20 @@ export function useApiAttributesV2() {
 
     /** Returns the new option alone. */
     addOption: (id: string, draft: AttributeOptionDraft) =>
-      $fetch<AttributeOption>(`${base}/${id}/options`, { method: 'POST', body: body(draft) }),
+      http<AttributeOption>(`${base}/${id}/options`, { method: 'POST', body: body(draft) }),
 
     /** Returns the changed option alone. No lockVersion — options are not versioned. */
     updateOption: (id: string, optionId: string, patch: AttributeOptionPatch) =>
-      $fetch<AttributeOption>(`${base}/${id}/options/${optionId}`, { method: 'PATCH', body: body(patch) }),
+      http<AttributeOption>(`${base}/${id}/options/${optionId}`, { method: 'PATCH', body: body(patch) }),
 
     /** 409 `in_use` if any product or variant ever used it. */
     removeOption: async (id: string, optionId: string): Promise<void> => {
-      await $fetch(`${base}/${id}/options/${optionId}`, { method: 'DELETE' })
+      await http(`${base}/${id}/options/${optionId}`, { method: 'DELETE' })
     },
 
     /** Every option id in the order they should sit. Returns the whole attribute. */
     reorderOptions: (id: string, optionIds: string[]) =>
-      $fetch<Attribute>(`${base}/${id}/options/order`, { method: 'PUT', body: body({ optionIds }) })
+      http<Attribute>(`${base}/${id}/options/order`, { method: 'PUT', body: body({ optionIds }) })
   }
 }
 

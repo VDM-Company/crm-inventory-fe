@@ -19,6 +19,7 @@ import type { VertexPlatform, VertexPlatformDraft, VertexPlatformPatch, VertexPl
 export function useApiPlatformsV2() {
   const api = useVertexResource<VertexPlatform, VertexPlatformDraft, VertexPlatformPatch>('platforms-v2')
   const base = '/api/platforms-v2'
+  const http = useApiFetch()
 
   return {
     ...api,
@@ -28,7 +29,7 @@ export function useApiPlatformsV2() {
     activate: (id: string) => api.action(id, 'activate'),
     deactivate: (id: string) => api.action(id, 'deactivate'),
 
-    settings: (id: string) => $fetch<VertexPlatformSettings>(`${base}/${id}/settings`),
+    settings: (id: string) => http<VertexPlatformSettings>(`${base}/${id}/settings`),
 
     /**
      * Drop this platform's own product order for one category, so it follows
@@ -36,12 +37,12 @@ export function useApiPlatformsV2() {
      * this lives here rather than on the categories binding.
      */
     resetCategoryProductOrder: async (id: string, categoryId: string): Promise<void> => {
-      await $fetch(`${base}/${id}/categories/${categoryId}/products/reset`, { method: 'POST' })
+      await http(`${base}/${id}/categories/${categoryId}/products/reset`, { method: 'POST' })
     },
 
     /** Full replace: send every group, or the API clears the missing ones. */
     saveSettings: (id: string, settings: Omit<VertexPlatformSettings, 'lockVersion'>, lockVersion: number) =>
-      $fetch<VertexPlatformSettings>(`${base}/${id}/settings`, {
+      http<VertexPlatformSettings>(`${base}/${id}/settings`, {
         method: 'PUT',
         body: { ...settings, lockVersion } as unknown as Record<string, unknown>
       })

@@ -29,6 +29,7 @@ import type {
  */
 export function useApiCategoriesV2() {
   const base = '/api/categories-v2'
+  const api = useApiFetch()
   const body = (v: unknown) => v as Record<string, unknown>
 
   return {
@@ -37,48 +38,48 @@ export function useApiCategoriesV2() {
      * does; without it every node's `platform` is null.
      */
     tree: (platformId?: string) =>
-      $fetch<VertexList<VertexCategory>>(base, { query: platformId ? { platformId } : undefined })
+      api<VertexList<VertexCategory>>(base, { query: platformId ? { platformId } : undefined })
         .then(r => r.data ?? []),
 
     /** One category with its sub-categories. */
     get: (id: string, platformId?: string) =>
-      $fetch<VertexCategory>(`${base}/${id}`, { query: platformId ? { platformId } : undefined }),
+      api<VertexCategory>(`${base}/${id}`, { query: platformId ? { platformId } : undefined }),
 
     create: (draft: VertexCategoryDraft) =>
-      $fetch<VertexCategory>(base, { method: 'POST', body: body(draft) }),
+      api<VertexCategory>(base, { method: 'POST', body: body(draft) }),
 
     /** Moving is a `parentId` change; null puts it at the top level. */
     update: (id: string, patch: VertexCategoryPatch, lockVersion: number) =>
-      $fetch<VertexCategory>(`${base}/${id}`, { method: 'PATCH', body: body({ ...patch, lockVersion }) }),
+      api<VertexCategory>(`${base}/${id}`, { method: 'PATCH', body: body({ ...patch, lockVersion }) }),
 
     remove: async (id: string): Promise<void> => {
-      await $fetch(`${base}/${id}`, { method: 'DELETE' })
+      await api(`${base}/${id}`, { method: 'DELETE' })
     },
 
     // ── membership ──────────────────────────────────────────────────────────
 
     /** The products assigned directly to this category, in display order. */
     products: (id: string, query?: VertexCategoryProductsQuery) =>
-      $fetch<VertexList<VertexCategoryProduct>>(`${base}/${id}/products`, {
+      api<VertexList<VertexCategoryProduct>>(`${base}/${id}/products`, {
         query: { ...query, all: true }
       }).then(r => r.data ?? []),
 
     /** One page of them, for a category with many products. */
     productsPage: (id: string, query?: VertexCategoryProductsQuery) =>
-      $fetch<VertexList<VertexCategoryProduct>>(`${base}/${id}/products`, {
+      api<VertexList<VertexCategoryProduct>>(`${base}/${id}/products`, {
         query: query as Record<string, unknown>
       }),
 
     /** Appends to the end of every order. */
     addProducts: (id: string, productIds: string[]) =>
-      $fetch<{ assigned: boolean }>(`${base}/${id}/products`, { method: 'POST', body: body({ productIds }) }),
+      api<{ assigned: boolean }>(`${base}/${id}/products`, { method: 'POST', body: body({ productIds }) }),
 
     /**
      * Answers with what it did. `keptOnPlatform` lists products still in the
      * category on that platform because they carry their own categories there.
      */
     removeProducts: (id: string, productIds: string[], platformId?: string) =>
-      $fetch<{ removed: string[], keptOnPlatform: string[] }>(`${base}/${id}/products`, {
+      api<{ removed: string[], keptOnPlatform: string[] }>(`${base}/${id}/products`, {
         method: 'DELETE',
         body: body({ productIds, platformId })
       }),
@@ -88,7 +89,7 @@ export function useApiCategoriesV2() {
      * `members_mismatch` — so order the list you just read.
      */
     orderProducts: (id: string, productIds: string[], platformId?: string) =>
-      $fetch<{ saved: boolean }>(`${base}/${id}/products`, {
+      api<{ saved: boolean }>(`${base}/${id}/products`, {
         method: 'PUT',
         body: body({ productIds, platformId })
       }),
@@ -109,7 +110,7 @@ export function useApiCategoriesV2() {
       patch: VertexCategoryPlatformContentPatch,
       lockVersion: number
     ) =>
-      $fetch<VertexCategory>(`${base}/${id}/platform-content/${platformId}`, {
+      api<VertexCategory>(`${base}/${id}/platform-content/${platformId}`, {
         method: 'PATCH',
         body: body({ ...patch, lockVersion })
       })
