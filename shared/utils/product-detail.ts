@@ -126,6 +126,8 @@ export function toDetailView(
     // read-only in this pass: the generator is a confirm-then-create flow of
     // its own, so the existing variants are shown as the API reports them
     variants: (p.children || []).map(c => ({
+      // carried so the row can link to the variant's own page
+      id: c.id,
       name: (c.axisValues || []).map(a => a.label).join(' / '),
       sku: c.sku,
       price: c.priceFrom ?? '',

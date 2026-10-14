@@ -48,7 +48,7 @@ describe('isGuardedApiPath', () => {
 
 describe('safeRedirect', () => {
   it('keeps a path on this site, query and hash included', () => {
-    expect(safeRedirect('/products/detail?id=abc')).toBe('/products/detail?id=abc')
+    expect(safeRedirect('/products/detail/abc')).toBe('/products/detail/abc')
     expect(safeRedirect('/categories#tree')).toBe('/categories#tree')
   })
 

@@ -14,7 +14,9 @@ const route = useRoute()
 const router = useRouter()
 
 // ── shapes ──
-interface DetailVariant { name: string, sku: string, price: number | string, stock: number | string, active: boolean, image?: string | null }
+// `id` is the variant's own product id; absent on a row the editor has just
+// generated, which does not exist upstream yet.
+interface DetailVariant { id?: string, name: string, sku: string, price: number | string, stock: number | string, active: boolean, image?: string | null }
 interface PricingComponent { feeId: string, published: boolean, amount: string | number }
 interface PricingVersion { version?: string, isSubscription?: boolean, monthly?: string | number, initial?: number, components?: PricingComponent[], active?: boolean }
 interface DetailProduct {
@@ -162,6 +164,7 @@ async function loadPricing(id: string) {
   }
 }
 
+/** `rawId` is the route param, which Vue Router hands over as string | string[]. */
 async function loadRecordById(rawId: unknown): Promise<DetailProduct | null> {
   const id = Array.isArray(rawId) ? rawId[0] : rawId
   if (!id) return null
@@ -235,7 +238,7 @@ onMounted(async () => {
     saveError.value = apiErrorMessage(err, 'Could not load the form data.')
   }
   try {
-    const rec = await loadRecordById(route.query.id)
+    const rec = await loadRecordById(route.params.id)
     if (!rec) {
       notFound.value = true
     } else {
@@ -475,9 +478,6 @@ const bundleComponentRows = computed(() =>
     products: c.products || []
   }))
 )
-// The id the variant screen loads its parent by. It used to fall back to the
-// string 'demo', which that screen understood as "render the demo variant".
-const variantParentKey = computed(() => product.value.id || '')
 // Shape produced by `viewVariantRows` below.
 interface ViewVariantRow {
   name: string
@@ -486,7 +486,7 @@ interface ViewVariantRow {
   priceLabel: string
   stockLabel: string
   statusLabel: string
-  detailTo: { path: string, query: Record<string, string> }
+  detailTo: string
 }
 
 const viewVariantColumns: TableColumn<ViewVariantRow>[] = [
@@ -507,7 +507,8 @@ const viewVariantRows = computed(() =>
     priceLabel: (v.price !== '' && v.price != null) ? '¥' + Number(v.price).toFixed(2) : '—',
     stockLabel: (v.stock !== '' && v.stock != null) ? String(v.stock) : '—',
     statusLabel: v.active ? 'Active' : 'Inactive',
-    detailTo: { path: '/products/variant-detail', query: { product: variantParentKey.value, variant: v.name } }
+    // a generated row has no id until it is saved, so it has nowhere to go
+    detailTo: v.id ? `/products/variants/${v.id}` : ''
   }))
 )
 const variantCountLabel = computed(() => {

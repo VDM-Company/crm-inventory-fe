@@ -27,10 +27,16 @@ function qParam(v: unknown): string {
   if (Array.isArray(v)) return typeof v[0] === 'string' ? v[0] : ''
   return typeof v === 'string' ? v : ''
 }
-// '' rather than the old 'demo' sentinel, which this page understood as
-// "render the demo variant" and the product page used to send.
-const productKey = qParam(route.query.product) || ''
-const variantNameQuery = qParam(route.query.variant)
+
+/**
+ * The variant's OWN product id.
+ *
+ * The URL used to carry two things — `?product=<parentId>&variant=<label>` —
+ * and this page found the child by matching that label against the parent's
+ * children. A variant is a product in its own right, so one id is enough:
+ * the parent comes from its `parentId` and the label from its `axisValues`.
+ */
+const variantId = qParam(route.params.id)
 
 // ── state ──
 const mode = ref<'view' | 'edit'>('view')
@@ -57,9 +63,8 @@ const feesApi = useApiFeeItems()
  * and its platforms), the variant record, and the variant's pricing. It is
  * NOT a row inside the parent any more.
  *
- * The URL still says `?product=<parentId>&variant=<label>` because
- * `products/detail` still links that way; it becomes `?id=<variantId>` when
- * that screen moves.
+ * The URL carries only the variant's own id; everything else is read off
+ * these three.
  */
 const parentRecord = ref<VertexProduct | null>(null)
 const variantRecord = ref<VertexProduct | null>(null)
@@ -67,6 +72,13 @@ const pricingDoc = ref<ProductPricing | null>(null)
 const notFoundHere = ref(false)
 
 const baseFeeId = computed(() => fees.value.find(f => f.kind === 'base')?.id || '')
+
+/**
+ * `Black / 8 Days` — the variant's axis values joined, which is what the
+ * screen calls it everywhere. It used to arrive in the URL; it is read off
+ * the record now, so the two can no longer disagree.
+ */
+const variantLabelText = computed(() => variantLabel(variantRecord.value?.axisValues))
 
 async function loadPricing(variantId: string) {
   try {
@@ -87,24 +99,26 @@ onMounted(async () => {
     saveError.value = apiErrorMessage(err, 'Could not load this variant.')
   }
 
-  if (!productKey) {
+  if (!variantId) {
     // nothing to look up; `found` stays false and the not-found card renders
     loading.value = false
     return
   }
 
   try {
-    const parent = await productsApi.get(productKey, { include: 'children' })
-    parentRecord.value = parent
-    const child = findVariantByLabel(parent.children, variantNameQuery)
-    if (!child) {
-      notFoundHere.value = true
-      return
+    const variant = await productsApi.get(variantId)
+    variantRecord.value = variant
+    // the parent supplies the platforms, the category and the breadcrumb
+    if (variant.parentId) {
+      parentRecord.value = await productsApi.get(variant.parentId, { include: 'children' })
     }
-    variantRecord.value = await productsApi.get(child.id)
-    await loadPricing(child.id)
+    await loadPricing(variant.id)
   } catch (err) {
-    saveError.value = apiErrorMessage(err, 'Could not load this variant.')
+    if ((err as { statusCode?: number })?.statusCode === 404) {
+      notFoundHere.value = true
+    } else {
+      saveError.value = apiErrorMessage(err, 'Could not load this variant.')
+    }
   } finally {
     loading.value = false
   }
@@ -112,7 +126,7 @@ onMounted(async () => {
 
 /** The row the screen renders, built from the three documents above. */
 const view = computed(() =>
-  variantRecord.value ? toVariantView(variantRecord.value, pricingDoc.value, scope.value, variantNameQuery) : null
+  variantRecord.value ? toVariantView(variantRecord.value, pricingDoc.value, scope.value, variantLabelText.value) : null
 )
 
 const isViewMode = computed(() => mode.value === 'view')
@@ -182,11 +196,14 @@ const parentName = computed(() => {
   const p = parentRecord.value
   return (p ? localized(p.name) : '') || 'Product'
 })
+// `/dashboard` rather than a parentless product page: without the parent
+// record there is no id to open, and the old fallback linked to a detail
+// screen with no product at all.
 const parentTo = computed(() => parentRecord.value
-  ? { path: '/products/detail', query: { id: parentRecord.value.id } }
-  : { path: '/products/detail' }
+  ? `/products/detail/${parentRecord.value.id}`
+  : '/dashboard'
 )
-const headerTitle = computed(() => (parentName.value ? parentName.value.toUpperCase() + ' — ' : '') + variantNameQuery)
+const headerTitle = computed(() => (parentName.value ? parentName.value.toUpperCase() + ' — ' : '') + variantLabelText.value)
 const skuLabel = computed(() => src.value?.sku || '—')
 const active = computed(() => !!src.value?.active)
 const statusLabel = computed(() => active.value ? 'Active' : 'Inactive')
@@ -530,7 +547,7 @@ async function onSaveEdit() {
           { label: 'Inventory', to: '/dashboard' },
           { label: 'Product', to: '/dashboard' },
           { label: parentName, to: parentTo },
-          { label: variantNameQuery }
+          { label: variantLabelText }
         ]"
       />
 

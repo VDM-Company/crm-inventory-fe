@@ -51,7 +51,7 @@ interface Row {
   priceLabel: string
   priceOverridden: boolean
   status: string
-  detailHref: { path: string, query?: Record<string, string> }
+  detailHref: string
 }
 
 const rows = computed<Row[]>(() => {
@@ -83,7 +83,7 @@ const rows = computed<Row[]>(() => {
         priceLabel: fmtYen(priceOv ? o.priceMonthly : baseMonthly),
         priceOverridden: priceOv,
         status: r.status || 'Active',
-        detailHref: { path: '/products/detail', query: { id: r.id || '' } }
+        detailHref: `/products/detail/${r.id || ''}`
       }
     })
 

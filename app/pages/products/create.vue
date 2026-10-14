@@ -761,7 +761,7 @@ async function priceAndPublish(created: VertexProduct, type: FormProductType) {
 function goToDraft() {
   if (!createdId.value) return
   formDirty.value = false
-  router.push({ path: '/products/detail', query: { id: createdId.value } })
+  router.push(`/products/detail/${createdId.value}`)
 }
 
 function onCancelClick() {

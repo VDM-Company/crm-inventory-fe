@@ -47,6 +47,12 @@ export type ProductType = 'single' | 'variant' | 'bundle'
 export type ProductStatus = 'Active' | 'Inactive'
 
 export interface ProductVariant {
+  /**
+   * The variant's own product id, when the row came from a real child.
+   * Optional because the dashboard synthesises rows from a count — see the
+   * note there — and those have none.
+   */
+  id?: string
   name: string
   sku: string
   price: string

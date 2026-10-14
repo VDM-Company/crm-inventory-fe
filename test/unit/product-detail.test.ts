@@ -191,3 +191,36 @@ describe('bundleSummary', () => {
     expect(bundleSummary([])).toEqual([])
   })
 })
+
+describe('toDetailView variants', () => {
+  it('carries each child\u2019s own product id', () => {
+    // the row links to `/products/variants/:id`; without the id it has
+    // nowhere to go, which is how the link was written before the children
+    // were checked
+    const view = toDetailView(product({
+      type: 'configurable',
+      children: [
+        {
+          id: 'v_black_8d',
+          sku: 'WIFI-X1-BLK-8D',
+          status: 'active',
+          stockStatus: 'in_stock',
+          priceFrom: 4400,
+          imageUrl: null,
+          axisValues: [{ attributeLabel: 'Color', label: 'Black' }, { attributeLabel: 'Validity', label: '8 Days' }]
+        }
+      ] as never
+    }), null) as unknown as { variants: { id?: string, name: string, sku: string }[] }
+
+    expect(view.variants[0]).toMatchObject({
+      id: 'v_black_8d',
+      name: 'Black / 8 Days',
+      sku: 'WIFI-X1-BLK-8D'
+    })
+  })
+
+  it('has no variants when the record carries no children', () => {
+    const view = toDetailView(product({ children: null }), null) as unknown as { variants: unknown[] }
+    expect(view.variants).toEqual([])
+  })
+})

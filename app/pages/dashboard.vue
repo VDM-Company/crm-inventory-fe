@@ -159,8 +159,11 @@ const allRows = computed<EnrichedRow[]>(() => {
       : ids.map(id => platformById(plats, id)?.name).filter((n): n is string => !!n)
 
     const key = r.id || r.sku
-    // Real variant records when present, otherwise placeholders so a product
-    // that only carries a count still expands.
+    // ASSUMPTION, and a weak one: the list endpoint sends `variantCount` but
+    // not the children, so these rows are SYNTHESISED — invented names and
+    // SKUs that look like records and are not. They predate the API cutover.
+    // They cannot link to a variant page because they have no id; the row
+    // opens the product instead, where the real variants are listed.
     let vs = (hasVariants && r.variants?.length) ? r.variants : []
     if (!vs.length && hasVariants && vCount > 0) {
       vs = Array.from({ length: vCount }, (_, i) => ({
@@ -202,11 +205,10 @@ const allRows = computed<EnrichedRow[]>(() => {
           + ' · Qty ' + (v.stock !== '' && v.stock != null ? v.stock : '0'),
         statusLabel: v.active ? 'Active' : 'Inactive',
         active: v.active,
-        onView: () => {
-          router.push({ path: '/products/variant-detail', query: { product: r.id || 'demo', variant: v.name } })
-        }
+        // the parent product, not the variant: see the note above
+        onView: () => { router.push(`/products/detail/${r.id || ''}`) }
       })),
-      onViewDetail: () => { router.push({ path: '/products/detail', query: { id: r.id || '' } }) }
+      onViewDetail: () => { router.push(`/products/detail/${r.id || ''}`) }
     }
   })
 })
@@ -316,7 +318,7 @@ const columns: TableColumn<DashRow>[] = [
 // ── derived UI helpers ──
 
 function onNewProduct() {
-  router.push('/products/new')
+  router.push('/products/create')
 }
 </script>
 

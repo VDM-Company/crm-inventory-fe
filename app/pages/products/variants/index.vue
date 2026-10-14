@@ -112,7 +112,7 @@ function pageBtnStyle(n: number) {
 const pagerNavStyle = 'width:32px;height:32px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;color:#64748b;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;'
 
 function onAddVariant() {
-  router.push('/products/new')
+  router.push('/products/create')
 }
 function onViewDetail() {
   router.push('/products/detail')
