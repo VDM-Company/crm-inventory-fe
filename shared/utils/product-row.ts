@@ -1,4 +1,4 @@
-import type { StoredProduct, VertexProductRow, VertexProductStatus, VertexProductType } from '#shared/types'
+import type { ProductVariant, StoredProduct, VertexProductRow, VertexProductStatus, VertexProductType } from '#shared/types'
 
 /**
  * The API's product list row, flattened to the shape the list screens read.
@@ -53,3 +53,30 @@ export function toStoredProduct(r: VertexProductRow): StoredProduct {
 }
 
 export const toStoredProducts = (rows: VertexProductRow[]) => rows.map(toStoredProduct)
+
+/**
+ * A variant as the product screens hold it.
+ *
+ * A variant IS a product — `GET /admin/products?parent_id=…` returns the same
+ * list rows as anything else — so this is the same fold as `toStoredProduct`,
+ * narrowed to what a variant table shows and keyed by the child's own id.
+ *
+ * Shared because two screens need it: Product Detail folds the children it
+ * already received, and the Dashboard fetches them when a row is expanded.
+ * The Dashboard used to invent them from a count instead.
+ */
+export function toProductVariant(c: VertexProductRow): ProductVariant {
+  return {
+    id: c.id,
+    // `Black / 8 Days` — what every screen calls a variant
+    name: (c.axisValues || []).map(a => a.label).join(' / ') || c.name,
+    sku: c.sku,
+    price: c.priceFrom == null ? '' : String(c.priceFrom),
+    stock: c.stockStatus,
+    active: c.status === 'active',
+    image: c.imageUrl ?? null
+  }
+}
+
+export const toProductVariants = (rows: VertexProductRow[] | null | undefined) =>
+  (rows || []).map(toProductVariant)

@@ -1,5 +1,6 @@
 import type { BundleOption, LocalizedText, ProductPricing, VertexProduct, VertexProductPatch } from '#shared/types'
 import { localized } from './localized'
+import { toProductVariants } from './product-row'
 import { monthlyFromLines } from './variant-pricing'
 
 /**
@@ -125,16 +126,8 @@ export function toDetailView(
     variantCount: (p.children || []).length,
     // read-only in this pass: the generator is a confirm-then-create flow of
     // its own, so the existing variants are shown as the API reports them
-    variants: (p.children || []).map(c => ({
-      // carried so the row can link to the variant's own page
-      id: c.id,
-      name: (c.axisValues || []).map(a => a.label).join(' / '),
-      sku: c.sku,
-      price: c.priceFrom ?? '',
-      stock: c.stockStatus,
-      active: c.status === 'active',
-      image: c.imageUrl ?? null
-    })),
+    // the same fold the Dashboard uses, so the two screens cannot drift
+    variants: toProductVariants(p.children),
     // the editor reads `{ name, values }`; the API reports the attribute's
     // label and a `display` string it has already resolved from the option
     // ids, so the one is the name and the other the single value shown

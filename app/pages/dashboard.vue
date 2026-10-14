@@ -28,6 +28,52 @@ const platformsApi = useApiPlatforms()
 const catalogApi = useApiCatalog()
 
 /*
+ * Variants, fetched when a row is opened.
+ *
+ * The list endpoint sends `variantCount` but not the children, and this
+ * screen used to turn that count into rows it made up — `<product> — Variant
+ * 1`, a SKU with a number glued on, blank price and stock — rendered in the
+ * same table as real records with nothing to mark them. `?parent_id=` returns
+ * the real ones, so they are fetched on expand rather than invented.
+ *
+ * Per product, and only once: a catalogue page holds up to a hundred rows and
+ * fetching every product's children up front would be a hundred requests for
+ * data most readers never open.
+ */
+type VariantLoad
+  = | { status: 'loading' }
+    | { status: 'error' }
+    | { status: 'ready', rows: ProductVariant[] }
+
+const variantCache = ref<Record<string, VariantLoad>>({})
+
+/** Open or close a row, fetching its children the first time it opens. */
+function onToggleVariants(row: {
+  original: { productId?: string }
+  getIsExpanded: () => boolean
+  toggleExpanded: () => void
+}) {
+  if (!row.getIsExpanded() && row.original.productId) void loadVariants(row.original.productId)
+  row.toggleExpanded()
+}
+
+async function loadVariants(productId: string) {
+  if (!productId || variantCache.value[productId]) return
+  variantCache.value = { ...variantCache.value, [productId]: { status: 'loading' } }
+  try {
+    const res = await productsApi.page({ parentId: productId, limit: 100 })
+    variantCache.value = {
+      ...variantCache.value,
+      [productId]: { status: 'ready', rows: toProductVariants(res.data) }
+    }
+  } catch {
+    // reported in the expanded row itself; a banner for a row nobody may be
+    // looking at is noise
+    variantCache.value = { ...variantCache.value, [productId]: { status: 'error' } }
+  }
+}
+
+/*
  * Fetched during SSR, so the table arrives with the page instead of after it.
  *
  * The screens were ported from a design whose logic was client-side, so every
@@ -102,6 +148,10 @@ const stats = computed<DashStat[]>(() => {
 
 // ── enriched rows ──
 interface VariantRow {
+  /** Distinct per row; the table keys sub-rows by it too. */
+  key: string
+  /** Non-empty on the stand-in row shown while the children load, or on error. */
+  notice: string
   name: string
   sku: string
   subLabel: string
@@ -112,6 +162,8 @@ interface VariantRow {
 
 interface EnrichedRow {
   key: string
+  /** The product's own id, which the expand handler fetches children by. */
+  productId: string
   name: string
   sku: string
   status: 'Active' | 'Inactive'
@@ -159,24 +211,19 @@ const allRows = computed<EnrichedRow[]>(() => {
       : ids.map(id => platformById(plats, id)?.name).filter((n): n is string => !!n)
 
     const key = r.id || r.sku
-    // ASSUMPTION, and a weak one: the list endpoint sends `variantCount` but
-    // not the children, so these rows are SYNTHESISED — invented names and
-    // SKUs that look like records and are not. They predate the API cutover.
-    // They cannot link to a variant page because they have no id; the row
-    // opens the product instead, where the real variants are listed.
-    let vs = (hasVariants && r.variants?.length) ? r.variants : []
-    if (!vs.length && hasVariants && vCount > 0) {
-      vs = Array.from({ length: vCount }, (_, i) => ({
-        name: r.name + ' — Variant ' + (i + 1),
-        sku: (r.sku || 'SKU') + '-' + String(i + 1).padStart(2, '0'),
-        price: '',
-        stock: '',
-        active: r.status !== 'Inactive'
-      }))
-    }
+    // The children, once this row has been opened. Until then a single row
+    // saying so — the table needs one sub-row to offer the expand control at
+    // all, and a row that says "Loading…" is the honest version of the
+    // invented ones this used to show.
+    const loaded = r.id ? variantCache.value[r.id] : undefined
+    const vs: ProductVariant[] = loaded?.status === 'ready' ? loaded.rows : []
+    const notice = loaded?.status === 'error'
+      ? 'Could not load variants.'
+      : loaded?.status === 'ready' ? '' : 'Loading variants…'
 
     return {
       key,
+      productId: r.id || '',
       name: r.name,
       sku: r.sku,
       status: r.status,
@@ -198,16 +245,19 @@ const allRows = computed<EnrichedRow[]>(() => {
       platformMoreLabel: names.length > 2 ? ('+' + (names.length - 2)) : '',
       platformMoreTitle: names.length > 2 ? names.slice(2).join(', ') : '',
       hasPlatforms: names.length > 0,
-      variantRows: vs.map(v => ({
-        name: v.name,
-        sku: v.sku || '—',
-        subLabel: (v.price !== '' && v.price != null ? '¥' + Number(v.price).toFixed(2) : '—')
-          + ' · Qty ' + (v.stock !== '' && v.stock != null ? v.stock : '0'),
-        statusLabel: v.active ? 'Active' : 'Inactive',
-        active: v.active,
-        // the parent product, not the variant: see the note above
-        onView: () => { router.push(`/products/detail/${r.id || ''}`) }
-      })),
+      variantRows: (notice && hasVariants && vCount > 0)
+        ? [{ key: `${key}:notice`, notice, name: notice, sku: '', subLabel: '', statusLabel: '', active: false, onView: () => {} }]
+        : vs.map(v => ({
+            key: `${key}:${v.id}`,
+            notice: '',
+            name: v.name,
+            sku: v.sku || '—',
+            subLabel: (v.price !== '' && v.price != null ? '¥' + Number(v.price).toFixed(2) : '—')
+              + ' · ' + (v.stock || '—'),
+            statusLabel: v.active ? 'Active' : 'Inactive',
+            active: v.active,
+            onView: () => { router.push(`/products/variants/${v.id}`) }
+          })),
       onViewDetail: () => { router.push(`/products/detail/${r.id || ''}`) }
     }
   })
@@ -500,7 +550,7 @@ function onNewProduct() {
 
                 title="Toggle variants"
                 :ui="{ base: 'border-none bg-transparent cursor-pointer text-slate-500 w-[22px] h-[22px] inline-flex items-center justify-center rounded-md flex-shrink-0 hover:bg-slate-100' }"
-                @click="row.toggleExpanded()"
+                @click="onToggleVariants(row)"
               >
                 <UIcon
                   :name="row.getIsExpanded() ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
@@ -521,7 +571,10 @@ function onNewProduct() {
             </div>
             <div v-else class="flex items-center gap-2 pl-[38px]">
               <UIcon name="i-lucide-corner-down-right" class="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
-              <div>
+              <div v-if="row.original.notice" class="text-sm text-slate-400 italic">
+                {{ row.original.notice }}
+              </div>
+              <div v-else>
                 <div class="text-sm font-medium text-slate-700">
                   {{ row.original.name }}
                 </div>
@@ -545,7 +598,10 @@ function onNewProduct() {
           </template>
 
           <template #sku-cell="{ row }">
-            <span :class="row.depth === 0 ? 'text-[15px] text-slate-500' : 'text-sm text-slate-500'">{{ row.original.sku }}</span>
+            <span
+              v-if="row.depth === 0 || !row.original.notice"
+              :class="row.depth === 0 ? 'text-[15px] text-slate-500' : 'text-sm text-slate-500'"
+            >{{ row.original.sku }}</span>
           </template>
 
           <template #categoryLabel-cell="{ row }">
@@ -595,7 +651,7 @@ function onNewProduct() {
               size="md"
             />
             <VertexStatusBadge
-              v-else
+              v-else-if="!row.original.notice"
               :active="row.original.active"
               :label="row.original.statusLabel"
               size="md"
@@ -614,7 +670,7 @@ function onNewProduct() {
               View Detail
             </UButton>
             <UButton
-              v-else
+              v-else-if="!row.original.notice"
 
               variant="ghost"
 
