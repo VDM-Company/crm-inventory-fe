@@ -1,5 +1,6 @@
 import type { BundleOption, LocalizedText, ProductPricing, VertexProduct, VertexProductPatch } from '#shared/types'
 import { localized } from './localized'
+import { monthlyFromLines } from './variant-pricing'
 
 /**
  * The pure half of the Product Detail screen.
@@ -143,7 +144,7 @@ export function toDetailView(
       ? [{
           version: 'current',
           isSubscription: !!p.isSubscription,
-          monthly: '',
+          monthly: monthlyFromLines(plan.lines),
           initial: plan.lines.filter(l => l.isPublished).reduce((t, l) => t + l.amount, 0),
           components: plan.lines
             .filter(l => l.lineType === 'fee' && l.feeItemId)

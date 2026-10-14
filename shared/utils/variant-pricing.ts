@@ -33,6 +33,19 @@ export interface PriceComponent {
   kind?: string
 }
 
+/**
+ * The recurring price of a saved plan, as the editor holds it.
+ *
+ * It is a line of its own (`lineType: 'monthly'`) rather than a field, and
+ * `linesToComponents` drops it along with every other non-fee line — so a
+ * screen that edits prices has to read it separately or it saves the plan
+ * back without one.
+ */
+export function monthlyFromLines(lines: PriceLine[] | undefined): string {
+  const line = (lines || []).find(l => l.lineType === 'monthly')
+  return line?.amountMonthly == null ? '' : String(line.amountMonthly)
+}
+
 /** A saved plan's lines, as the editor holds them. */
 export function linesToComponents(lines: PriceLine[] | undefined): PriceComponent[] {
   return (lines || [])
@@ -58,7 +71,8 @@ export function linesToComponents(lines: PriceLine[] | undefined): PriceComponen
  */
 export function componentsToLines(
   components: PriceComponent[],
-  baseFeeItemId: string
+  baseFeeItemId: string,
+  monthly?: string | number | null
 ): PricePlanDraft['lines'] {
   const out: PricePlanDraft['lines'] = []
   for (const c of components) {
@@ -74,6 +88,18 @@ export function componentsToLines(
     }
     out.push({ lineType: 'fee', feeItemId: c.feeItemId, amount, isPublished: c.isPublished !== false })
   }
+
+  // The recurring price is a line, not a field: `amount` is stored as 0 and
+  // the price sits in `amountMonthly`. A subscription product must carry
+  // exactly one (422 `monthly_required`), and any other product must carry
+  // none (`monthly_not_allowed`) — so a blank or non-integer value adds
+  // nothing rather than a zero line, which would be a ¥0 subscription.
+  const m = (monthly ?? '').toString().trim()
+  const amountMonthly = m === '' ? NaN : Number(m)
+  if (Number.isInteger(amountMonthly)) {
+    out.push({ lineType: 'monthly', amount: 0, amountMonthly, isPublished: true })
+  }
+
   return out
 }
 
@@ -86,11 +112,18 @@ export function componentsToLines(
  * a row without changing an amount is not a price change.
  */
 export function pricePlanUnchanged(saved: PriceLine[] | undefined, next: PricePlanDraft['lines']): boolean {
-  const key = (l: { feeItemId?: string | null, amount: number, isPublished?: boolean }) =>
-    `${l.feeItemId}:${l.amount}:${l.isPublished !== false}`
+  const key = (l: { lineType: string, feeItemId?: string | null, amount: number, amountMonthly?: number | null, isPublished?: boolean }) =>
+    // `?? ''` on both ids: a saved line carries null where a draft line
+    // simply leaves the key out, and `null` !== `undefined` as a string
+    `${l.lineType}:${l.feeItemId ?? ''}:${l.amount}:${l.amountMonthly ?? ''}:${l.isPublished !== false}`
 
-  const before = (saved || []).filter(l => l.lineType === 'fee' && l.feeItemId).map(key).sort()
-  const after = next.map(key).sort()
+  // Only the lines this editor owns. A bundle's `selection` lines are saved
+  // elsewhere, so counting them here would report a change on every save.
+  const owned = (l: { lineType: string, feeItemId?: string | null }) =>
+    l.lineType === 'monthly' || (l.lineType === 'fee' && !!l.feeItemId)
+
+  const before = (saved || []).filter(owned).map(key).sort()
+  const after = next.filter(owned).map(key).sort()
 
   return before.length === after.length && before.every((k, i) => k === after[i])
 }
@@ -116,6 +149,10 @@ export interface VariantView {
   stockStatus: string
   lockedFields: string[]
   lockVersion: number
+  /** Whether this product is priced monthly. Decides the `monthly` line. */
+  isSubscription: boolean
+  /** The recurring price, which is a plan line rather than a field. */
+  monthly: string
   components: PriceComponent[]
   /** The plan currently in force for the scope on screen, if any. */
   savedLines: PriceLine[]
@@ -148,6 +185,8 @@ export function toVariantView(
     stockStatus: variant.stockStatus,
     lockedFields: variant.lockedFields || [],
     lockVersion: variant.lockVersion,
+    isSubscription: !!variant.isSubscription,
+    monthly: monthlyFromLines(plan?.lines),
     components: linesToComponents(plan?.lines),
     savedLines: plan?.lines || []
   }

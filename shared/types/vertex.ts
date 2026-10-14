@@ -582,11 +582,23 @@ export interface VertexProductDraft {
   requiresShipping?: boolean
   isSubscription?: boolean
   isGift?: boolean
+  /** Rejected on a configurable parent, which computes it from its variants. */
+  stockStatus?: string
   categoryIds?: string[]
   platformIds?: string[]
   attributes?: { attributeId: string, optionIds?: string[], valueText?: LocalizedText }[]
   media?: { uploadId: string, role?: string, alt?: LocalizedText }[]
   status?: 'draft'
+  /**
+   * Creates the variants in the same call — `type: 'configurable'` only, and
+   * at most 100 of them (422 `too_many_combinations` beyond that: create the
+   * product first, then use `variants/generate`).
+   *
+   * Its errors come back under `variants.` with the generate endpoint's own
+   * field names, e.g. `variants.combinations.{i}.sku`, which is what says
+   * the block is shaped like a generate body.
+   */
+  variants?: { axes: VariantAxis[], combinations?: VariantCombination[] }
 }
 
 /**
@@ -625,8 +637,16 @@ export interface VertexProductQuery extends CursorQuery {
 
 // ── product pricing ─────────────────────────────────────────────────────────
 
-/** `fee` is a fee-item line; `selection` prices one choice inside a bundle. */
-export type PriceLineType = 'fee' | 'selection'
+/**
+ * `fee` is a fee-item line, `monthly` carries the recurring price of a
+ * subscription, and `selection` prices one choice inside a bundle.
+ *
+ * A `monthly` line is the odd one: it has no `feeItemId` and its `amount` is
+ * stored as 0, the price being in `amountMonthly`. The API requires exactly
+ * one on a subscription product and refuses one otherwise (422
+ * `monthly_required` / `monthly_not_allowed`).
+ */
+export type PriceLineType = 'fee' | 'monthly' | 'selection'
 
 /** A plan supersedes the one before it; history is kept. */
 export type PricePlanStatus = 'active' | 'scheduled' | 'superseded' | 'cancelled'
@@ -702,6 +722,16 @@ export interface PricePlanDraft {
 export interface VariantAxis {
   attributeId: string
   optionIds: string[]
+}
+
+/**
+ * One combination to create, as `variants/generate` and the `variants` block
+ * of create take it. `optionIds` is one option per axis, in axis order; a
+ * combination without a `sku` gets a generated one.
+ */
+export interface VariantCombination {
+  optionIds: string[]
+  sku?: string
 }
 
 /** Whether the suggested SKU can be used as it stands. */

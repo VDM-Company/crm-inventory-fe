@@ -3,6 +3,7 @@ import {
   componentsToLines,
   findVariantByLabel,
   linesToComponents,
+  monthlyFromLines,
   pricePlanUnchanged,
   variantLabel
 } from '../../shared/utils/variant-pricing'
@@ -157,5 +158,94 @@ describe('pricePlanUnchanged', () => {
 
   it('treats no saved plan as a change, so the first price is written', () => {
     expect(pricePlanUnchanged(undefined, [{ lineType: 'fee', feeItemId: BASE, amount: 1, isPublished: true }])).toBe(false)
+  })
+})
+
+// ── the recurring price ─────────────────────────────────────────────────────
+// It is a line of the plan, not a field: `lineType: 'monthly'`, `amount` 0
+// and the price in `amountMonthly`. Every one of these failed before the
+// monthly line existed in this helper, which is how a subscription product
+// lost its price whenever its initial fees were saved.
+
+const comp = (feeItemId: string, amount: string, isPublished = true) => ({ feeItemId, amount, isPublished })
+
+const monthlyLine = (amountMonthly: number | null): PriceLine => ({
+  id: 'l_monthly',
+  lineType: 'monthly',
+  feeItemId: null,
+  bundleSelectionId: null,
+  amount: 0,
+  amountMonthly,
+  isPublished: true,
+  sortOrder: 2,
+  feeCode: null,
+  feeName: null,
+  feeKind: null
+})
+
+describe('monthlyFromLines', () => {
+  it('reads the recurring price out of the plan', () => {
+    expect(monthlyFromLines([line(BASE, 0), monthlyLine(2980)])).toBe('2980')
+  })
+
+  it('is blank when the plan has no monthly line', () => {
+    expect(monthlyFromLines([line(BASE, 3300)])).toBe('')
+    expect(monthlyFromLines(undefined)).toBe('')
+  })
+
+  it('is blank, not "null", when the line carries no amount', () => {
+    expect(monthlyFromLines([monthlyLine(null)])).toBe('')
+  })
+})
+
+describe('componentsToLines, monthly', () => {
+  it('appends a monthly line with the price in amountMonthly and amount 0', () => {
+    const lines = componentsToLines([comp(BASE, '0')], BASE, '2980')
+    expect(lines).toEqual([
+      { lineType: 'fee', feeItemId: BASE, amount: 0, isPublished: true },
+      { lineType: 'monthly', amount: 0, amountMonthly: 2980, isPublished: true }
+    ])
+  })
+
+  it('adds nothing when the product is not priced monthly', () => {
+    // `monthly_not_allowed`: a zero line would be a ¥0 subscription, which
+    // is not the same as having no subscription at all
+    expect(componentsToLines([comp(BASE, '3300')], BASE, '')).toHaveLength(1)
+    expect(componentsToLines([comp(BASE, '3300')], BASE)).toHaveLength(1)
+    expect(componentsToLines([comp(BASE, '3300')], BASE, null)).toHaveLength(1)
+  })
+
+  it('refuses a fractional monthly price, as it does elsewhere', () => {
+    expect(componentsToLines([comp(BASE, '0')], BASE, '2980.5')).toHaveLength(1)
+  })
+
+  it('takes a number as readily as a string', () => {
+    expect(componentsToLines([comp(BASE, '0')], BASE, 2980)[1]!.amountMonthly).toBe(2980)
+  })
+})
+
+describe('pricePlanUnchanged, monthly', () => {
+  const saved = [line(BASE, 0, { sortOrder: 0 }), monthlyLine(2980)]
+
+  it('is true when the recurring price is unchanged', () => {
+    expect(pricePlanUnchanged(saved, componentsToLines([comp(BASE, '0')], BASE, '2980'))).toBe(true)
+  })
+
+  it('is false when only the recurring price moved', () => {
+    expect(pricePlanUnchanged(saved, componentsToLines([comp(BASE, '0')], BASE, '3280'))).toBe(false)
+  })
+
+  it('is false when the monthly line would be dropped', () => {
+    // the bug this exists for: saving the initial fees of a subscription
+    // product used to send a plan with no monthly line and report no change
+    expect(pricePlanUnchanged(saved, componentsToLines([comp(BASE, '0')], BASE))).toBe(false)
+  })
+
+  it('ignores a bundle selection line, which this editor does not own', () => {
+    const withSelection: PriceLine[] = [
+      ...saved,
+      { ...monthlyLine(null), id: 'l_sel', lineType: 'selection', bundleSelectionId: 'sel_1', amount: 500, sortOrder: 3 }
+    ]
+    expect(pricePlanUnchanged(withSelection, componentsToLines([comp(BASE, '0')], BASE, '2980'))).toBe(true)
   })
 })

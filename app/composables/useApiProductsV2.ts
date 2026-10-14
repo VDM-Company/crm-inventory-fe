@@ -8,6 +8,7 @@ import type {
   ProductPlatformContentPatch,
   ProductPricing,
   VariantAxis,
+  VariantCombination,
   VariantGenerateResult,
   VariantPreview,
   VariantSimulation,
@@ -131,20 +132,25 @@ export function useApiProductsV2() {
       $fetch<VariantPreview>(`${base}/${id}/variants/preview`, { method: 'POST', body: body({ axes }) }),
 
     /**
-     * Creates the variants. Prices are not set here — they come afterwards
-     * through `createPricePlan`.
+     * Creates the variants, replacing the existing set. Prices are not set
+     * here — they come afterwards through `createPricePlan`.
      *
-     * A large set runs as a job and answers with a `jobId` instead of the
+     * Leaving `combinations` out generates the whole matrix of `axes`. Naming
+     * it `combinations` matters: the API reports its errors under
+     * `combinations.{i}.sku`, and a body under any other key is simply
+     * ignored — which the Postman mock cannot catch, because it never reads
+     * request bodies at all.
+     *
+     * A simple product becomes configurable here; its own SKU becomes the
+     * parent SKU and stops being sellable.
+     *
+     * A set over 100 runs as a job and answers with a `jobId` instead of the
      * products, so a caller has to check which it got back.
      */
-    generateVariants: (
-      id: string,
-      axes: VariantAxis[],
-      variants?: { combination: string[], sku?: string }[]
-    ) =>
+    generateVariants: (id: string, axes: VariantAxis[], combinations?: VariantCombination[]) =>
       $fetch<VariantGenerateResult>(`${base}/${id}/variants/generate`, {
         method: 'POST',
-        body: body({ axes, ...(variants ? { variants } : {}) })
+        body: body({ axes, ...(combinations ? { combinations } : {}) })
       }),
 
     // ── bundles ─────────────────────────────────────────────────────────────

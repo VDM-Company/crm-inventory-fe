@@ -156,8 +156,8 @@ const variant = computed<VariantRow | null>(() => {
     active: vw.active,
     stock: vw.stockStatus,
     pricing: {
-      isSubscription: false,
-      monthly: '',
+      isSubscription: vw.isSubscription,
+      monthly: vw.monthly,
       components: vw.components.map(c => ({
         feeId: c.feeItemId,
         published: c.isPublished,
@@ -457,7 +457,10 @@ async function onSaveEdit() {
       amount: String(c.amount ?? ''),
       isPublished: c.published !== false
     })),
-    baseFeeId.value
+    baseFeeId.value,
+    // the recurring price is a line of the same plan: saving without one
+    // wipes it on a subscription variant (422 `monthly_required`)
+    d.pricing?.isSubscription ? d.pricing?.monthly : ''
   )
   const savedLines = scopePricing(pricingDoc.value, scope.value)?.activePlan?.lines
   const pricesChanged = !pricePlanUnchanged(savedLines, lines)

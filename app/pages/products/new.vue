@@ -1,27 +1,22 @@
 <script setup lang="ts">
 import * as z from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
+import type { CreateFormInput, FormProductType } from '#shared/utils/product-create'
 import type {
+  Attribute,
   AttributeDef,
   Category,
-  Fee,
+  FeeItem,
   ProductType,
-  StoredProduct
+  VariantAxis,
+  VariantCombination,
+  VertexProduct,
+  VertexProductRow
 } from '~/types'
 
 useHead({ title: 'Create New Product — Vertex' })
 
 const router = useRouter()
-
-// Seed catalog for the Bundle component picker (design's SEED_CATALOG).
-const SEED_CATALOG = [
-  { id: 'c2000', name: 'Tourist SIM 15GB', sku: 'SKU-2000' },
-  { id: 'c2001', name: 'Business eSIM Pro', sku: 'SKU-2001' },
-  { id: 'c2002', name: 'Pocket WiFi Router X1', sku: 'SKU-2002' },
-  { id: 'c2003', name: 'Unlimited Data Plan 30D', sku: 'SKU-2003' },
-  { id: 'c2004', name: 'Prepaid Data Plan 7D', sku: 'SKU-2004' },
-  { id: 'c2005', name: 'eSIM Global 5GB', sku: 'SKU-2005' }
-]
 
 // ── local shapes ──
 interface AttrRow { id: string, name: string, values: string[] }
@@ -39,15 +34,13 @@ const form = reactive({
   category: '',
   categoryId: '',
   platformIds: [] as string[],
-  image: null as string | null,
-  imageName: '',
   priceMonthly: '',
   stock: 'in_stock',
-  initialComponents: [
-    { feeId: 'fee_base', published: true, amount: '' },
-    { feeId: FEE_TAX_ID, published: true, amount: '' },
-    { feeId: FEE_SHIPPING_ID, published: true, amount: '' }
-  ] as InitialComponent[]
+  // Seeded from the fee items once they load, by `kind` — the ids are the
+  // API's and are not known here. It used to hold three literals, one of
+  // which ('fee_base') had stopped matching the real Base Price id, so the
+  // row was neither recognised as the base nor resolvable to a name.
+  initialComponents: [] as InitialComponent[]
 })
 
 const productType = ref<ProductType>('single')
@@ -79,39 +72,71 @@ const appliedKey = ref('')
 const categories = ref<Category[]>([])
 const platforms = ref<VertexPlatform[]>([])
 const attributeDefs = ref<AttributeDef[]>([])
-const fees = ref<Fee[]>([])
+// The flat defs above render the value pickers; the records below keep the
+// attribute and option ids, which is what a variant axis is made of.
+const attributeRecords = ref<Attribute[]>([])
+const fees = ref<FeeItem[]>([])
 const existingSkus = ref<string[]>([])
-const catalogProducts = ref<StoredProduct[]>([])
+const catalogProducts = ref<VertexProductRow[]>([])
 const saveError = ref('')
 const saving = ref(false)
+// Set the moment the product exists. Everything after that step is a change
+// to something real, so a retry must never create a second draft.
+const createdId = ref('')
 
-const prodImageInput = ref<HTMLInputElement | null>(null)
+const baseFeeId = computed(() => fees.value.find(f => f.kind === 'base')?.id || '')
+
 let toastTimer: number | null = null
 
 const hasVariants = computed(() => productType.value === 'variant')
 const isBundle = computed(() => productType.value === 'bundle')
 
-const productsApi = useApiProducts()
+const productsApi = useApiProductsV2()
 const categoriesApi = useApiCategoriesV2()
 const platformsApi = useApiPlatformsV2()
 const attributesApi = useApiAttributesV2()
-const feesApi = useApiFees()
+const feesApi = useApiFeeItems()
 
 onMounted(async () => {
   try {
-    ;[categories.value, platforms.value, attributeDefs.value, fees.value, existingSkus.value] = await Promise.all([
-      categoriesApi.tree().then(flattenVertexTree), platformsApi.list(), attributesApi.list().then(toAttributeDefs), feesApi.list(),
-      // the duplicate-SKU rule runs inside a zod refine, which cannot await —
-      // so the list it checks against is fetched once here
-      productsApi.list().then((list) => {
-        catalogProducts.value = list
-        return productSkus(list)
+    ;[categories.value, platforms.value, attributeRecords.value, fees.value] = await Promise.all([
+      categoriesApi.tree().then(flattenVertexTree),
+      platformsApi.list(),
+      attributesApi.list(),
+      feesApi.list(),
+      // A bundle selection has to be an active, sellable product, so the
+      // picker is only offered those — anything else is 422
+      // `selection_not_sellable` at save time. The duplicate-SKU rule runs
+      // inside a zod refine, which cannot await, so the list it checks is
+      // fetched once here. It is one page: a SKU further down the catalogue
+      // is caught upstream instead, when the product leaves Draft.
+      productsApi.page({ limit: 100, status: 'active', sellable: true }).then((r) => {
+        catalogProducts.value = r.data
       })
     ])
+    attributeDefs.value = toAttributeDefs(attributeRecords.value)
+    existingSkus.value = catalogProducts.value.map(p => (p.sku || '').toLowerCase()).filter(Boolean)
+    seedInitialComponents()
   } catch (err) {
     saveError.value = apiErrorMessage(err, 'Could not load the form data.')
   }
 })
+
+/**
+ * The Initial Fee rows the form opens with: Base Price, Tax and Shipping, as
+ * the design has them, found by `kind` rather than by a hard-coded id.
+ *
+ * A row left blank never becomes a price line, so seeding Shipping costs
+ * nothing on a product that does not ship; typing an amount into it on one
+ * that does not is 422 `shipping_not_allowed`, which is reported.
+ */
+function seedInitialComponents() {
+  const byKind = (kind: string) => fees.value.find(f => f.kind === kind)?.id
+  form.initialComponents = ['base', 'tax', 'shipping']
+    .map(byKind)
+    .filter((id): id is string => !!id)
+    .map(feeId => ({ feeId, published: true, amount: '' }))
+}
 
 onBeforeUnmount(() => {
   if (toastTimer !== null) clearTimeout(toastTimer)
@@ -154,35 +179,6 @@ const productTypeItems = computed(() =>
   ([['single', 'Single'], ['variant', 'Variant'], ['bundle', 'Bundle']] as [ProductType, string][])
     .map(([value, name]) => ({ value, name, selected: productType.value === value }))
 )
-
-function readImageFile(file: File) {
-  if (!file.type || !file.type.startsWith('image/')) return
-  const reader = new FileReader()
-  reader.onload = (ev) => {
-    form.image = String(ev.target?.result || '')
-    form.imageName = file.name
-  }
-  reader.readAsDataURL(file)
-}
-function onBrowseImage() {
-  if (prodImageInput.value) {
-    prodImageInput.value.value = ''
-    prodImageInput.value.click()
-  }
-}
-function onImageChange(e: Event) {
-  const files = (e.target as HTMLInputElement).files
-  if (files && files[0]) readImageFile(files[0])
-}
-function onDropImage(e: DragEvent) {
-  e.preventDefault()
-  const files = e.dataTransfer?.files
-  if (files && files[0]) readImageFile(files[0])
-}
-function onRemoveImage() {
-  form.image = null
-  form.imageName = ''
-}
 
 // ── settings: category / platforms / stock / status ──
 const categoryDisplay = computed(() =>
@@ -354,19 +350,21 @@ function toggleVariantActive(key: string) {
 const variantCountLabel = computed(() =>
   variants.value.length === 1 ? '1 variant' : variants.value.length + ' variants'
 )
+// A configurable parent holds no price of its own — the API answers 422
+// `not_sellable` — so the prices are per variant, and the one column means
+// the monthly price on a subscription and the Base Price on anything else.
+const variantPriceHeading = computed(() => isSubscription.value ? 'Monthly' : 'Price')
 
 // ── bundle components ──
 function bundleComponentTitle(name: string) {
   const n = (name || '').trim()
   return /component$/i.test(n) ? n : (n + ' Component')
 }
-// The bundle picker offers the stored products (fetched on mount) plus the
-// design's demo catalog.
+// The bundle picker offers the active, sellable products fetched on mount.
+// The design's demo catalogue is gone: its ids were made up, and a selection
+// that is not a real product is refused at save time.
 const catalogOptions = computed(() =>
-  catalogProducts.value
-    .map(p => ({ id: p.id || '', name: p.name, sku: p.sku }))
-    .concat(SEED_CATALOG)
-    .map(c => ({ id: c.id, label: c.name + ' (' + c.sku + ')' }))
+  catalogProducts.value.map(p => ({ id: p.id, label: p.name + ' (' + p.sku + ')' }))
 )
 const bundleComponentRows = computed(() =>
   bundleComponents.value.map(c => ({ id: c.id, title: bundleComponentTitle(c.name), products: c.products }))
@@ -404,11 +402,8 @@ const componentSaveDisabled = computed(() =>
 function saveComponent() {
   const m = componentModal.value
   if (!m) return
-  const catalog = catalogProducts.value
-    .map(p => ({ id: p.id || '', name: p.name, sku: p.sku }))
-    .concat(SEED_CATALOG)
   const products = m.rows.filter(r => r.productId).map((r) => {
-    const p = catalog.find(c => c.id === r.productId)
+    const p = catalogProducts.value.find(c => c.id === r.productId)
     return { id: r.productId, name: p?.name || '', sku: p?.sku || '' }
   })
   if (!m.name.trim() || products.length === 0) return
@@ -433,17 +428,17 @@ const initialTotalLabel = computed(() => '¥' + Math.round(initialTotal.value).t
 const initialComponentRows = computed(() => {
   const chosen = form.initialComponents.map(c => c.feeId).filter(Boolean)
   const mapped = form.initialComponents.map((c, i) => {
-    const fee = feeById(fees.value, c.feeId)
-    const isBase = c.feeId === FEE_BASE_ID
+    const fee = fees.value.find(f => f.id === c.feeId)
+    const isBase = !!baseFeeId.value && c.feeId === baseFeeId.value
     const options = fees.value.filter(f => f.id === c.feeId || chosen.indexOf(f.id) === -1)
     return {
       index: i,
       feeId: c.feeId,
-      name: fee ? fee.name : 'Select component...',
+      name: fee ? localized(fee.name) : 'Select component...',
       isBase,
       showAddBefore: false,
       selectable: !isBase,
-      options: options.map(o => ({ id: o.id, name: o.name })),
+      options: options.map(o => ({ id: o.id, name: localized(o.name) })),
       amount: c.amount,
       published: c.published,
       publishLocked: isBase,
@@ -468,7 +463,7 @@ function setComponentAmount(i: number, amount: string) {
 }
 function toggleComponentPublish(i: number) {
   const c = form.initialComponents[i]
-  if (!c || c.feeId === FEE_BASE_ID) return
+  if (!c || c.feeId === baseFeeId.value) return
   form.initialComponents = form.initialComponents.map((x, idx) => idx === i ? { ...x, published: !x.published } : x)
 }
 function addInitialComponent() {
@@ -476,7 +471,7 @@ function addInitialComponent() {
 }
 function removeInitialComponent(i: number) {
   const c = form.initialComponents[i]
-  if (!c || c.feeId === FEE_BASE_ID) return
+  if (!c || c.feeId === baseFeeId.value) return
   form.initialComponents = form.initialComponents.filter((_, idx) => idx !== i)
 }
 function onPricingFocus() {
@@ -531,6 +526,15 @@ const productSchema = computed(() => z.object({
     ctx.addIssue({ code: 'custom', path: ['variants'], message: 'Click Apply to generate combinations' })
   } else if (variants.value.some(v => !v.sku || !String(v.sku).trim())) {
     ctx.addIssue({ code: 'custom', path: ['variants'], message: 'Each variant needs a SKU' })
+  } else if (published.value && !variants.value.some(v => v.active && String(v.price ?? '').trim())) {
+    // a configurable parent cannot be activated while no variant of it is
+    // (422 `no_active_variant`), and a variant cannot be activated without a
+    // price of its own (`base_price_required`)
+    ctx.addIssue({
+      code: 'custom',
+      path: ['variants'],
+      message: 'To publish this product, at least one variant needs a price and must be switched on'
+    })
   }
 }))
 type ProductSchema = { name: string, sku: string, category: string, categoryId: string }
@@ -556,53 +560,85 @@ const variantIssue = computed(() => {
 function onSaveProduct(_event: FormSubmitEvent<ProductSchema>) {
   saveConfirmOpen.value = true
 }
+/**
+ * Saving is a sequence, and the first step commits.
+ *
+ * The API spells the order out: create the product as a Draft, then its
+ * price, then activate it — "this endpoint only creates product data; prices
+ * are set afterwards through the price-plan endpoints". A configurable
+ * parent is not sellable, so its prices go on its variants instead, and at
+ * least one variant has to be active before the parent can be.
+ *
+ * So the failure that matters is one AFTER the create. The product exists by
+ * then; retrying the whole form would create a second Draft. `createdId`
+ * records that, the Save button stops offering to create, and the reader is
+ * pointed at the Draft to finish it there.
+ */
 async function commitSave() {
-  const f = form
-  const variantsOn = productType.value === 'variant'
-  const vList = variantsOn
-    ? variants.value.map(v => ({ name: v.name, sku: v.sku, price: v.price, stock: v.stock, active: v.active }))
-    : []
-  const rec: Omit<StoredProduct, 'id'> = {
-    name: f.name.trim() || 'Untitled Product',
-    sku: f.sku.trim() || '—',
-    notes: f.notes,
-    description: f.description,
-    category: f.category,
-    categoryId: f.categoryId || '',
-    categoryPath: f.categoryId ? categoryPathById(categories.value, f.categoryId) : f.category,
-    platformIds: f.platformIds || [],
-    platformNames: (f.platformIds || [])
-      .map(id => platformById(platforms.value, id)?.name)
-      .filter((n): n is string => !!n),
-    overrides: {},
-    status: published.value ? 'Active' : 'Inactive',
-    notForSale: notForSale.value,
-    isDraft: false,
-    productType: productType.value,
-    hasVariants: variantsOn,
-    variantCount: variantsOn ? vList.length : 0,
-    image: f.image || undefined,
-    imageName: f.imageName,
-    bundle: productType.value === 'bundle'
-      ? { components: bundleComponents.value.map(c => ({ id: c.id, name: c.name, products: c.products.map(p => ({ id: p.id, name: p.name, sku: p.sku })) })) }
-      : null,
-    attributes: variantsOn ? attributes.value.filter(a => a.name && a.values.length).map(a => ({ name: a.name, values: a.values })) : [],
-    variants: vList,
-    pricing: (f.priceMonthly !== '' || initialTotal.value > 0)
-      ? [{ version: 'v1', monthly: f.priceMonthly, initial: initialTotal.value, components: f.initialComponents.filter(c => c.feeId).map(c => ({ feeId: c.feeId, published: !!c.published, amount: c.amount })), active: true }]
-      : [],
-    createdAt: Date.now()
-  }
   if (saving.value) return
+  if (createdId.value) {
+    // already created once; the rest is finished on the detail screen
+    goToDraft()
+    return
+  }
   saving.value = true
+  saveError.value = ''
+
+  const type = productType.value as FormProductType
+  let inlineVariants: { axes: VariantAxis[], combinations: VariantCombination[] } | undefined
+
+  if (type === 'variant') {
+    const { axes, unresolved } = resolveAxes(attributeRecords.value, attributes.value)
+    const combos = resolveCombinations(attributeRecords.value, axes, variants.value)
+    const unknown = [...unresolved, ...combos.unresolved]
+    if (unknown.length) {
+      // the matrix is built from labels; one the attribute list has no id for
+      // would quietly create a different set of variants than the table shows
+      saving.value = false
+      saveConfirmOpen.value = false
+      saveError.value = 'These variant values are not in the attribute list: ' + unknown.join(', ')
+        + '. Re-pick them, or add them under Settings → Attributes.'
+      return
+    }
+    inlineVariants = { axes, combinations: combos.combinations }
+  }
+
+  const input: CreateFormInput = {
+    name: form.name,
+    sku: form.sku,
+    notes: form.notes,
+    description: form.description,
+    categoryId: form.categoryId,
+    platformIds: form.platformIds || [],
+    productType: type,
+    stock: form.stock,
+    isSubscription: isSubscription.value,
+    notForSale: notForSale.value
+  }
+
+  let created: VertexProduct
   try {
-    await productsApi.create(rec)
+    created = await productsApi.create(toProductDraft(input, inlineVariants))
   } catch (err) {
+    // nothing was created, so the form is still safe to submit again
     saving.value = false
     saveConfirmOpen.value = false
     saveError.value = apiErrorMessage(err, 'Could not save the product.')
     return
   }
+
+  createdId.value = created.id
+
+  try {
+    await priceAndPublish(created, type)
+  } catch (err) {
+    saving.value = false
+    saveConfirmOpen.value = false
+    saveError.value = apiErrorMessage(err, 'The product was saved, but the rest could not be.')
+      + ' It exists as a draft — open it to finish.'
+    return
+  }
+
   saving.value = false
   try {
     sessionStorage.setItem('vertex_toast', 'Product created')
@@ -613,6 +649,77 @@ async function commitSave() {
   formDirty.value = false
   saveConfirmOpen.value = false
   toastTimer = window.setTimeout(() => router.push('/dashboard'), 1200)
+}
+
+/** The product's own Initial Fee rows as price lines. */
+function productLines() {
+  return componentsToLines(
+    form.initialComponents
+      .filter(c => c.feeId)
+      .map(c => ({ feeItemId: c.feeId, amount: String(c.amount ?? ''), isPublished: !!c.published })),
+    baseFeeId.value,
+    // the recurring price is a line of the same plan, and the API wants
+    // exactly one on a subscription product and none on any other
+    isSubscription.value ? form.priceMonthly : ''
+  )
+}
+
+/**
+ * One variant row's price.
+ *
+ * The table has a single Price column, which is the monthly price on a
+ * subscription product and the Base Price on any other. A plan must carry
+ * exactly one Base Price line either way, so the subscription case sends it
+ * at zero alongside the monthly line.
+ */
+function variantLines(price: string) {
+  return isSubscription.value
+    ? componentsToLines([{ feeItemId: baseFeeId.value, amount: '0', isPublished: true }], baseFeeId.value, price)
+    : componentsToLines([{ feeItemId: baseFeeId.value, amount: price, isPublished: true }], baseFeeId.value)
+}
+
+/** Steps 2 and 3, on a product that already exists. */
+async function priceAndPublish(created: VertexProduct, type: FormProductType) {
+  if (type === 'bundle') {
+    const draft = toBundleOptionsDraft(bundleComponents.value)
+    if (draft.options.length) await productsApi.saveBundleOptions(created.id, draft)
+  }
+
+  if (type !== 'variant') {
+    const lines = productLines()
+    if (lines.length) {
+      await productsApi.createPricePlan(created.id, { scope: 'default', effectiveAt: null, lines })
+    }
+    if (published.value) await productsApi.setStatus(created.id, 'active')
+    return
+  }
+
+  // A configurable parent carries no price of its own. Its variants were
+  // created by the same call, but their ids come back only on a re-read.
+  const children = (await productsApi.get(created.id, { include: 'children' })).children || []
+  const toActivate: string[] = []
+
+  for (const row of variants.value) {
+    const child = findVariantByLabel(children, row.key)
+    if (!child) continue
+    const lines = variantLines(String(row.price ?? '').trim())
+    if (!lines.length) continue
+    await productsApi.createPricePlan(child.id, { scope: 'default', effectiveAt: null, lines })
+    if (row.active) toActivate.push(child.id)
+  }
+
+  if (!published.value) return
+  // The parent is refused while no variant is active (422 `no_active_variant`),
+  // and a variant of a Draft parent activates without the price check — so
+  // the variants go first, and only the ones that are switched on and priced.
+  for (const id of toActivate) await productsApi.setStatus(id, 'active')
+  await productsApi.setStatus(created.id, 'active')
+}
+
+function goToDraft() {
+  if (!createdId.value) return
+  formDirty.value = false
+  router.push({ path: '/products/detail', query: { id: createdId.value } })
 }
 
 function onCancelClick() {
@@ -751,47 +858,15 @@ function onConfirmDiscard() {
 
           <div>
             <label class="field-label">Product Image</label>
-            <div
-              v-if="form.image"
-              class="flex items-center gap-3 border border-slate-200 rounded-[10px] px-3 py-2.5"
-            >
-              <img :src="form.image" class="w-14 h-14 rounded-lg object-cover flex-shrink-0">
-              <div class="flex-1 min-w-0">
-                <div class="text-[13px] font-semibold text-slate-900 overflow-hidden text-ellipsis whitespace-nowrap">
-                  {{ form.imageName }}
-                </div>
-                <div class="text-xs text-green-600">
-                  Image attached
-                </div>
-              </div>
-              <UButton
-                variant="ghost"
-
-                title="Remove image"
-
-                :ui="{ base: 'border border-slate-200 bg-white text-slate-500 w-7 h-7 rounded-full cursor-pointer flex items-center justify-center flex-shrink-0' }"
-                @click="onRemoveImage"
-              >
-                <UIcon name="i-lucide-x" class="w-[13px] h-[13px]" />
-              </UButton>
+            <div class="border-[1.5px] border-dashed border-slate-200 rounded-[10px] p-6 flex flex-col items-center gap-2 text-slate-400 bg-slate-50">
+              <UIcon name="i-lucide-image-off" class="w-[22px] h-[22px] text-slate-300" />
+              <span class="text-[13px] text-center">Images are added after the product is saved</span>
             </div>
-            <div
-              v-else
-              class="border-[1.5px] border-dashed border-slate-300 rounded-[10px] p-6 flex flex-col items-center gap-2 text-slate-400 bg-slate-50 cursor-pointer"
-              @click="onBrowseImage"
-              @dragover.prevent
-              @drop="onDropImage"
-            >
-              <UIcon name="i-lucide-image-plus" class="w-[22px] h-[22px] text-slate-400" />
-              <span class="text-[13px]">Drag &amp; drop or <span class="text-green-600 font-semibold">browse</span></span>
-            </div>
-            <input
-              ref="prodImageInput"
-              type="file"
-              accept="image/*"
-              class="hidden"
-              @change="onImageChange"
-            >
+            <p class="text-xs text-slate-400 mt-1.5">
+              The API attaches an image by its upload id, which comes from a pre-signed upload
+              (<code class="font-mono">POST /admin/uploads</code>) that this app does not do yet.
+              The picker used to accept a file and drop it on save.
+            </p>
           </div>
         </UCard>
 
@@ -1080,17 +1155,18 @@ function onConfirmDiscard() {
 
             <div v-if="variants.length" class="border border-slate-200 rounded-[10px] overflow-hidden">
               <div class="overflow-x-auto">
-                <div class="min-w-[420px]">
-                  <div class="grid grid-cols-[minmax(160px,1.6fr)_150px_90px_40px] gap-2 items-center px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+                <div class="min-w-[560px]">
+                  <div class="grid grid-cols-[minmax(160px,1.4fr)_140px_120px_90px_40px] gap-2 items-center px-4 py-2.5 bg-slate-50 border-b border-slate-200">
                     <span class="th text-xs">Variant</span>
                     <span class="th text-xs">SKU</span>
+                    <span class="th text-xs">{{ variantPriceHeading }}</span>
                     <span class="th text-xs text-center">Status</span>
                     <span />
                   </div>
                   <div
                     v-for="v in variants"
                     :key="v.key"
-                    class="grid grid-cols-[minmax(160px,1.6fr)_150px_90px_40px] gap-2 items-center px-4 py-2 border-b border-slate-100"
+                    class="grid grid-cols-[minmax(160px,1.4fr)_140px_120px_90px_40px] gap-2 items-center px-4 py-2 border-b border-slate-100"
                   >
                     <span class="text-sm font-semibold text-slate-900">{{ v.name }}</span>
                     <UInput
@@ -1099,6 +1175,17 @@ function onConfirmDiscard() {
                       :ui="fieldCompactSm()"
                       @update:model-value="updateVariant(v.key, 'sku', String($event))"
                     />
+                    <UInput
+                      :model-value="v.price"
+                      placeholder="0"
+                      inputmode="numeric"
+                      :ui="fieldCompactSm()"
+                      @update:model-value="updateVariant(v.key, 'price', String($event))"
+                    >
+                      <template #leading>
+                        <span class="text-slate-400 text-[13px]">¥</span>
+                      </template>
+                    </UInput>
                     <div class="text-center">
                       <USwitch
                         :model-value="v.active"
@@ -1405,7 +1492,18 @@ function onConfirmDiscard() {
         class="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3.5 py-3 text-[13px] text-red-700"
       >
         <UIcon name="i-lucide-circle-alert" class="w-[15px] h-[15px] flex-shrink-0" />
-        <span>{{ saveError }}</span>
+        <span class="flex-1">{{ saveError }}</span>
+        <!-- the product already exists; submitting again would make a second
+             draft, so the only way on is to open the one that was created -->
+        <UButton
+          v-if="createdId"
+          type="button"
+          variant="ghost"
+          :ui="{ base: 'border border-red-200 bg-white text-red-700 text-[13px] font-semibold px-3 py-1.5 rounded-lg cursor-pointer flex-shrink-0' }"
+          @click="goToDraft"
+        >
+          Open the draft
+        </UButton>
       </div>
     </UForm>
 

@@ -355,6 +355,18 @@ const productMedia = z.object({
   alt: localizedText.optional()
 }).loose()
 
+const variantAxisSchema = z.object({
+  attributeId: z.string().trim().min(1),
+  optionIds: z.array(z.string().trim().min(1)).min(1, 'Choose at least one option on each axis.')
+}).loose()
+
+const axesSchema = z.array(variantAxisSchema).min(1, 'A variant matrix needs at least one axis.')
+
+const combinationsSchema = z.array(z.object({
+  optionIds: z.array(z.string().trim().min(1)).min(1),
+  sku: z.string().trim().min(1).optional()
+}).loose())
+
 const productBody = z.object({
   name: localizedText,
   sku: z.string().trim().min(1).optional(),
@@ -363,16 +375,25 @@ const productBody = z.object({
   requiresShipping: z.boolean().optional(),
   isSubscription: z.boolean().optional(),
   isGift: z.boolean().optional(),
+  stockStatus: z.string().trim().min(1).optional(),
   categoryIds: z.array(z.string().trim().min(1)).optional(),
   platformIds: z.array(z.string().trim().min(1)).optional(),
   attributes: z.array(productAttributeValue).optional(),
   media: z.array(productMedia).optional()
 }).loose()
 
+/** The same block as it goes inline on create, at most 100 combinations. */
+export const vertexInlineVariantsSchema = z.object({
+  axes: axesSchema,
+  combinations: combinationsSchema.max(100, 'At most 100 variants can be created in one call.').optional()
+}).loose()
+
 /** `status` may only ever be `draft` on create; anything else is 422 `in`. */
 export const vertexProductCreateSchema = productBody.extend({
   type: vertexProductTypeSchema.optional(),
-  status: z.literal('draft', { error: 'A product can only be created as a draft.' }).optional()
+  status: z.literal('draft', { error: 'A product can only be created as a draft.' }).optional(),
+  /** Configurable products may create their variants in the same call. */
+  variants: vertexInlineVariantsSchema.optional()
 })
 
 /**
@@ -422,7 +443,7 @@ export const vertexProductQuerySchema = z.object({
 // ── product pricing, variants, bundles, per-platform content ────────────────
 
 const priceLineSchema = z.object({
-  lineType: z.enum(['fee', 'selection']),
+  lineType: z.enum(['fee', 'monthly', 'selection']),
   feeItemId: z.string().trim().min(1).nullish(),
   bundleSelectionId: z.string().trim().min(1).nullish(),
   // integer JPY; the API has no minor unit
@@ -430,8 +451,14 @@ const priceLineSchema = z.object({
   amountMonthly: z.number().int().nullish(),
   isPublished: z.boolean().optional()
 }).loose().refine(
-  v => v.lineType === 'fee' ? !!v.feeItemId : !!v.bundleSelectionId,
-  'A fee line needs a feeItemId; a selection line needs a bundleSelectionId.'
+  // A `monthly` line references neither: it is the product's own recurring
+  // price, so it carries `amountMonthly` instead of an id.
+  v => v.lineType === 'fee'
+    ? !!v.feeItemId
+    : v.lineType === 'monthly'
+      ? typeof v.amountMonthly === 'number'
+      : !!v.bundleSelectionId,
+  'A fee line needs a feeItemId, a monthly line an amountMonthly, a selection line a bundleSelectionId.'
 )
 
 /**
@@ -451,22 +478,16 @@ export const vertexPricePlanQuerySchema = z.object({
   scope: z.string().trim().min(1).optional()
 }).loose()
 
-const variantAxisSchema = z.object({
-  attributeId: z.string().trim().min(1),
-  optionIds: z.array(z.string().trim().min(1)).min(1, 'Choose at least one option on each axis.')
-}).loose()
-
-const axesSchema = z.array(variantAxisSchema).min(1, 'A variant matrix needs at least one axis.')
-
 export const vertexVariantAxesSchema = z.object({ axes: axesSchema }).loose()
 
-/** `generate` may also name which combinations to create and their SKUs. */
+/**
+ * `generate` may also name which combinations to create and their SKUs;
+ * leaving them out generates the whole matrix. The key is `combinations`
+ * because the API names its errors `combinations.{i}.sku`.
+ */
 export const vertexVariantGenerateSchema = z.object({
   axes: axesSchema,
-  variants: z.array(z.object({
-    combination: z.array(z.string().trim().min(1)).min(1),
-    sku: z.string().trim().min(1).optional()
-  }).loose()).optional()
+  combinations: combinationsSchema.optional()
 }).loose()
 
 /** The Create page's dry run: the product does not exist yet, so it sends its own sku and name. */

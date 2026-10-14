@@ -861,7 +861,11 @@ async function persist(merged: DetailProduct) {
       editInitialComponents.value
         .filter(c => c.feeId)
         .map(c => ({ feeItemId: c.feeId, amount: String(c.amount ?? ''), isPublished: !!c.published })),
-      baseFeeId.value
+      baseFeeId.value,
+      // the recurring price is a line of the same plan, and a plan saved
+      // without one wipes it — the API requires exactly one on a
+      // subscription product and refuses one on any other
+      editIsSubscription.value ? editMonthly.value : ''
     )
     if (!pricePlanUnchanged(pricingDoc.value?.default?.activePlan?.lines, lines)) {
       await productsApi.createPricePlan(rec.id, { scope: 'default', effectiveAt: null, lines })
