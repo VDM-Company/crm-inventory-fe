@@ -46,8 +46,6 @@ interface DetailProduct {
 interface EditAttr { id: string, name: string, values: string[] }
 interface ScopeOverride { name?: string, priceMonthly?: string | number, componentAmounts?: Record<string, string> }
 type Overrides = Record<string, ScopeOverride>
-interface HistoryChange { field: string, from: string, to: string }
-interface HistoryEntry { id: string, actor: string, ts: number, changes: HistoryChange[] }
 interface HistoryRow {
   id: string
   actor: string
@@ -61,8 +59,6 @@ interface HistoryRow {
   toggleLabel: string
   toggleIcon: string
 }
-
-const DAY = 86400000
 
 const DEMO_PRODUCT: DetailProduct = {
   id: null,
@@ -83,29 +79,6 @@ const DEMO_PRODUCT: DetailProduct = {
     { name: '15GB / 8 Days', sku: 'SKU-2000-01', price: 24, stock: 42, active: true },
     { name: '15GB / 16 Days', sku: 'SKU-2000-02', price: 32, stock: 28, active: true },
     { name: '15GB / 31 Days', sku: 'SKU-2000-03', price: 44, stock: 12, active: false }
-  ]
-}
-
-// Seeded on mount only — the relative timestamps need `Date.now()`, which would
-// otherwise differ between server and client render (hydration mismatch).
-function seedHistory(): HistoryEntry[] {
-  const now = Date.now()
-  return [
-    { id: 's1', actor: 'Olivia Rhye', ts: now - 3600000, changes: [
-      { field: 'Status', from: 'Inactive', to: 'Active' },
-      { field: 'Price (SIM Point)', from: '¥1,200', to: '¥1,300' },
-      { field: 'Stock', from: 'Out of stock', to: 'In stock' }
-    ] },
-    { id: 's2', actor: 'Phoenix Baker', ts: now - DAY - 5400000, changes: [
-      { field: 'Variant 15GB / 8 Days — Price', from: '¥24', to: '¥26' }
-    ] },
-    { id: 's3', actor: 'Demi Wilkinson', ts: now - DAY * 4 - 7200000, changes: [
-      { field: 'Description', from: '—', to: 'Tourist data SIM, valid 8–31 days' },
-      { field: 'Mark as gift', from: 'Yes', to: 'No' }
-    ] },
-    { id: 's4', actor: 'Candice Wu', ts: now - DAY * 12 - 3600000, changes: [
-      { field: 'Category', from: 'Data Plan', to: 'SIM Card' }
-    ] }
   ]
 }
 
@@ -232,6 +205,42 @@ const categoriesApi = useApiCategories()
 const platformsApi = useApiPlatforms()
 const attributesApi = useApiAttributes()
 const feesApi = useApiFeeItems()
+const auditApi = useApiAuditLogs()
+
+/**
+ * The Version History drawer's entries.
+ *
+ * Asked for by SUBJECT, not entity: a product's history covers its SKUs,
+ * pricing, stock and bundle options, and anything done to one of its variants
+ * is filed here rather than under the variant.
+ *
+ * A failure is swallowed on purpose. The drawer is secondary to the page, and
+ * an empty history reads as "nothing recorded", which is the honest thing to
+ * show when the log cannot be read.
+ */
+/**
+ * Names for the ids the log records, so a row reads `SK SIM, SIM Point`
+ * rather than two UUIDs or a bare `2 items`.
+ *
+ * The page has already loaded both lists for its own form, so this costs
+ * nothing. Returning undefined for an unknown id is deliberate — the mapper
+ * falls back to a count rather than naming some of a list and not the rest.
+ */
+function historyLabel(id: string): string | undefined {
+  return platformById(platforms.value, id)?.name
+    ?? categoryById(categories.value, id)?.name
+    ?? undefined
+}
+
+async function loadHistory() {
+  const id = record.value?.id
+  if (!id) return
+  try {
+    historyEntries.value = toHistoryEntries(await auditApi.forSubject('product', id), historyLabel)
+  } catch {
+    historyEntries.value = []
+  }
+}
 
 onMounted(async () => {
   try {
@@ -241,13 +250,14 @@ onMounted(async () => {
   } catch (err) {
     saveError.value = apiErrorMessage(err, 'Could not load the form data.')
   }
-  historyEntries.value = seedHistory()
   try {
     const rec = await loadRecordById(route.query.id)
     const norm = normalizeProduct(rec)
     product.value = norm.product
     draft.value = { ...norm.product }
     isStored.value = norm.stored
+    // after the record, so it has an id to ask about
+    await loadHistory()
   } catch {
     // the error is already on screen; don't present the demo record
   } finally {
@@ -761,25 +771,6 @@ const historyGroups = computed(() => {
   })
   return groups
 })
-function diffChanges(before: DetailProduct, after: DetailProduct): HistoryChange[] {
-  const out: HistoryChange[] = []
-  const push = (field: string, a: unknown, b: unknown) => {
-    const from = a == null ? '' : String(a)
-    const to = b == null ? '' : String(b)
-    if (from !== to) out.push({ field, from: from === '' ? '—' : from, to: to === '' ? '—' : to })
-  }
-  push('Name', before.name, after.name)
-  push('Notes', before.notes, after.notes)
-  push('Description', before.description, after.description)
-  push('Category', before.category, after.category)
-  push('Stock', before.stock === 'out_stock' ? 'Out of stock' : 'In stock', after.stock === 'out_stock' ? 'Out of stock' : 'In stock')
-  push('Status', before.status, after.status)
-  push('Mark as gift', before.notForSale ? 'Yes' : 'No', after.notForSale ? 'Yes' : 'No')
-  const bp = (before.platformIds || []).join(', ')
-  const ap = (after.platformIds || []).join(', ')
-  if (bp !== ap) out.push({ field: 'Platforms', from: bp || '—', to: ap || '—' })
-  return out
-}
 
 // ── mode transitions ──
 function isDirty(): boolean {
@@ -930,10 +921,9 @@ async function onSaveClick(_event: FormSubmitEvent<ProductSchema>) {
       : apiErrorMessage(err, 'Could not save the product.')
     return
   }
-  const changes = diffChanges(product.value, merged)
-  if (changes.length) {
-    historyEntries.value = [{ id: 'h' + Date.now(), actor: 'Olivia Rhye', ts: Date.now(), changes }, ...historyEntries.value]
-  }
+  // The API writes the audit entry; re-reading it beats inventing one, which
+  // is what this used to do — attributing every save to a hard-coded name.
+  void loadHistory()
   product.value = merged
   draft.value = { ...merged }
   mode.value = 'view'
@@ -1922,10 +1912,16 @@ async function onConfirmDelete() {
                     </div>
                     <div class="mt-1.5 flex flex-col gap-1">
                       <div v-for="(c, idx) in e.visibleChanges" :key="idx" class="text-[13px] text-slate-700">
-                        <span class="font-semibold">{{ c.field }}:</span>
-                        <span class="text-slate-400 line-through">{{ c.from }}</span>
-                        <UIcon name="i-lucide-arrow-right" class="w-[11px] h-[11px] inline align-middle text-slate-300 mx-0.5" />
-                        <span class="text-slate-900 font-medium">{{ c.to }}</span>
+                        <span class="font-semibold">{{ c.field }}</span>
+                        <!-- an entry whose snapshots differ in nothing carries
+                             the action instead of a field, and has nothing to
+                             draw an arrow between -->
+                        <template v-if="c.from || c.to">
+                          <span class="font-semibold">:</span>
+                          <span class="text-slate-400 line-through">{{ c.from }}</span>
+                          <UIcon name="i-lucide-arrow-right" class="w-[11px] h-[11px] inline align-middle text-slate-300 mx-0.5" />
+                          <span class="text-slate-900 font-medium">{{ c.to }}</span>
+                        </template>
                       </div>
                     </div>
                     <UButton

@@ -393,6 +393,20 @@ export const vertexPricePlanCreateSchema = z.object({
   lines: z.array(priceLineSchema).min(1, 'A plan needs at least one line.')
 }).loose()
 
+export const vertexAuditLogQuerySchema = z.object({
+  subjectType: z.string().trim().min(1).optional(),
+  subjectId: z.string().trim().min(1).optional(),
+  entityType: z.string().trim().min(1).optional(),
+  entityId: z.string().trim().min(1).optional(),
+  module: z.string().trim().min(1).optional(),
+  action: z.string().trim().min(1).optional(),
+  actorId: z.string().trim().min(1).optional(),
+  from: z.string().trim().min(1).optional(),
+  to: z.string().trim().min(1).optional(),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional()
+}).loose()
+
 export const vertexCatalogStatsQuerySchema = z.object({
   platformId: z.string().trim().min(1).optional()
 }).loose()

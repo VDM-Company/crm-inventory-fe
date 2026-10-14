@@ -395,6 +395,48 @@ export interface VertexCategoryProductsQuery extends CursorQuery {
   all?: boolean
 }
 
+// ── audit log ────────────────────────────────────────────────────────────────
+
+/**
+ * One entry of `GET /admin/audit-logs` — what the Version History drawer
+ * reads.
+ *
+ * `subjectType`/`subjectId` ask for a whole record's history: a product's
+ * entry covers its SKU, pricing, stock and bundle options, and anything done
+ * to a VARIANT is filed under its parent rather than under the variant.
+ *
+ * `changes.before` and `changes.after` are free-form snapshots, not a diff —
+ * an `updated` entry repeats every field whether it moved or not, so the
+ * reader has to diff them. Their keys arrive camelCased like everything else
+ * (`platform_ids` → `platformIds`).
+ */
+export interface AuditLogEntry {
+  id: string
+  actor: { type: string, id: string | null, name: string | null }
+  module: string
+  entityType: string
+  entityId: string
+  entityLabel: string | null
+  subject: { type: string, id: string }
+  /** `created`, `updated`, `product_platform_content_updated`, … */
+  action: string
+  changes: { before: Record<string, unknown> | null, after: Record<string, unknown> | null } | null
+  ip: string | null
+  createdAt: string
+}
+
+export interface AuditLogQuery extends CursorQuery {
+  subjectType?: string
+  subjectId?: string
+  entityType?: string
+  entityId?: string
+  module?: string
+  action?: string
+  actorId?: string
+  from?: string
+  to?: string
+}
+
 // ── catalog stats ────────────────────────────────────────────────────────────
 
 /**
