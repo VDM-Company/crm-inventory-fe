@@ -18,7 +18,7 @@ interface AddModalState {
 }
 
 // ── state (mirrors the design's DCLogic state) ──
-const categoriesApi = useApiCategoriesV2()
+const categoriesApi = useApiCategories()
 
 /**
  * The tree as the API sent it, by id.
@@ -28,7 +28,7 @@ const categoriesApi = useApiCategoriesV2()
  */
 const vertexById = ref<Map<string, VertexCategory>>(new Map())
 const lockVersionOf = (id: string) => vertexById.value.get(id)?.lockVersion ?? 0
-const platformsApi = useApiPlatformsV2()
+const platformsApi = useApiPlatforms()
 
 const treeCollapsed = ref(false)
 const cats = ref<Category[]>([])
@@ -84,7 +84,7 @@ onMounted(async () => {
 // Delete button could never be reached: every category looked fully stocked.
 // These are the real products now.
 const catalog = ref<VertexProductRow[]>([])
-const productsApi = useApiProductsV2()
+const productsApi = useApiProducts()
 
 /** Direct assignments, as the API counts them. Zero for a node it has not sent. */
 function productCount(catId: string): number {

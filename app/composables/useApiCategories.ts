@@ -11,9 +11,6 @@ import type {
 /**
  * The categories resource on the Vertex Commerce API.
  *
- * Named `V2` only while `useApiCategories` still serves the pages from the
- * older seam; it takes that name once they move.
- *
  * Three ways this differs from every other resource here:
  *
  * - **The list is a nested tree, not a page.** `GET /admin/categories` takes
@@ -27,8 +24,8 @@ import type {
  *   carry their own `lockVersion`, separate from the category's, and each
  *   field reports whether its value is the platform's or inherited.
  */
-export function useApiCategoriesV2() {
-  const base = '/api/categories-v2'
+export function useApiCategories() {
+  const base = '/api/categories'
   const api = useApiFetch()
   const body = (v: unknown) => v as Record<string, unknown>
 

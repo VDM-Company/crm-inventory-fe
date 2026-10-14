@@ -43,8 +43,8 @@ const platforms = ref<VertexPlatform[]>([])
 const fees = ref<FeeItem[]>([])
 const imageInput = ref<HTMLInputElement | null>(null)
 
-const productsApi = useApiProductsV2()
-const platformsApi = useApiPlatformsV2()
+const productsApi = useApiProducts()
+const platformsApi = useApiPlatforms()
 const feesApi = useApiFeeItems()
 
 /**

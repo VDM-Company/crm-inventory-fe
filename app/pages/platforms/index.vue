@@ -10,7 +10,7 @@ const loading = ref(true)
 const loadError = ref('')
 const { message: toast, show: showToast } = usePageToast(3000)
 
-const platformsApi = useApiPlatformsV2()
+const platformsApi = useApiPlatforms()
 
 // No product fetch any more. It was here to block deleting a platform that
 // still had products, and the API has no delete — a platform is switched off

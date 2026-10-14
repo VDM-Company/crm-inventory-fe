@@ -4,7 +4,7 @@ import type { AdminUser } from '../../shared/types/vertex'
 
 describe('isGuardedApiPath', () => {
   it('guards every API route', () => {
-    expect(isGuardedApiPath('/api/products-v2')).toBe(true)
+    expect(isGuardedApiPath('/api/products')).toBe(true)
     expect(isGuardedApiPath('/api/fee-items/abc')).toBe(true)
     expect(isGuardedApiPath('/api/auth/logout')).toBe(true)
     expect(isGuardedApiPath('/api/auth/me')).toBe(true)
@@ -31,7 +31,7 @@ describe('isGuardedApiPath', () => {
   it('ignores a query string and a trailing slash', () => {
     expect(isGuardedApiPath('/api/auth/login?next=/x')).toBe(false)
     expect(isGuardedApiPath('/api/auth/login/')).toBe(false)
-    expect(isGuardedApiPath('/api/products-v2?limit=10')).toBe(true)
+    expect(isGuardedApiPath('/api/products?limit=10')).toBe(true)
   })
 
   it('leaves pages and assets alone', () => {

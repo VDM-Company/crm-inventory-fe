@@ -10,9 +10,6 @@ import type {
 /**
  * The attributes resource on the Vertex Commerce API.
  *
- * Named `V2` only while `useApiAttributes` still serves the pages from the
- * older seam; it takes that name once they move.
- *
  * This is the resource that changed shape most. The old one carried
  * `values: string[]` and saved the whole array in one PUT. Here each value is
  * an `AttributeOption` record with its own id, order and usage count, and the
@@ -34,9 +31,9 @@ import type {
  * `reorderOptions` returns the whole attribute; the other three return only
  * the option they touched.
  */
-export function useApiAttributesV2() {
-  const api = useVertexResource<Attribute, AttributeDraft, AttributePatch>('attributes-v2')
-  const base = '/api/attributes-v2'
+export function useApiAttributes() {
+  const api = useVertexResource<Attribute, AttributeDraft, AttributePatch>('attributes')
+  const base = '/api/attributes'
   const http = useApiFetch()
   const body = (v: unknown) => v as Record<string, unknown>
 

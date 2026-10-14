@@ -17,7 +17,7 @@ const editId = computed(() => {
 })
 
 // ── state ──
-const attributesApi = useApiAttributesV2()
+const attributesApi = useApiAttributes()
 
 const attrs = ref<Attribute[]>([])
 /** The record being edited, kept whole for its option ids and lockVersion. */

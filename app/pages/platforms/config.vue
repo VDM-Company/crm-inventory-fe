@@ -9,7 +9,7 @@ const route = useRoute()
 const router = useRouter()
 
 // ── platform + identity ──
-const platformsApi = useApiPlatformsV2()
+const platformsApi = useApiPlatforms()
 
 const platforms = ref<VertexPlatform[]>([])
 const loading = ref(true)

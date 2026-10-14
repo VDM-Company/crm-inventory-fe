@@ -91,10 +91,10 @@ let toastTimer: number | null = null
 const hasVariants = computed(() => productType.value === 'variant')
 const isBundle = computed(() => productType.value === 'bundle')
 
-const productsApi = useApiProductsV2()
-const categoriesApi = useApiCategoriesV2()
-const platformsApi = useApiPlatformsV2()
-const attributesApi = useApiAttributesV2()
+const productsApi = useApiProducts()
+const categoriesApi = useApiCategories()
+const platformsApi = useApiPlatforms()
+const attributesApi = useApiAttributes()
 const feesApi = useApiFeeItems()
 
 onMounted(async () => {

@@ -4,7 +4,7 @@ import { PLATFORM_CONFIG_SEED, GENERIC_CONFIG_SEED } from '#shared/seeds'
 // The field groups the platform Configuration form renders, and the seed that
 // fills a new platform's form.
 //
-// Reads and writes moved to `useApiPlatformsV2().settings` / `saveSettings`,
+// Reads and writes moved to `useApiPlatforms().settings` / `saveSettings`,
 // which speak the API's grouped shape; `shared/utils/platform-settings.ts`
 // maps between that and the flat keys below.
 

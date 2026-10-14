@@ -19,9 +19,9 @@ const search = ref('')
 
 const loadError = ref('')
 
-const productsApi = useApiProductsV2()
-const platformsApi = useApiPlatformsV2()
-const categoriesApi = useApiCategoriesV2()
+const productsApi = useApiProducts()
+const platformsApi = useApiPlatforms()
+const categoriesApi = useApiCategories()
 
 onMounted(async () => {
   try {

@@ -7,7 +7,7 @@ const route = useRoute()
 const router = useRouter()
 
 // ── state (mirrors the design's DCLogic state) ──
-const platformsApi = useApiPlatformsV2()
+const platformsApi = useApiPlatforms()
 
 const editId = ref<string | null>(null)
 // derived from the route so the title is right before the record arrives

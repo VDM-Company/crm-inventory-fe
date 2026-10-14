@@ -23,9 +23,6 @@ import type {
 /**
  * The products resource on the Vertex Commerce API.
  *
- * Named `V2` only while `useApiProducts` still serves the screens from the
- * older seam; it takes that name once they move.
- *
  * **There is no `list()` here, only `page()`.** Every other resource in this
  * folder is master data a screen renders in full, so its binding walks the
  * cursors server-side. Products are not: the list is unbounded, and asking
@@ -48,8 +45,8 @@ import type {
  * content. They are grouped below rather than flattened, because each is a
  * different concern with its own rules.
  */
-export function useApiProductsV2() {
-  const base = '/api/products-v2'
+export function useApiProducts() {
+  const base = '/api/products'
   const api = useApiFetch()
   const body = (v: unknown) => v as Record<string, unknown>
 
@@ -214,7 +211,7 @@ export const simulateVariants = (sku: string, name: Record<string, string>, axes
   // before plugins run (`export const $fetch = globalThis.$fetch` in
   // `#build/fetch.mjs`), so it is not the instance `auth-401.client.ts`
   // installs and a dead session here would go unnoticed.
-  globalThis.$fetch<VariantSimulation>('/api/products-v2/variants/simulate', {
+  globalThis.$fetch<VariantSimulation>('/api/products/variants/simulate', {
     method: 'POST',
     body: { sku, name, axes } as unknown as Record<string, unknown>
   })

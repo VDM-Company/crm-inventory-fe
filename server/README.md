@@ -39,20 +39,19 @@ Know what that mock does and does not do before trusting a green screen:
 
 ## Routes
 
-Named `*-v2` while the older routes still existed; the suffix is now just a
-name. One file per endpoint under `server/api/`, each a thin wrapper: parse
-the body or query with a schema from `shared/schemas`, then call `vertex()`.
+One file per endpoint under `server/api/`, each a thin wrapper: parse the
+body or query with a schema from `shared/schemas`, then call `vertex(event)`.
 
 | area | paths |
 | --- | --- |
-| products | `/api/products-v2`, `/:id`, `/:id/status`, `/restore`, `/duplicate` |
+| products | `/api/products`, `/:id`, `/:id/status`, `/restore`, `/duplicate` |
 | pricing | `/:id/pricing`, `/:id/price-plans`, `/:id/pricing/platforms/:p/override`, `/reset` |
-| variants | `/:id/variants/preview`, `/generate`, and `/api/products-v2/variants/simulate` |
+| variants | `/:id/variants/preview`, `/generate`, and `/api/products/variants/simulate` |
 | bundles | `/:id/bundle-options`, `/:id/bundle-price` |
 | content | `/:id/platform-content`, `/:id/platform-content/:platform` |
-| categories | `/api/categories-v2`, `/:id`, `/:id/products`, `/:id/platform-content/:platform` |
-| platforms | `/api/platforms-v2`, `/:id`, `/:id/settings`, `/activate`, `/deactivate` |
-| attributes | `/api/attributes-v2`, `/:id`, `/:id/options`, `/:id/options/:option`, `/options/order` |
+| categories | `/api/categories`, `/:id`, `/:id/products`, `/:id/platform-content/:platform` |
+| platforms | `/api/platforms`, `/:id`, `/:id/settings`, `/activate`, `/deactivate` |
+| attributes | `/api/attributes`, `/:id`, `/:id/options`, `/:id/options/:option`, `/options/order` |
 | fee items | `/api/fee-items`, `/:id` |
 
 ### Shapes

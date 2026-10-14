@@ -22,9 +22,9 @@ const platFilter = ref('')
 const typeFilter = ref('')
 const statusFilter = ref('')
 
-const productsApi = useApiProductsV2()
-const categoriesApi = useApiCategoriesV2()
-const platformsApi = useApiPlatformsV2()
+const productsApi = useApiProducts()
+const categoriesApi = useApiCategories()
+const platformsApi = useApiPlatforms()
 
 /*
  * Fetched during SSR, so the table arrives with the page instead of after it.

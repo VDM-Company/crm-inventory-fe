@@ -19,7 +19,7 @@ const columns: TableColumn<Attribute>[] = [
   { id: 'action', header: 'Action', meta: { class: { th: 'px-5 text-right w-[130px]', td: TABLE_EDGE.td } } }
 ]
 
-const attributesApi = useApiAttributesV2()
+const attributesApi = useApiAttributes()
 
 // No product fetch: the API reports `usageCount` per attribute, which is the
 // only thing this screen ever loaded products for.

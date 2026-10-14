@@ -3,9 +3,6 @@ import type { VertexPlatform, VertexPlatformDraft, VertexPlatformPatch, VertexPl
 /**
  * The platforms resource on the Vertex Commerce API.
  *
- * Named `V2` only while `useApiPlatforms` still serves the pages from the
- * older seam; it takes that name once they move.
- *
  * Two things the old shape did not have:
  *
  * - **No delete.** The API has no DELETE for a platform — it is switched off
@@ -16,9 +13,9 @@ import type { VertexPlatform, VertexPlatformDraft, VertexPlatformPatch, VertexPl
  *   from `settings()`, and reports errors keyed by setting
  *   (`contact.recipientEmail`), not by form field.
  */
-export function useApiPlatformsV2() {
-  const api = useVertexResource<VertexPlatform, VertexPlatformDraft, VertexPlatformPatch>('platforms-v2')
-  const base = '/api/platforms-v2'
+export function useApiPlatforms() {
+  const api = useVertexResource<VertexPlatform, VertexPlatformDraft, VertexPlatformPatch>('platforms')
+  const base = '/api/platforms'
   const http = useApiFetch()
 
   return {
