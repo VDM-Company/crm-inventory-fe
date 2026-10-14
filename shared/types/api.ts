@@ -1,57 +1,12 @@
 /**
- * The contract between the Nuxt app and `server/api`.
+ * What is left of the contract between the Nuxt app and `server/api`.
  *
- * This is OUR shape, deliberately not Laravel's. `server/utils/backend.ts` is
- * the single place that translates whatever the upstream returns into these,
- * so swapping the placeholder for the real API is one file plus its mappers.
+ * It used to describe OUR shape — a page-numbered envelope that
+ * `server/utils/backend.ts` translated the upstream into. That seam is gone:
+ * the routes speak the Vertex Commerce API's own documents now, which
+ * `shared/types/vertex.ts` describes. Only the error shape is still ours,
+ * because it is what `createError({ data })` hands the screens.
  */
-
-/** A page of records. `meta` is null when the upstream does not paginate. */
-export interface ApiList<T> {
-  data: T[]
-  meta: ApiListMeta | null
-}
-
-export interface ApiListMeta {
-  page: number
-  perPage: number
-  total: number
-  lastPage: number
-}
-
-/** Query accepted by every list endpoint. All optional. */
-export interface ListQuery {
-  page?: number
-  perPage?: number
-  /** free-text search; the upstream decides which columns it covers */
-  q?: string
-  sort?: string
-  dir?: 'asc' | 'desc'
-}
 
 /** Per-field validation messages, shaped for Nuxt UI's UForm `errors`. */
 export type FieldErrors = Record<string, string>
-
-/**
- * The body of a failed response. Thrown via `createError({ data })`, so the
- * client reads it off `error.data`.
- */
-export interface ApiErrorBody {
-  message: string
-  /** present on 422 only */
-  fieldErrors?: FieldErrors
-}
-
-/**
- * A record that came back from the API: the server has assigned it an id.
- *
- * The domain types leave `id` optional because the same shape describes a
- * record still being filled in by a form. Anything the API hands back has one.
- */
-export type Persisted<T> = T & { id: string }
-
-/** A record on its way to the API for the first time — no id until it replies. */
-export type Draft<T> = Omit<T, 'id'> & { id?: string }
-
-/** Which backend served the request — surfaced by `/api/_health`. */
-export type ApiMode = 'mock' | 'proxy'

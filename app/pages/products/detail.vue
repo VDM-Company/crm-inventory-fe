@@ -643,7 +643,7 @@ const editComponentRows = computed(() => {
   const locked = feeComponentsLocked.value
   const chosen = editInitialComponents.value.map(c => c.feeId).filter(Boolean)
   return editInitialComponents.value.map((c, i) => {
-    const isBase = c.feeId === FEE_BASE_ID
+    const isBase = !!baseFeeId.value && c.feeId === baseFeeId.value
     const amt = locked
       ? (scopeComponentAmounts.value[c.feeId] !== undefined ? scopeComponentAmounts.value[c.feeId] : '')
       : c.amount
@@ -690,7 +690,7 @@ function setComponentAmount(index: number, value: string) {
 }
 function toggleComponentPublish(index: number) {
   const c = editInitialComponents.value[index]
-  if (!c || c.feeId === FEE_BASE_ID || feeComponentsLocked.value) return
+  if (!c || c.feeId === baseFeeId.value || feeComponentsLocked.value) return
   editInitialComponents.value = editInitialComponents.value.map((x, i) => i === index ? { ...x, published: !x.published } : x)
 }
 function removeComponent(index: number) {
@@ -718,8 +718,8 @@ function seedPricingEdit(p: DetailProduct) {
   editMonthly.value = baseV.monthly != null ? baseV.monthly : ''
   const src = baseV.components || []
   editInitialComponents.value = src.length
-    ? src.map(c => ({ feeId: c.feeId || FEE_BASE_ID, published: c.published === undefined ? true : !!c.published, amount: c.amount }))
-    : [{ feeId: FEE_BASE_ID, published: true, amount: '' }]
+    ? src.map(c => ({ feeId: c.feeId || baseFeeId.value, published: c.published === undefined ? true : !!c.published, amount: c.amount }))
+    : [{ feeId: baseFeeId.value, published: true, amount: '' }]
 }
 
 // ── version history ──

@@ -1,10 +1,10 @@
 /**
  * The seam between this app and the Vertex Commerce API.
  *
- * Separate from `backend.ts` on purpose. That file speaks the shape this app
- * was built against before the real contract existed — page numbers, PUT, no
- * `lock_version` — and four resources still run on it. Resources move here one
- * at a time; when the last one has, `backend.ts` and its in-memory mock go.
+ * It replaced `backend.ts`, which spoke the shape this app was built against
+ * before the real contract existed — page numbers, PUT, no `lock_version`.
+ * The screens moved here one resource at a time, and that file and its
+ * in-memory mock went with the last of them.
  *
  * This module is the half that cannot be pure: configuration, the bearer
  * token, the HTTP call, and turning a failure into an h3 error. The wire

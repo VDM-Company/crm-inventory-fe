@@ -22,12 +22,10 @@ export default defineNuxtConfig({
   },
 
   // Private by default — only reachable from `server/`. Override at deploy
-  // time with NUXT_API_BASE_URL / NUXT_API_TOKEN. While `apiBaseUrl` is empty
-  // the `server/api` layer answers from its in-memory mock.
+  // time with NUXT_VERTEX_API_BASE / NUXT_VERTEX_API_TOKEN. With no base
+  // configured every `/api` route fails rather than inventing an answer: the
+  // in-memory mock that used to stand in for one is gone.
   runtimeConfig: {
-    // the old seam (server/utils/backend.ts) — four resources still on it
-    apiBaseUrl: '',
-    apiToken: '',
     // the Vertex Commerce API (server/utils/vertex.ts). Include the /api/v1
     // prefix; the collection's baseUrl carries it and the paths assume it.
     // Server-only: the token must never reach the browser.

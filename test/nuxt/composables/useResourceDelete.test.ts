@@ -31,7 +31,11 @@ function setup(overrides: Partial<Parameters<typeof useResourceDelete<Row>>[0]> 
     removed,
     notices,
     make: () => useResourceDelete<Row>({
-      remove: useApiResource<Row>('widgets').remove,
+      // the composable only needs a `remove`; the generic resource binding it
+      // used to borrow one from went with the old placeholder seam
+      remove: async (id: string) => {
+        await $fetch(`/api/widgets/${id}`, { method: 'DELETE' })
+      },
       noun: 'widget',
       usageCount: () => usage,
       blockedMessage: u => `This widget is used by ${u} product${u === 1 ? '' : 's'}.`,
