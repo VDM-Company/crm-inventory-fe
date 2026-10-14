@@ -7,8 +7,10 @@ import { isSessionEnding } from '#shared/utils/auth'
  * this, every screen independently shows "Could not load…" forever and the
  * reader has no way to know that signing in again is the fix.
  *
- * Only 401 is handled. A 403 means signed in but not allowed, which is a real
- * answer the screen should show rather than a reason to sign out.
+ * Only 401 is handled, and only by CODE. A 403 means signed in but not
+ * allowed, and a 401 that is not session-ending belongs to the screen that
+ * asked — bouncing on every 401 threw people out whenever they saved a price,
+ * because the Postman mock answers that write with a saved 401 of its own.
  */
 export default defineNuxtPlugin((nuxtApp) => {
   const router = useRouter()
@@ -17,26 +19,32 @@ export default defineNuxtPlugin((nuxtApp) => {
     onResponseError({ response }) {
       if (response.status !== 401) return
 
-      // By CODE, not by status. A 401 that does not mean "your session is
-      // over" belongs to the screen that asked — bouncing on all of them
-      // threw people out of the app whenever an endpoint answered 401 for
-      // its own reasons. The guard's own refusal is `unauthenticated`, so
-      // it still lands here.
       const body = response._data as { statusMessage?: string, data?: { code?: string } } | undefined
       if (!isSessionEnding(body?.statusMessage ?? body?.data?.code)) return
 
       const current = router.currentRoute.value
       if (current.path === '/login') return
 
+      /*
+       * Forget the session SYNCHRONOUSLY, before navigating.
+       *
+       * `clear()` would be the polite call, but it is async and it DELETEs a
+       * session the server has already dropped. Worse, leaving the client
+       * state alone for even one tick means the route middleware still sees
+       * `loggedIn`, takes its "already signed in, so no reason to show the
+       * form" branch, and bounces straight back to the page just left. That
+       * is exactly what happened here: the interceptor fired, matched, and
+       * called `replace`, and the navigation quietly undid itself.
+       *
+       * `session` is the module's own `useState` ref, so writing it is what
+       * `loggedIn` reads on the very next tick.
+       */
+      nuxtApp.runWithContext(() => {
+        useUserSession().session.value = null
+      })
       // `router.replace` rather than `navigateTo`: this runs inside a fetch
       // interceptor, which is outside any Nuxt context, and `navigateTo`
-      // needs one — it fails silently there, which is how this went
-      // unnoticed the first time.
-      nuxtApp.runWithContext(() => {
-        const { user, loaded } = useAuth()
-        user.value = null
-        loaded.value = true
-      })
+      // needs one — it fails silently there.
       router.replace({ path: '/login', query: { redirect: current.fullPath } })
     }
   })

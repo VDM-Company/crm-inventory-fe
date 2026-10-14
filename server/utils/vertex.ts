@@ -101,7 +101,7 @@ export function vertex(event: H3Event, auth?: { token?: string }) {
       const e = err as { status?: number, statusCode?: number, data?: VertexErrorBody }
       const status = e.status || e.statusCode
       if (!auth && status === 401 && isSessionEnding(e.data?.error?.code)) {
-        await endSession(event)
+        await clearUserSession(event)
       }
       vertexError(err)
     }

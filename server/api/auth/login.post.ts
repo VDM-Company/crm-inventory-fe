@@ -5,12 +5,15 @@ import { toSessionUser } from '#shared/utils/auth'
 /**
  * Exchanges credentials for a session.
  *
- * The token the API answers with stops here: it goes into the sealed cookie
- * and the browser is told only who it is signed in as. Nothing in the
- * response body is the token.
+ * The token the API answers with stops here. It goes under `secure`, which
+ * `nuxt-auth-utils` strips before the session is ever sent to the browser;
+ * what the client gets back is a name, an email and a permission list.
  *
  * Called with no bearer of its own — there is no session yet, which is the
  * point.
+ *
+ * `replaceUserSession`, not `setUserSession`: the latter merges with defu, so
+ * signing in as someone else would keep whatever the previous session held.
  */
 export default defineEventHandler(async (event) => {
   const body = await parseBody(event, vertexLoginSchema)
@@ -19,6 +22,6 @@ export default defineEventHandler(async (event) => {
     .one<LoginResult>('/admin/auth/login', { method: 'POST', body })
 
   const user = toSessionUser(result.user)
-  await startSession(event, result.token, user)
+  await replaceUserSession(event, { user, secure: { token: result.token } })
   return { user }
 })

@@ -85,9 +85,10 @@ and `/api/_health`, matched exactly — `server/middleware/auth.ts` answers 401
 to everything else.
 
 **The upstream token never reaches the browser.** `POST /api/auth/login`
-forwards the credentials, takes the Sanctum token out of the reply, and puts
-it in a sealed `httpOnly` cookie (`server/utils/session.ts`). What goes back
-to the client is the user's name, email, roles and permissions — no token.
+forwards the credentials and puts the Sanctum token under the session's
+`secure` key. `nuxt-auth-utils` destructures that away before the session is
+ever sent to the client (`const { secure, ...data } = session`), so what goes
+back is the user's name, email, roles and permissions — no token.
 `vertex(event)` reads the cookie and turns it into the Authorization header,
 which is why that parameter is required rather than optional: there is no
 shared credential to fall back on.
@@ -96,7 +97,7 @@ shared credential to fall back on.
 | --- | --- |
 | `POST /api/auth/login` | credentials → session cookie; answers `{ user }` |
 | `POST /api/auth/logout` | revokes upstream (best effort), always clears the session |
-| `GET /api/auth/me` | the session's user, or `null` |
+| `GET /api/_auth/session` | the module's own: the session without `secure` |
 
 Two behaviours worth knowing:
 
@@ -112,7 +113,14 @@ Two behaviours worth knowing:
   saved 401 whose code is the literal string `"string"`.
 
 `NUXT_SESSION_PASSWORD` seals the cookie and must be at least 32 characters;
-the session refuses to start without it. Changing it signs everyone out.
+the module writes a generated one into `.env` on the first dev run. Changing
+it signs everyone out.
+
+The module's own defaults are not enough, so `nuxt.config.ts` adds three —
+each checked against its source and h3's rather than assumed:
+`sessionHeader: false` (h3 otherwise accepts a sealed session in an
+`x-nuxt-session` request header, which WINS over the cookie), `secure`
+outside dev only, and a `maxAge`.
 
 ## Before deploying
 
@@ -140,7 +148,7 @@ shared/schemas/            zod request validation, from the collection
 shared/utils/vertex-wire.ts  case mapping and error flattening (pure)
 shared/utils/cursor.ts     the cursor walk (pure)
 server/utils/vertex.ts     THE SEAM — config, the caller's token, HTTP, h3 errors
-server/utils/session.ts    the sealed cookie holding that token
+server/utils/session.ts    reads the token back out of the session's `secure`
 server/middleware/auth.ts  401 for any guarded /api path without a session
 shared/utils/auth.ts       which paths are guarded, and redirect safety (pure)
 server/utils/vertex-crud.ts  shared handler bodies

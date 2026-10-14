@@ -18,7 +18,12 @@ import type { AdminUser } from '#shared/types'
  */
 const PUBLIC_API_PATHS = new Set([
   '/api/auth/login',
-  '/api/_health'
+  '/api/_health',
+  // `nuxt-auth-utils` serves the session here, and it has to answer a
+  // signed-out visitor too — with `{}`, which is how the app learns there is
+  // nobody. Guarding it would make every page bounce. It leaks nothing: the
+  // handler strips `secure` before replying.
+  '/api/_auth/session'
 ])
 
 /**

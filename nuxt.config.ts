@@ -4,7 +4,8 @@ export default defineNuxtConfig({
     '@nuxt/eslint',
     '@nuxt/test-utils/module',
     '@nuxt/ui',
-    '@vueuse/nuxt'
+    '@vueuse/nuxt',
+    'nuxt-auth-utils'
   ],
 
   devtools: {
@@ -30,9 +31,36 @@ export default defineNuxtConfig({
     // prefix; the collection's baseUrl carries it and the paths assume it.
     // Server-only: the token must never reach the browser.
     vertexApiBase: '',
-    // Seals the session cookie that holds each user's API token. At least 32
-    // characters; `server/utils/session.ts` refuses to run without it.
-    sessionPassword: ''
+
+    /*
+     * The session cookie `nuxt-auth-utils` keeps the signed-in user in.
+     *
+     * Three of these harden what the module does not — each checked against
+     * its source and h3's rather than assumed:
+     *
+     * - `sessionHeader: false`. h3 otherwise also accepts a sealed session in
+     *   an `x-nuxt-session` request header, and that header WINS over the
+     *   cookie. Nothing here needs a second door.
+     * - `secure` outside dev only. h3 defaults it to true, and WebKit refuses
+     *   to store a Secure cookie on http://localhost, so dev would silently
+     *   never stay signed in.
+     * - `maxAge`. Without one the cookie dies with the browser session.
+     *
+     * `password` comes from NUXT_SESSION_PASSWORD (32+ characters); the
+     * module writes a generated one into .env on the first dev run.
+     */
+    session: {
+      name: 'vertex_session',
+      maxAge: 60 * 60 * 24 * 7,
+      sessionHeader: false,
+      cookie: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 60 * 60 * 24 * 7
+      }
+    }
   },
 
   routeRules: {

@@ -10,9 +10,11 @@ describe('isGuardedApiPath', () => {
     expect(isGuardedApiPath('/api/auth/me')).toBe(true)
   })
 
-  it('lets exactly two through', () => {
+  it('lets exactly three through', () => {
     expect(isGuardedApiPath('/api/auth/login')).toBe(false)
     expect(isGuardedApiPath('/api/_health')).toBe(false)
+    // the module's own session endpoint has to answer a signed-out visitor
+    expect(isGuardedApiPath('/api/_auth/session')).toBe(false)
   })
 
   it('matches the exceptions exactly, not by prefix', () => {
@@ -22,6 +24,8 @@ describe('isGuardedApiPath', () => {
     expect(isGuardedApiPath('/api/auth/login/elevate')).toBe(true)
     expect(isGuardedApiPath('/api/_healthcheck')).toBe(true)
     expect(isGuardedApiPath('/api/_health/secrets')).toBe(true)
+    expect(isGuardedApiPath('/api/_auth/session/steal')).toBe(true)
+    expect(isGuardedApiPath('/api/_auth/sessions')).toBe(true)
   })
 
   it('ignores a query string and a trailing slash', () => {

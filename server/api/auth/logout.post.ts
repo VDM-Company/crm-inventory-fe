@@ -13,7 +13,7 @@ export default defineEventHandler(async (event) => {
   } catch {
     // best effort; the session below is what actually signs them out here
   }
-  await endSession(event)
+  await clearUserSession(event)
   setResponseStatus(event, 204)
   return null
 })
