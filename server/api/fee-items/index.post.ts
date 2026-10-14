@@ -3,7 +3,7 @@ import { feeItemCreateSchema } from '#shared/schemas'
 
 export default defineEventHandler(async (event) => {
   const body = await parseBody(event, feeItemCreateSchema)
-  const created = await vertex().one<FeeItem>('/admin/fee-items', { method: 'POST', body })
+  const created = await vertex(event).one<FeeItem>('/admin/fee-items', { method: 'POST', body })
   setResponseStatus(event, 201)
   return created
 })

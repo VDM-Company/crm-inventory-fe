@@ -10,5 +10,5 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw notFound('product')
   const body = await parseBody(event, vertexProductStatusSchema)
-  return vertex().one<VertexProduct>(`/admin/products/${id}/status`, { method: 'POST', body })
+  return vertex(event).one<VertexProduct>(`/admin/products/${id}/status`, { method: 'POST', body })
 })

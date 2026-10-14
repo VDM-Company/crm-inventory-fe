@@ -30,16 +30,18 @@ export default defineNuxtConfig({
     // prefix; the collection's baseUrl carries it and the paths assume it.
     // Server-only: the token must never reach the browser.
     vertexApiBase: '',
-    vertexApiToken: ''
+    // Seals the session cookie that holds each user's API token. At least 32
+    // characters; `server/utils/session.ts` refuses to run without it.
+    sessionPassword: ''
   },
 
   routeRules: {
     '/': {
       redirect: '/dashboard'
-    },
-    '/api/**': {
-      cors: true
     }
+    // No `cors: true` on `/api/**`. The app calls it same-origin and never
+    // needed it, and with a session cookie behind the routes that rule would
+    // have let any other site's JavaScript drive the API as the visitor.
   },
 
   compatibilityDate: '2026-06-30',

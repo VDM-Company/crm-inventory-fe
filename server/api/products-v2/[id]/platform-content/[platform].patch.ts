@@ -11,6 +11,6 @@ export default defineEventHandler(async (event) => {
   const platform = getRouterParam(event, 'platform')
   if (!id || !platform) throw notFound('product platform content')
   const body = await parseBody(event, vertexProductPlatformContentSchema)
-  return vertex().one<ProductContent>(
+  return vertex(event).one<ProductContent>(
     `/admin/products/${id}/platform-content/${platform}`, { method: 'PATCH', body })
 })

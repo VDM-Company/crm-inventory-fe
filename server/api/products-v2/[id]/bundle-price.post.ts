@@ -10,5 +10,5 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw notFound('product')
   const body = await parseBody(event, vertexBundlePriceSchema)
-  return vertex().one<BundleQuote>(`/admin/products/${id}/bundle-price`, { method: 'POST', body })
+  return vertex(event).one<BundleQuote>(`/admin/products/${id}/bundle-price`, { method: 'POST', body })
 })

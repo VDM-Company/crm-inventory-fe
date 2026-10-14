@@ -6,5 +6,5 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw notFound('category')
   const query = await getValidatedQuery(event, vertexCategoryQuerySchema.parse)
-  return vertex().one<VertexCategory>(`/admin/categories/${id}`, { query })
+  return vertex(event).one<VertexCategory>(`/admin/categories/${id}`, { query })
 })

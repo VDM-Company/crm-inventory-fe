@@ -10,5 +10,5 @@ export default defineEventHandler(async (event) => {
   const option = getRouterParam(event, 'option')
   if (!id || !option) throw notFound('attribute option')
   const body = await parseBody(event, vertexAttributeOptionUpdateSchema)
-  return vertex().one<AttributeOption>(`/admin/attributes/${id}/options/${option}`, { method: 'PATCH', body })
+  return vertex(event).one<AttributeOption>(`/admin/attributes/${id}/options/${option}`, { method: 'PATCH', body })
 })

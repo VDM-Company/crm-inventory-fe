@@ -8,5 +8,5 @@ import type { ProductPricing } from '#shared/types'
 export default defineEventHandler((event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw notFound('product')
-  return vertex().one<ProductPricing>(`/admin/products/${id}/pricing`)
+  return vertex(event).one<ProductPricing>(`/admin/products/${id}/pricing`)
 })

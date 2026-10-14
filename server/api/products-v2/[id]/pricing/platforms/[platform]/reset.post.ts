@@ -9,6 +9,6 @@ export default defineEventHandler((event) => {
   const id = getRouterParam(event, 'id')
   const platform = getRouterParam(event, 'platform')
   if (!id || !platform) throw notFound('product pricing')
-  return vertex().one<ProductPricing>(
+  return vertex(event).one<ProductPricing>(
     `/admin/products/${id}/pricing/platforms/${platform}/reset`, { method: 'POST' })
 })

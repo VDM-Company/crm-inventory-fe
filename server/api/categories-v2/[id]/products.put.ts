@@ -9,5 +9,5 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw notFound('category')
   const body = await parseBody(event, vertexCategoryProductsOrderSchema)
-  return vertex().one<{ saved: boolean }>(`/admin/categories/${id}/products`, { method: 'PUT', body })
+  return vertex(event).one<{ saved: boolean }>(`/admin/categories/${id}/products`, { method: 'PUT', body })
 })

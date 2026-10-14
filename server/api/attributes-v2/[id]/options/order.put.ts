@@ -9,5 +9,5 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw notFound('attribute')
   const body = await parseBody(event, vertexAttributeOptionOrderSchema)
-  return vertex().one<Attribute>(`/admin/attributes/${id}/options/order`, { method: 'PUT', body })
+  return vertex(event).one<Attribute>(`/admin/attributes/${id}/options/order`, { method: 'PUT', body })
 })

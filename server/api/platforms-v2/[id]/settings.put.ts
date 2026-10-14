@@ -9,5 +9,5 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw notFound('platform')
   const body = await parseBody(event, vertexPlatformSettingsUpdateSchema)
-  return vertex().one<VertexPlatformSettings>(`/admin/platforms/${id}/settings`, { method: 'PUT', body })
+  return vertex(event).one<VertexPlatformSettings>(`/admin/platforms/${id}/settings`, { method: 'PUT', body })
 })

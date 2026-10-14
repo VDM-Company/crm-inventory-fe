@@ -13,5 +13,5 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw notFound('product')
   const query = await getValidatedQuery(event, querySchema.parse)
-  return vertex().one<VertexProduct>(`/admin/products/${id}`, { query })
+  return vertex(event).one<VertexProduct>(`/admin/products/${id}`, { query })
 })

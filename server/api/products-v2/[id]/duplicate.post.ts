@@ -10,7 +10,7 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw notFound('product')
   const body = await parseBody(event, vertexProductDuplicateSchema)
-  const created = await vertex().one<VertexProduct>(`/admin/products/${id}/duplicate`, { method: 'POST', body })
+  const created = await vertex(event).one<VertexProduct>(`/admin/products/${id}/duplicate`, { method: 'POST', body })
   setResponseStatus(event, 201)
   return created
 })

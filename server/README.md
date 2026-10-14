@@ -78,20 +78,53 @@ flattened into the `{ message, fieldErrors }` the screens read — see
 `vertexErrorData()` in `shared/utils/vertex-wire.ts` and `apiFieldErrors()`
 in `app/composables/useApi.ts`.
 
+## Authentication
+
+Every `/api` route needs a session. The two exceptions are `/api/auth/login`
+and `/api/_health`, matched exactly — `server/middleware/auth.ts` answers 401
+to everything else.
+
+**The upstream token never reaches the browser.** `POST /api/auth/login`
+forwards the credentials, takes the Sanctum token out of the reply, and puts
+it in a sealed `httpOnly` cookie (`server/utils/session.ts`). What goes back
+to the client is the user's name, email, roles and permissions — no token.
+`vertex(event)` reads the cookie and turns it into the Authorization header,
+which is why that parameter is required rather than optional: there is no
+shared credential to fall back on.
+
+| route | does |
+| --- | --- |
+| `POST /api/auth/login` | credentials → session cookie; answers `{ user }` |
+| `POST /api/auth/logout` | revokes upstream (best effort), always clears the session |
+| `GET /api/auth/me` | the session's user, or `null` |
+
+Two behaviours worth knowing:
+
+- **Logout clears the local session even when the upstream call fails.** A
+  user who clicked Log out has to end up logged out. Against the Postman mock
+  that call always fails: its default saved example for logout is the 401.
+- **An upstream 401 clears the session.** A token revoked or expired while a
+  tab is open would otherwise leave someone looking signed in while every
+  screen failed.
+
+`NUXT_SESSION_PASSWORD` seals the cookie and must be at least 32 characters;
+the session refuses to start without it. Changing it signs everyone out.
+
 ## Before deploying
 
-`/api/*` has **no authentication**, and `nuxt.config.ts` sets
-`'/api/**': { cors: true }`. That is not harmless once
-`NUXT_VERTEX_API_TOKEN` is set: the route becomes an open proxy holding a
-privileged credential, and the CORS rule lets any site's JavaScript drive it
-from a visitor's browser.
+The open-proxy problem is fixed: `/api/*` is behind a session, the cookie is
+`sameSite: 'lax'`, and the `cors: true` rule is gone — the app calls `/api`
+same-origin and never needed it.
 
-Before pointing this at a real API in any reachable environment:
+What is left before this faces the internet:
 
-- put auth in front of the routes (a session, or forward the caller's own
-  token — there is no login flow in this app yet)
-- drop the `cors: true` rule; the app calls `/api` same-origin and never
-  needed it
+- `secure` on the session cookie is tied to `import.meta.dev`, so production
+  must actually be served over HTTPS for it to mean anything
+- there is no rate limiting on `/api/auth/login` of our own; the API answers
+  429 `rate_limited` and the login page counts it down, which is the whole of
+  the protection
+- `NUXT_SESSION_PASSWORD` has to be a real secret in the deployed
+  environment, not the one from a developer's `.env`
 
 ## Layout
 
@@ -102,7 +135,10 @@ shared/types/api.ts        what is left of our own contract (FieldErrors)
 shared/schemas/            zod request validation, from the collection
 shared/utils/vertex-wire.ts  case mapping and error flattening (pure)
 shared/utils/cursor.ts     the cursor walk (pure)
-server/utils/vertex.ts     THE SEAM — config, token, HTTP, h3 errors
+server/utils/vertex.ts     THE SEAM — config, the caller's token, HTTP, h3 errors
+server/utils/session.ts    the sealed cookie holding that token
+server/middleware/auth.ts  401 for any guarded /api path without a session
+shared/utils/auth.ts       which paths are guarded, and redirect safety (pure)
 server/utils/vertex-crud.ts  shared handler bodies
 server/utils/validate.ts   parseBody
 server/utils/errors.ts     404 / 422 helpers

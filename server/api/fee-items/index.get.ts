@@ -13,8 +13,8 @@ export default defineEventHandler(async (event) => {
   const { all, ...rest } = query as Record<string, unknown>
 
   if (all) {
-    const data = await vertex().all<FeeItem>('/admin/fee-items', rest)
+    const data = await vertex(event).all<FeeItem>('/admin/fee-items', rest)
     return { data, meta: { nextCursor: null, prevCursor: null, total: data.length } }
   }
-  return vertex().page<FeeItem>('/admin/fee-items', rest)
+  return vertex(event).page<FeeItem>('/admin/fee-items', rest)
 })

@@ -395,6 +395,41 @@ export interface VertexCategoryProductsQuery extends CursorQuery {
   all?: boolean
 }
 
+// ── authentication ──────────────────────────────────────────────────────────
+
+/** A role as the API reports it. Only the name is used on this side. */
+export interface AdminRole {
+  id: string
+  name: string
+}
+
+/**
+ * The signed-in administrator.
+ *
+ * `permissions` is already flattened by the API — the union of every role's
+ * permissions — so a screen never has to resolve roles itself.
+ */
+export interface AdminUser {
+  id: string
+  name: string
+  email: string
+  status: string
+  roles: AdminRole[]
+  permissions: string[]
+  hasPassword: boolean
+  socialProviders: string[]
+  lastLoginAt: string | null
+  lockVersion: number
+  createdAt: string
+}
+
+/** `POST /admin/auth/login`. 401 `invalid_credential`, 429 `rate_limited`. */
+export interface LoginResult {
+  /** Sanctum personal access token. Never leaves the server. */
+  token: string
+  user: AdminUser
+}
+
 // ── products ────────────────────────────────────────────────────────────────
 
 /**

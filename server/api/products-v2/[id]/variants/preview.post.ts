@@ -10,5 +10,5 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw notFound('product')
   const body = await parseBody(event, vertexVariantAxesSchema)
-  return vertex().one<VariantPreview>(`/admin/products/${id}/variants/preview`, { method: 'POST', body })
+  return vertex(event).one<VariantPreview>(`/admin/products/${id}/variants/preview`, { method: 'POST', body })
 })

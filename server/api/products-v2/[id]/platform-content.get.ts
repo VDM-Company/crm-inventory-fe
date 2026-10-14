@@ -8,5 +8,5 @@ import type { ProductContent } from '#shared/types'
 export default defineEventHandler((event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw notFound('product')
-  return vertex().one<ProductContent>(`/admin/products/${id}/platform-content`)
+  return vertex(event).one<ProductContent>(`/admin/products/${id}/platform-content`)
 })

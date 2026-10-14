@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw notFound('product')
   const body = await parseBody(event, vertexBundleOptionsSchema)
-  const data = await vertex().one<BundleOption[]>(
+  const data = await vertex(event).one<BundleOption[]>(
     `/admin/products/${id}/bundle-options`, { method: 'PUT', body })
   return { data: data ?? [] }
 })

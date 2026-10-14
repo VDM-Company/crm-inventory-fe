@@ -9,6 +9,6 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw notFound('category')
   const body = await parseBody(event, vertexCategoryProductsRemoveSchema)
-  return vertex().one<{ removed: string[], keptOnPlatform: string[] }>(
+  return vertex(event).one<{ removed: string[], keptOnPlatform: string[] }>(
     `/admin/categories/${id}/products`, { method: 'DELETE', body })
 })

@@ -10,7 +10,7 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw notFound('product')
   const body = await parseBody(event, vertexPricePlanCreateSchema)
-  const created = await vertex().one<PricePlan>(`/admin/products/${id}/price-plans`, { method: 'POST', body })
+  const created = await vertex(event).one<PricePlan>(`/admin/products/${id}/price-plans`, { method: 'POST', body })
   setResponseStatus(event, 201)
   return created
 })

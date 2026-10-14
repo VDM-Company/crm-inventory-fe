@@ -6,7 +6,7 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw notFound('attribute')
   const body = await parseBody(event, vertexAttributeOptionCreateSchema)
-  const created = await vertex().one<AttributeOption>(`/admin/attributes/${id}/options`, { method: 'POST', body })
+  const created = await vertex(event).one<AttributeOption>(`/admin/attributes/${id}/options`, { method: 'POST', body })
   setResponseStatus(event, 201)
   return created
 })

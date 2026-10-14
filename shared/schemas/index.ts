@@ -18,6 +18,16 @@ import { camelToSnake } from '../utils/vertex-wire'
 
 // ── Vertex Commerce API ─────────────────────────────────────────────────────
 
+/**
+ * Login credentials. Deliberately only shape-checked: whether they are
+ * correct is the API's answer to give (401 `invalid_credential`), and a
+ * client-side rule about password length would only leak what the policy is.
+ */
+export const vertexLoginSchema = z.object({
+  email: z.string().trim().min(1, 'Enter your email address.').email('That does not look like an email address.'),
+  password: z.string().min(1, 'Enter your password.')
+}).loose()
+
 /** Text keyed by locale. At least one locale, each a non-empty string. */
 const localizedText = z.record(z.string(), z.string().trim().min(1))
   .refine(v => Object.keys(v).length > 0, 'Give the text in at least one language.')

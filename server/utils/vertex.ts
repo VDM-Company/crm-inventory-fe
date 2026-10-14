@@ -15,6 +15,7 @@
  * Built from `docs/api/vertex-commerce.postman_collection.json`. Unverified
  * against a live backend.
  */
+import type { H3Event } from 'h3'
 import type { VertexErrorBody, VertexList } from '#shared/types'
 import { CursorNotTerminated, walkCursor } from '#shared/utils/cursor'
 import { cleanQuery, fromVertex, toListMeta, toVertex, vertexErrorData } from '#shared/utils/vertex-wire'
@@ -43,10 +44,21 @@ interface CallOptions {
   idempotencyKey?: string
 }
 
-export function vertex() {
+/**
+ * The upstream client, authenticated as whoever is making THIS request.
+ *
+ * `event` is required rather than optional on purpose: the token used to come
+ * from a single static `NUXT_VERTEX_API_TOKEN`, which meant every visitor —
+ * signed in or not — acted as the same privileged account. Taking the event
+ * makes the compiler name every call site that has to say whose request it
+ * is, and leaves nowhere for a shared credential to hide.
+ *
+ * Pass `{ token }` to call as someone who has no session yet. Only the login
+ * route needs that, and it passes no token at all.
+ */
+export function vertex(event: H3Event, auth?: { token?: string }) {
   const config = useRuntimeConfig()
   const baseURL = config.vertexApiBase as string
-  const token = config.vertexApiToken as string
 
   if (!baseURL) {
     throw createError({
@@ -57,16 +69,18 @@ export function vertex() {
   }
 
   // One instance so the base URL and the bearer token are set in a single
-  // place rather than on every call.
-  const api = $fetch.create({
-    baseURL,
-    headers: {
-      Accept: 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
-    }
-  })
+  // place rather than on every call. The token is read per call rather than
+  // captured, because the login route creates the session mid-request.
+  async function authHeaders(): Promise<Record<string, string>> {
+    const token = auth ? auth.token : await sessionToken(event)
+    return token ? { Authorization: `Bearer ${token}` } : {}
+  }
 
   async function call<T>(path: string, opts: CallOptions = {}): Promise<T> {
+    const api = $fetch.create({
+      baseURL,
+      headers: { Accept: 'application/json', ...(await authHeaders()) }
+    })
     try {
       return await api(path, {
         method: (opts.method || 'GET') as 'GET',
@@ -75,6 +89,12 @@ export function vertex() {
         body: opts.body === undefined ? undefined : (toVertex(opts.body) as Record<string, unknown>)
       }) as T
     } catch (err) {
+      // The upstream no longer accepts this token — revoked, or expired.
+      // Clearing the session here is what stops a signed-in-looking user
+      // from watching every screen fail: the next page load sends them to
+      // the login form instead.
+      const e = err as { status?: number, statusCode?: number }
+      if (!auth && (e.status || e.statusCode) === 401) await endSession(event)
       vertexError(err)
     }
   }

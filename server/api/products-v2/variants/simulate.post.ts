@@ -8,5 +8,5 @@ import { vertexVariantSimulateSchema } from '#shared/schemas'
  */
 export default defineEventHandler(async (event) => {
   const body = await parseBody(event, vertexVariantSimulateSchema)
-  return vertex().one<VariantSimulation>('/admin/products/variants/simulate', { method: 'POST', body })
+  return vertex(event).one<VariantSimulation>('/admin/products/variants/simulate', { method: 'POST', body })
 })

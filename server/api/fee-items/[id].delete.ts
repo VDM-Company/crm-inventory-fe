@@ -6,6 +6,6 @@
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw notFound('fee item')
-  await vertex().none(`/admin/fee-items/${id}`, { method: 'DELETE' })
+  await vertex(event).none(`/admin/fee-items/${id}`, { method: 'DELETE' })
   setResponseStatus(event, 204)
 })

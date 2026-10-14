@@ -142,6 +142,20 @@ function childClass(k: string) {
     k === activeKey.value ? 'text-green-600 bg-emerald-50 font-bold' : 'text-slate-500 font-medium hover:bg-slate-100'
   ]
 }
+// ── profile ──
+// The signed-in user, not the design's placeholder. The sidebar only renders
+// inside the authenticated layout, so there is always one by the time it
+// paints — the fallbacks are for the instant before hydration.
+const { user, logout } = useAuth()
+const profileName = computed(() => user.value?.name || 'Signed in')
+const profileEmail = computed(() => user.value?.email || '')
+const profileInitials = computed(() => {
+  const parts = (user.value?.name || '').trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return '–'
+  const first = parts[0]?.[0] || ''
+  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] || '') : ''
+  return (first + last).toUpperCase()
+})
 </script>
 
 <template>
@@ -292,24 +306,25 @@ function childClass(k: string) {
     >
       <div
         class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold flex-shrink-0"
-        title="Olivia Rhye"
+        :title="profileName"
       >
-        OR
+        {{ profileInitials }}
       </div>
       <template v-if="!collapsed">
         <div class="flex-1 min-w-0">
           <div class="text-[13px] font-semibold text-slate-900 whitespace-nowrap overflow-hidden text-ellipsis">
-            Olivia Rhye
+            {{ profileName }}
           </div>
           <div class="text-[11px] text-slate-500 whitespace-nowrap overflow-hidden text-ellipsis">
-            olivia@vertexdigital.com
+            {{ profileEmail }}
           </div>
         </div>
         <UButton
           variant="ghost"
-
+          type="button"
           title="Log out"
           :ui="{ base: 'border-none bg-transparent text-slate-400 w-7 h-7 rounded-lg cursor-pointer flex items-center justify-center flex-shrink-0 p-0 hover:bg-slate-100 transition-colors' }"
+          @click="logout"
         >
           <UIcon name="i-lucide-log-out" class="w-[15px] h-[15px]" />
         </UButton>

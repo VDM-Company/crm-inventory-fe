@@ -5,5 +5,5 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw notFound('category')
   const body = await parseBody(event, vertexCategoryProductsAddSchema)
-  return vertex().one<{ assigned: boolean }>(`/admin/categories/${id}/products`, { method: 'POST', body })
+  return vertex(event).one<{ assigned: boolean }>(`/admin/categories/${id}/products`, { method: 'POST', body })
 })

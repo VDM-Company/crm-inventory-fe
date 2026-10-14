@@ -22,21 +22,21 @@ export async function vertexListHandler<T>(event: H3Event, path: string, schema:
   const { all, ...rest } = query as Record<string, unknown>
 
   if (all) {
-    const data = await vertex().all<T>(path, rest)
+    const data = await vertex(event).all<T>(path, rest)
     return { data, meta: { nextCursor: null, prevCursor: null, total: data.length } }
   }
-  return vertex().page<T>(path, rest)
+  return vertex(event).page<T>(path, rest)
 }
 
 export function vertexGetHandler<T>(event: H3Event, path: string, what: string) {
   const id = getRouterParam(event, 'id')
   if (!id) throw notFound(what)
-  return vertex().one<T>(`${path}/${id}`)
+  return vertex(event).one<T>(`${path}/${id}`)
 }
 
 export async function vertexCreateHandler<T>(event: H3Event, path: string, schema: ZodType) {
   const body = await parseBody(event, schema)
-  const created = await vertex().one<T>(path, { method: 'POST', body })
+  const created = await vertex(event).one<T>(path, { method: 'POST', body })
   setResponseStatus(event, 201)
   return created
 }
@@ -50,13 +50,13 @@ export async function vertexUpdateHandler<T>(event: H3Event, path: string, schem
   const id = getRouterParam(event, 'id')
   if (!id) throw notFound(what)
   const body = await parseBody(event, schema)
-  return vertex().one<T>(`${path}/${id}`, { method: 'PATCH', body })
+  return vertex(event).one<T>(`${path}/${id}`, { method: 'PATCH', body })
 }
 
 export async function vertexRemoveHandler(event: H3Event, path: string, what: string) {
   const id = getRouterParam(event, 'id')
   if (!id) throw notFound(what)
-  await vertex().none(`${path}/${id}`, { method: 'DELETE' })
+  await vertex(event).none(`${path}/${id}`, { method: 'DELETE' })
   setResponseStatus(event, 204)
 }
 
@@ -64,5 +64,5 @@ export async function vertexRemoveHandler(event: H3Event, path: string, what: st
 export function vertexActionHandler<T>(event: H3Event, path: string, action: string, what: string) {
   const id = getRouterParam(event, 'id')
   if (!id) throw notFound(what)
-  return vertex().one<T>(`${path}/${id}/${action}`, { method: 'POST' })
+  return vertex(event).one<T>(`${path}/${id}/${action}`, { method: 'POST' })
 }

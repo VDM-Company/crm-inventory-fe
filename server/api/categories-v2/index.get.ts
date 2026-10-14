@@ -10,6 +10,6 @@ import { vertexCategoryQuerySchema } from '#shared/schemas'
  */
 export default defineEventHandler(async (event) => {
   const query = await getValidatedQuery(event, vertexCategoryQuerySchema.parse)
-  const data = await vertex().one<VertexCategory[]>('/admin/categories', { query })
+  const data = await vertex(event).one<VertexCategory[]>('/admin/categories', { query })
   return { data: data ?? [], meta: { nextCursor: null, prevCursor: null } }
 })

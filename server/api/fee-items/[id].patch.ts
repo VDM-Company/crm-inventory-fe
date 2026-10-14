@@ -9,5 +9,5 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw notFound('fee item')
   const body = await parseBody(event, feeItemUpdateSchema)
-  return vertex().one<FeeItem>(`/admin/fee-items/${id}`, { method: 'PATCH', body })
+  return vertex(event).one<FeeItem>(`/admin/fee-items/${id}`, { method: 'PATCH', body })
 })
