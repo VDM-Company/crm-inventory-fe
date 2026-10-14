@@ -451,16 +451,25 @@ async function onSaveEdit() {
   const v = variantRecord.value
   if (!d || !v) return
 
+  // The EFFECTIVE values for the scope on screen, not the Default ones. On a
+  // platform scope every edit lands in `priceOverrides[scope]`, so reading
+  // `pricing` here saved the Default prices as the platform's plan and threw
+  // away what was typed.
+  const ov: PriceOverride = (!isDefaultScope.value && d.priceOverrides?.[scope.value]) || {}
+  const amounts = ov.componentAmounts || {}
+  const pick = (a: string | number | undefined, b: string | number | undefined) =>
+    (a !== undefined && a !== '') ? a : b
+
   const lines = componentsToLines(
     (d.pricing?.components || []).map(c => ({
       feeItemId: c.feeId,
-      amount: String(c.amount ?? ''),
+      amount: String(pick(amounts[c.feeId], c.amount) ?? ''),
       isPublished: c.published !== false
     })),
     baseFeeId.value,
     // the recurring price is a line of the same plan: saving without one
     // wipes it on a subscription variant (422 `monthly_required`)
-    d.pricing?.isSubscription ? d.pricing?.monthly : ''
+    d.pricing?.isSubscription ? pick(ov.monthly, d.pricing?.monthly) : ''
   )
   const savedLines = scopePricing(pricingDoc.value, scope.value)?.activePlan?.lines
   const pricesChanged = !pricePlanUnchanged(savedLines, lines)

@@ -518,7 +518,38 @@ const productSchema = computed(() => z.object({
     ctx.addIssue({ code: 'custom', path: ['sku'], message: 'SKU already exists' })
   }
 
-  if (productType.value !== 'variant') return
+  // Every price here is integer JPY: the API has no minor unit, and a
+  // fractional amount is dropped on its way to the request rather than
+  // rounded into a price nobody chose.
+  const whole = (v: unknown) => {
+    const t = String(v ?? '').trim()
+    return t !== '' && Number.isInteger(Number(t))
+  }
+
+  if (productType.value !== 'variant') {
+    // A subscription product must carry exactly one monthly line and any
+    // other product none at all (422 `monthly_required` /
+    // `monthly_not_allowed`). The toggle starts ON, so without this rule the
+    // commonest save of all creates the draft and then fails on its price.
+    if (isSubscription.value && !whole(form.priceMonthly)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['priceMonthly'],
+        message: form.priceMonthly.trim()
+          ? 'The monthly fee has to be a whole number of yen'
+          : 'A subscription product needs a monthly fee'
+      })
+    }
+    if (form.initialComponents.some(c => c.feeId && String(c.amount ?? '').trim() && !whole(c.amount))) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['priceMonthly'],
+        message: 'Every fee amount has to be a whole number of yen'
+      })
+    }
+    return
+  }
+
   const applied = attributes.value.filter(a => a.name && a.name.trim() && a.values.length)
   if (!applied.length) {
     ctx.addIssue({ code: 'custom', path: ['variants'], message: 'Add at least one attribute value and click Apply' })
@@ -526,6 +557,8 @@ const productSchema = computed(() => z.object({
     ctx.addIssue({ code: 'custom', path: ['variants'], message: 'Click Apply to generate combinations' })
   } else if (variants.value.some(v => !v.sku || !String(v.sku).trim())) {
     ctx.addIssue({ code: 'custom', path: ['variants'], message: 'Each variant needs a SKU' })
+  } else if (variants.value.some(v => String(v.price ?? '').trim() && !whole(v.price))) {
+    ctx.addIssue({ code: 'custom', path: ['variants'], message: 'Every variant price has to be a whole number of yen' })
   } else if (published.value && !variants.value.some(v => v.active && String(v.price ?? '').trim())) {
     // a configurable parent cannot be activated while no variant of it is
     // (422 `no_active_variant`), and a variant cannot be activated without a
@@ -545,6 +578,15 @@ const validationResult = computed(() => productSchema.value.safeParse({
   category: form.category,
   categoryId: form.categoryId
 }))
+
+// the price rules have no UFormField of their own either, so they are shown
+// under the Pricing card the same way the variant ones are shown by the table
+const pricingIssue = computed(() => {
+  const r = validationResult.value
+  if (r.success) return null
+  const issue = r.error.issues.find(i => i.path[0] === 'priceMonthly')
+  return issue ? issue.message : null
+})
 const saveConfirmName = computed(() => form.name.trim() || 'this product')
 // Matches the design: the button stays disabled until the product is valid.
 const saveDisabled = computed(() => !validationResult.value.success)
@@ -1473,6 +1515,16 @@ function onConfirmDiscard() {
                       <span class="text-base font-bold text-slate-900">{{ initialTotalLabel }}</span>
                     </div>
                   </div>
+                </div>
+
+                <!-- Save stays disabled until the prices are valid, so say why
+                     here rather than leaving a dead button -->
+                <div
+                  v-if="pricingIssue"
+                  class="mt-3 flex items-center gap-2 text-[13px] text-red-600"
+                >
+                  <UIcon name="i-lucide-circle-alert" class="w-[15px] h-[15px] flex-shrink-0" />
+                  <span>{{ pricingIssue }}</span>
                 </div>
               </template>
               <div
