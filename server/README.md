@@ -103,9 +103,13 @@ Two behaviours worth knowing:
 - **Logout clears the local session even when the upstream call fails.** A
   user who clicked Log out has to end up logged out. Against the Postman mock
   that call always fails: its default saved example for logout is the 401.
-- **An upstream 401 clears the session.** A token revoked or expired while a
+- **A session-ending 401 clears the session** — `unauthenticated`,
+  `token_expired` or `account_inactive`. A token revoked or expired while a
   tab is open would otherwise leave someone looking signed in while every
-  screen failed.
+  screen failed. The decision is by `error.code`, never by status: any other
+  401 belongs to the screen that asked. Deciding by status logged people out
+  whenever they saved a price, because the mock answers that write with a
+  saved 401 whose code is the literal string `"string"`.
 
 `NUXT_SESSION_PASSWORD` seals the cookie and must be at least 32 characters;
 the session refuses to start without it. Changing it signs everyone out.

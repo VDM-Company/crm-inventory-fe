@@ -1,3 +1,5 @@
+import { isSessionEnding } from '#shared/utils/auth'
+
 /**
  * A session that stopped working mid-visit.
  *
@@ -14,6 +16,14 @@ export default defineNuxtPlugin((nuxtApp) => {
   globalThis.$fetch = $fetch.create({
     onResponseError({ response }) {
       if (response.status !== 401) return
+
+      // By CODE, not by status. A 401 that does not mean "your session is
+      // over" belongs to the screen that asked — bouncing on all of them
+      // threw people out of the app whenever an endpoint answered 401 for
+      // its own reasons. The guard's own refusal is `unauthenticated`, so
+      // it still lands here.
+      const body = response._data as { statusMessage?: string, data?: { code?: string } } | undefined
+      if (!isSessionEnding(body?.statusMessage ?? body?.data?.code)) return
 
       const current = router.currentRoute.value
       if (current.path === '/login') return

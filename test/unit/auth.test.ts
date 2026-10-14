@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { can, isGuardedApiPath, safeRedirect, toSessionUser } from '../../shared/utils/auth'
+import { can, isGuardedApiPath, isSessionEnding, safeRedirect, toSessionUser } from '../../shared/utils/auth'
 import type { AdminUser } from '../../shared/types/vertex'
 
 describe('isGuardedApiPath', () => {
@@ -140,5 +140,33 @@ describe('can', () => {
   it('is false without a user, rather than throwing', () => {
     expect(can(null, 'products.view')).toBe(false)
     expect(can(undefined, 'products.view')).toBe(false)
+  })
+})
+
+describe('isSessionEnding', () => {
+  it('ends the session for a credential that is finished', () => {
+    expect(isSessionEnding('unauthenticated')).toBe(true)
+    expect(isSessionEnding('token_expired')).toBe(true)
+    expect(isSessionEnding('account_inactive')).toBe(true)
+  })
+
+  it('does not end it for a wrong password, which has no session to end', () => {
+    expect(isSessionEnding('invalid_credential')).toBe(false)
+  })
+
+  it('does not end it for a code it does not recognise', () => {
+    // the bug this exists for: the Postman mock answers some writes with a
+    // saved 401 whose code is the literal string "string", which used to log
+    // someone out every time they saved a price
+    expect(isSessionEnding('string')).toBe(false)
+    expect(isSessionEnding('rate_limited')).toBe(false)
+    expect(isSessionEnding('not_found')).toBe(false)
+  })
+
+  it('does not end it for a missing or non-string code', () => {
+    expect(isSessionEnding(undefined)).toBe(false)
+    expect(isSessionEnding(null)).toBe(false)
+    expect(isSessionEnding(401)).toBe(false)
+    expect(isSessionEnding({ code: 'unauthenticated' })).toBe(false)
   })
 })

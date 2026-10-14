@@ -18,6 +18,7 @@
 import type { H3Event } from 'h3'
 import type { VertexErrorBody, VertexList } from '#shared/types'
 import { CursorNotTerminated, walkCursor } from '#shared/utils/cursor'
+import { isSessionEnding } from '#shared/utils/auth'
 import { cleanQuery, fromVertex, toListMeta, toVertex, vertexErrorData } from '#shared/utils/vertex-wire'
 
 /**
@@ -89,12 +90,19 @@ export function vertex(event: H3Event, auth?: { token?: string }) {
         body: opts.body === undefined ? undefined : (toVertex(opts.body) as Record<string, unknown>)
       }) as T
     } catch (err) {
-      // The upstream no longer accepts this token — revoked, or expired.
+      // A token the upstream no longer accepts — revoked, or expired.
       // Clearing the session here is what stops a signed-in-looking user
-      // from watching every screen fail: the next page load sends them to
-      // the login form instead.
-      const e = err as { status?: number, statusCode?: number }
-      if (!auth && (e.status || e.statusCode) === 401) await endSession(event)
+      // from watching every screen fail.
+      //
+      // By CODE, not by status. Not every 401 means the session is over, and
+      // clearing on all of them logged people out whenever they saved a
+      // price: the Postman mock answers that write with its saved 401, whose
+      // code is the literal string `"string"`.
+      const e = err as { status?: number, statusCode?: number, data?: VertexErrorBody }
+      const status = e.status || e.statusCode
+      if (!auth && status === 401 && isSessionEnding(e.data?.error?.code)) {
+        await endSession(event)
+      }
       vertexError(err)
     }
   }

@@ -57,6 +57,36 @@ export function safeRedirect(value: unknown, fallback = '/dashboard'): string {
   return path
 }
 
+/**
+ * Which 401s mean the session is over, rather than this one call failing.
+ *
+ * Not every 401 is a dead session, and treating them alike is expensive in
+ * both directions. The collection names its 401 example
+ * `unauthenticated / invalid_credential / account_inactive / token_expired`,
+ * so those four are the universe:
+ *
+ * - `unauthenticated`, `token_expired`, `account_inactive` — the credential
+ *   is finished; sign in again;
+ * - `invalid_credential` — only ever an answer to a login attempt, which has
+ *   no session to end.
+ *
+ * Anything unrecognised leaves the session alone and surfaces as an ordinary
+ * error. That is the safer default: a session wrongly kept can still be
+ * ended from the Log out button, while one wrongly cleared throws away
+ * whatever the reader was in the middle of. The Postman mock makes this
+ * concrete — it answers some writes with its saved 401 whose code is the
+ * literal string `"string"`, which would otherwise log someone out every
+ * time they saved a price.
+ */
+const SESSION_ENDING_CODES = new Set([
+  'unauthenticated',
+  'token_expired',
+  'account_inactive'
+])
+
+export const isSessionEnding = (code: unknown): boolean =>
+  typeof code === 'string' && SESSION_ENDING_CODES.has(code)
+
 /** What the app keeps about whoever is signed in. */
 export interface SessionUser {
   id: string
