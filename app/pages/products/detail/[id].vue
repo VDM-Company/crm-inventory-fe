@@ -89,6 +89,12 @@ const attributeDefs = ref<AttributeDef[]>([])
 // The flat defs render the value pickers; the records keep the attribute and
 // option ids, which is what a variant axis is made of.
 const attributeRecords = ref<Attribute[]>([])
+/**
+ * Products a bundle can offer. Fetched only for a bundle, and only the ones
+ * the API would accept: a selection has to be an active, sellable product
+ * (422 `selection_not_sellable`).
+ */
+const catalogProducts = ref<VertexProductRow[]>([])
 
 // An id that resolved to nothing. Kept apart from `saveError`: it is not a
 // failure to report, it is a page with nothing to show.
@@ -201,6 +207,14 @@ async function loadRecordById(rawId: unknown): Promise<DetailProduct | null> {
         bundleOpts.value = await productsApi.bundleOptions(rec.id)
       } catch {
         bundleOpts.value = []
+      }
+      bundleSnapshot.value = toBundleEditor(bundleOpts.value)
+      editBundle.value = toBundleEditor(bundleOpts.value)
+      try {
+        const page = await productsApi.page({ limit: 100, status: 'active', sellable: true })
+        catalogProducts.value = page.data
+      } catch {
+        catalogProducts.value = []
       }
     }
     return toDetailView(rec, pricingDoc.value) as unknown as DetailProduct
@@ -501,13 +515,112 @@ function toggleNotForSale() {
 // ── variants ──
 const isVariantProduct = computed(() => !!product.value.hasVariants)
 const isBundleProduct = computed(() => product.value.productType === 'bundle')
-const bundleComps = computed(() => (product.value.bundle && product.value.bundle.components) ? product.value.bundle.components : [])
-const bundleComponentRows = computed(() =>
-  bundleComps.value.map(c => ({
-    title: /component$/i.test((c.name || '').trim()) ? c.name.trim() : ((c.name || '').trim() + ' Component'),
-    products: c.products || []
-  }))
+/*
+ * The bundle's contents.
+ *
+ * This card used to read `product.bundle`, which `toDetailView` never fills,
+ * so every bundle rendered as "No components" while `bundleOptions()` sat
+ * fetched and unused a few lines away. It reads the fetched document now.
+ */
+const bundleComponentRows = computed(() => bundleSummary(bundleOpts.value))
+
+// ── bundle editing ──
+const editBundle = ref<BundleOptionRow[]>([])
+const bundleSnapshot = ref<BundleOptionRow[]>([])
+const bundleConfirmOpen = ref(false)
+const savingBundle = ref(false)
+
+const bundleBlocked = computed(() => bundleBlockedReason(editBundle.value))
+const bundleDirty = computed(() => bundleChanged(bundleSnapshot.value, editBundle.value))
+const bundleLosing = computed(() => bundleRemovals(bundleSnapshot.value, editBundle.value))
+
+/** Active, sellable products this bundle can offer — never the bundle itself. */
+const bundleCatalog = computed(() =>
+  catalogProducts.value
+    .filter(p => p.id !== record.value?.id)
+    .map(p => ({ id: p.id, label: `${p.name} (${p.sku})` }))
 )
+
+function addBundleOption() {
+  editBundle.value = [...editBundle.value, {
+    key: `new:${Date.now()}`,
+    title: '',
+    inputType: 'radio',
+    isRequired: true,
+    selections: []
+  }]
+}
+function removeBundleOption(key: string) {
+  editBundle.value = editBundle.value.filter(o => o.key !== key)
+}
+function setBundleTitle(key: string, title: string) {
+  editBundle.value = editBundle.value.map(o => o.key === key ? { ...o, title } : o)
+}
+function addBundleSelection(key: string) {
+  editBundle.value = editBundle.value.map(o => o.key === key
+    ? { ...o, selections: [...o.selections, { productId: '', name: '', sku: '', isDefault: !o.selections.length, maxQty: 1 }] }
+    : o)
+}
+function removeBundleSelection(key: string, index: number) {
+  editBundle.value = editBundle.value.map(o => o.key === key
+    ? { ...o, selections: o.selections.filter((_, i) => i !== index) }
+    : o)
+}
+function setBundleProduct(key: string, index: number, productId: string) {
+  const hit = catalogProducts.value.find(p => p.id === productId)
+  editBundle.value = editBundle.value.map(o => o.key === key
+    ? {
+        ...o,
+        selections: o.selections.map((sel, i) => i === index
+          // the id goes: this is a different choice now, not the same one
+          // renamed, and keeping it would attach the old price to it
+          ? { ...sel, id: undefined, productId, name: hit?.name || '', sku: hit?.sku || '' }
+          : sel)
+      }
+    : o)
+}
+function setBundleDefault(key: string, index: number) {
+  editBundle.value = editBundle.value.map((o) => {
+    if (o.key !== key) return o
+    const single = o.inputType === 'radio' || o.inputType === 'dropdown'
+    return {
+      ...o,
+      selections: o.selections.map((sel, i) => i === index
+        ? { ...sel, isDefault: !sel.isDefault }
+        : (single ? { ...sel, isDefault: false } : sel))
+    }
+  })
+}
+
+/** Ask first when the save would drop something that holds a price. */
+function onSaveBundle() {
+  if (bundleBlocked.value || !bundleDirty.value) return
+  if (bundleLosing.value.length) {
+    bundleConfirmOpen.value = true
+    return
+  }
+  void persistBundle()
+}
+
+async function persistBundle() {
+  const id = record.value?.id
+  if (!id) return
+  savingBundle.value = true
+  saveError.value = ''
+  try {
+    bundleOpts.value = await productsApi.saveBundleOptions(id, toBundleDraft(editBundle.value))
+    bundleSnapshot.value = toBundleEditor(bundleOpts.value)
+    editBundle.value = toBundleEditor(bundleOpts.value)
+    bundleConfirmOpen.value = false
+    showToast('Bundle contents saved')
+    await loadHistory()
+  } catch (err) {
+    bundleConfirmOpen.value = false
+    saveError.value = apiErrorMessage(err, 'Could not save the bundle contents.')
+  } finally {
+    savingBundle.value = false
+  }
+}
 // Shape produced by `viewVariantRows` below.
 interface ViewVariantRow {
   name: string
@@ -1743,50 +1856,155 @@ async function onConfirmDelete() {
 
             <!-- BUNDLE -->
             <UCard v-if="isBundleProduct" class="p-6">
-              <h2 class="text-base font-bold text-slate-900 mt-0 mb-1">
-                Bundle
-              </h2>
-              <p class="text-[13px] text-slate-500 mt-0 mb-4">
-                Components and their products in this bundle.
-              </p>
-              <div v-if="bundleComponentRows.length" class="flex flex-col gap-4">
-                <div
-                  v-for="(comp, ci) in bundleComponentRows"
-                  :key="ci"
-                  class="border border-slate-200 rounded-[10px] p-4 bg-slate-50"
+              <div class="flex items-start justify-between gap-3 mb-4">
+                <div>
+                  <h2 class="text-base font-bold text-slate-900 mt-0 mb-1">
+                    Bundle
+                  </h2>
+                  <p class="text-[13px] text-slate-500 m-0">
+                    Components and their products in this bundle.
+                  </p>
+                </div>
+                <UButton
+                  v-if="isEditMode"
+                  variant="ghost"
+                  type="button"
+                  :disabled="!!bundleBlocked || !bundleDirty || savingBundle"
+                  :ui="{ base: ['text-[13px] font-bold px-4 py-2 rounded-lg flex-shrink-0', (bundleBlocked || !bundleDirty || savingBundle) ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-green-500 text-white cursor-pointer hover:bg-green-600'] }"
+                  @click="onSaveBundle"
                 >
-                  <div class="text-sm font-bold text-slate-900 mb-3">
-                    {{ comp.title }}
-                  </div>
-                  <div class="grid gap-2.5 grid-cols-[repeat(auto-fill,minmax(min(220px,100%),1fr))]">
-                    <div
-                      v-for="(prod, pi) in comp.products"
-                      :key="pi"
-                      class="border border-slate-200 rounded-lg bg-white px-3.5 py-3 flex items-center gap-2.5"
-                    >
-                      <div class="w-[34px] h-[34px] rounded-lg bg-emerald-50 text-green-600 flex items-center justify-center flex-shrink-0">
-                        <UIcon name="i-lucide-package" class="w-[17px] h-[17px]" />
-                      </div>
-                      <div class="min-w-0">
-                        <div class="text-[13.5px] font-semibold text-slate-900 overflow-hidden text-ellipsis whitespace-nowrap">
-                          {{ prod.name }}
+                  {{ savingBundle ? 'Saving…' : 'Save contents' }}
+                </UButton>
+              </div>
+
+              <template v-if="!isEditMode">
+                <div v-if="bundleComponentRows.length" class="flex flex-col gap-4">
+                  <div
+                    v-for="comp in bundleComponentRows"
+                    :key="comp.id"
+                    class="border border-slate-200 rounded-[10px] p-4 bg-slate-50"
+                  >
+                    <div class="text-sm font-bold text-slate-900 mb-3">
+                      {{ comp.title }}
+                    </div>
+                    <div class="grid gap-2.5 grid-cols-[repeat(auto-fill,minmax(min(220px,100%),1fr))]">
+                      <div
+                        v-for="prod in comp.products"
+                        :key="prod.id"
+                        class="border border-slate-200 rounded-lg bg-white px-3.5 py-3 flex items-center gap-2.5"
+                      >
+                        <div class="w-[34px] h-[34px] rounded-lg bg-emerald-50 text-green-600 flex items-center justify-center flex-shrink-0">
+                          <UIcon name="i-lucide-package" class="w-[17px] h-[17px]" />
                         </div>
-                        <div class="text-xs text-slate-500">
-                          {{ prod.sku }}
+                        <div class="min-w-0">
+                          <div class="text-[13.5px] font-semibold text-slate-900 overflow-hidden text-ellipsis whitespace-nowrap">
+                            {{ prod.name }}
+                          </div>
+                          <div class="text-xs text-slate-500">
+                            {{ prod.sku }}
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
-              <div
-                v-else
-                class="border-[1.5px] border-dashed border-slate-200 rounded-[10px] px-6 py-10 text-center"
-              >
-                <div class="text-sm text-slate-400">
-                  No components in this bundle.
+                <div v-else class="border-[1.5px] border-dashed border-slate-200 rounded-[10px] px-6 py-10 text-center">
+                  <div class="text-sm text-slate-400">
+                    No components in this bundle.
+                  </div>
                 </div>
-              </div>
+              </template>
+
+              <template v-else>
+                <div
+                  v-if="bundleBlocked"
+                  class="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3.5 py-3 text-[13px] text-amber-800 mb-4"
+                >
+                  <UIcon name="i-lucide-circle-alert" class="w-[15px] h-[15px] flex-shrink-0 mt-0.5" />
+                  <span>{{ bundleBlocked }}</span>
+                </div>
+
+                <div class="flex flex-col gap-4">
+                  <div
+                    v-for="opt in editBundle"
+                    :key="opt.key"
+                    class="border border-slate-200 rounded-[10px] p-4 bg-slate-50"
+                  >
+                    <div class="flex items-center gap-2 mb-3">
+                      <UInput
+                        :model-value="opt.title"
+                        placeholder="Component name, e.g. SIM"
+                        :ui="fieldCompactSm('flex-1')"
+                        @update:model-value="setBundleTitle(opt.key, String($event))"
+                      />
+                      <UButton
+                        variant="ghost"
+                        type="button"
+                        title="Remove component"
+                        :ui="{ base: 'hover:bg-slate-100 border-none bg-transparent text-slate-400 w-8 h-8 rounded-lg cursor-pointer inline-flex items-center justify-center flex-shrink-0' }"
+                        @click="removeBundleOption(opt.key)"
+                      >
+                        <UIcon name="i-lucide-trash-2" class="w-[15px] h-[15px]" />
+                      </UButton>
+                    </div>
+
+                    <div class="flex flex-col gap-2">
+                      <div
+                        v-for="(sel, si) in opt.selections"
+                        :key="si"
+                        class="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2.5 py-2"
+                      >
+                        <USelect
+                          :model-value="sel.productId"
+                          :items="bundleCatalog"
+                          value-key="id"
+                          label-key="label"
+                          placeholder="Choose a product…"
+                          :ui="SELECT_FILTER"
+                          class="flex-1 min-w-0"
+                          @update:model-value="setBundleProduct(opt.key, si, String($event))"
+                        />
+                        <UButton
+                          variant="ghost"
+                          type="button"
+                          :title="sel.isDefault ? 'Default choice' : 'Make default'"
+                          :ui="{ base: ['text-[11px] font-bold px-2 py-1 rounded-full border flex-shrink-0 cursor-pointer', sel.isDefault ? 'bg-emerald-50 text-green-700 border-emerald-200' : 'bg-white text-slate-400 border-slate-200'] }"
+                          @click="setBundleDefault(opt.key, si)"
+                        >
+                          Default
+                        </UButton>
+                        <UButton
+                          variant="ghost"
+                          type="button"
+                          title="Remove product"
+                          :ui="{ base: 'hover:bg-slate-100 border-none bg-transparent text-slate-400 w-7 h-7 rounded-lg cursor-pointer inline-flex items-center justify-center flex-shrink-0' }"
+                          @click="removeBundleSelection(opt.key, si)"
+                        >
+                          <UIcon name="i-lucide-x" class="w-[13px] h-[13px]" />
+                        </UButton>
+                      </div>
+                    </div>
+
+                    <UButton
+                      variant="ghost"
+                      type="button"
+                      :ui="{ base: 'inline-flex items-center gap-1.5 border border-dashed border-green-500 bg-emerald-50 text-green-600 text-[13px] font-semibold px-3.5 py-2 rounded-lg cursor-pointer mt-2.5' }"
+                      @click="addBundleSelection(opt.key)"
+                    >
+                      <UIcon name="i-lucide-plus" class="w-3.5 h-3.5" /> Add product
+                    </UButton>
+                  </div>
+                </div>
+
+                <UButton
+                  variant="ghost"
+                  type="button"
+                  :ui="{ base: 'inline-flex items-center gap-1.5 border border-dashed border-slate-300 bg-white text-slate-600 text-[13px] font-semibold px-4 py-[9px] rounded-lg cursor-pointer mt-4' }"
+                  @click="addBundleOption"
+                >
+                  <UIcon name="i-lucide-plus" class="w-3.5 h-3.5" /> Add component
+                </UButton>
+              </template>
             </UCard>
 
             <!-- PRICING (single / bundle) -->
@@ -2109,6 +2327,50 @@ async function onConfirmDelete() {
                 @click="confirmGenerateVariants"
               >
                 {{ generating ? 'Generating…' : 'Generate' }}
+              </UButton>
+            </div>
+          </UCard>
+        </div>
+      </template>
+
+      <!-- bundle: what saving would drop -->
+      <template v-if="bundleConfirmOpen">
+        <div class="fixed inset-0 bg-slate-900/35 backdrop-blur-[2px] z-[130]" @click="bundleConfirmOpen = false" />
+        <div class="fixed inset-0 z-[131] flex items-center justify-center p-4 pointer-events-none">
+          <UCard class="pointer-events-auto w-[460px] max-w-full max-h-[80vh] overflow-y-auto p-6">
+            <h2 class="text-base font-bold text-slate-900 m-0 mb-1.5">
+              Remove from this bundle?
+            </h2>
+            <p class="text-[13px] text-slate-500 m-0 mb-5">
+              These are dropped, and the price each one carries inside the bundle goes with them.
+            </p>
+            <ul class="list-none p-0 m-0 mb-6 flex flex-col gap-1.5">
+              <li
+                v-for="(row, i) in bundleLosing"
+                :key="i"
+                class="text-[13px] text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 flex items-baseline gap-2"
+              >
+                <span class="font-medium">{{ row.label }}</span>
+                <span v-if="row.sku" class="font-mono text-xs opacity-70">{{ row.sku }}</span>
+              </li>
+            </ul>
+            <div class="flex justify-end gap-2.5">
+              <UButton
+                variant="ghost"
+                type="button"
+                :ui="{ base: 'border border-slate-200 bg-white text-slate-700 text-sm font-semibold px-4 py-2 rounded-lg cursor-pointer' }"
+                @click="bundleConfirmOpen = false"
+              >
+                Cancel
+              </UButton>
+              <UButton
+                variant="ghost"
+                type="button"
+                :disabled="savingBundle"
+                :ui="{ base: ['text-sm font-bold px-4 py-2 rounded-lg', savingBundle ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-red-600 text-white cursor-pointer hover:bg-red-700'] }"
+                @click="persistBundle"
+              >
+                {{ savingBundle ? 'Saving…' : 'Remove and save' }}
               </UButton>
             </div>
           </UCard>
