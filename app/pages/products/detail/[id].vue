@@ -46,8 +46,6 @@ interface DetailProduct {
   variantCount?: number
 }
 interface EditAttr { id: string, name: string, values: string[] }
-interface ScopeOverride { name?: string, priceMonthly?: string | number, componentAmounts?: Record<string, string> }
-type Overrides = Record<string, ScopeOverride>
 interface HistoryRow {
   id: string
   actor: string
@@ -146,6 +144,13 @@ const draft = ref<DetailProduct>({ ...EMPTY })
 const record = ref<VertexProduct | null>(null)
 const pricingDoc = ref<ProductPricing | null>(null)
 const bundleOpts = ref<BundleOption[]>([])
+/**
+ * Per-platform content: the Name each platform overrides, and its own
+ * `lockVersion`, which its PATCH requires — the product's would be a 409.
+ */
+const contentDoc = ref<ProductContent | null>(null)
+/** What the overrides were when the screen loaded, to diff a save against. */
+const savedOverrides = ref<Overrides>({})
 
 const baseFeeId = computed(() => fees.value.find(f => f.kind === 'base')?.id || '')
 const canPrice = computed(() => isSellable(record.value))
@@ -164,6 +169,21 @@ async function loadPricing(id: string) {
   }
 }
 
+/**
+ * What each platform overrides, from the two documents that report it.
+ *
+ * Swallowed on failure the way pricing is: the scope switcher is one part of
+ * the screen, and a banner for it would bury the product itself.
+ */
+async function loadPlatformContent(id: string) {
+  try {
+    contentDoc.value = await productsApi.platformContent(id)
+  } catch {
+    contentDoc.value = null
+  }
+  savedOverrides.value = toScopeOverrides(contentDoc.value, pricingDoc.value)
+}
+
 /** `rawId` is the route param, which Vue Router hands over as string | string[]. */
 async function loadRecordById(rawId: unknown): Promise<DetailProduct | null> {
   const id = Array.isArray(rawId) ? rawId[0] : rawId
@@ -172,6 +192,7 @@ async function loadRecordById(rawId: unknown): Promise<DetailProduct | null> {
     const rec = await productsApi.get(id, { include: 'children' })
     record.value = rec
     await loadPricing(rec.id)
+    await loadPlatformContent(rec.id)
     if (rec.type === 'bundle') {
       try {
         bundleOpts.value = await productsApi.bundleOptions(rec.id)
@@ -779,7 +800,9 @@ function onEditClick() {
   editAttributes.value = seed.attrs
   editVariants.value = seed.variants
   editAppliedKey.value = attrKey(seed.attrs)
-  draftOverrides.value = JSON.parse(JSON.stringify(product.value.overrides || {}))
+  // what the API says each platform overrides, not `product.overrides`,
+  // which `toDetailView` always leaves empty
+  draftOverrides.value = JSON.parse(JSON.stringify(savedOverrides.value))
   seedPricingEdit(product.value)
   scope.value = 'default'
   mode.value = 'edit'
@@ -854,10 +877,62 @@ async function persist(merged: DetailProduct) {
     }
   }
 
+  await persistOverrides(rec.id, merged.overrides || {})
+
   const wantActive = merged.status === 'Active'
   if (record.value && wantActive !== (record.value.status === 'active')) {
     record.value = await productsApi.setStatus(rec.id, wantActive ? 'active' : 'inactive')
   }
+}
+
+/**
+ * The per-platform overrides.
+ *
+ * This is new, not a refactor: the screen collected these and dropped them,
+ * reporting a successful save either way.
+ *
+ * Content and price are two different writes against two different versions
+ * — the content PATCH takes the PLATFORM's `lockVersion`, not the product's —
+ * so they are sent separately, and only for the platforms that actually
+ * moved.
+ */
+async function persistOverrides(productId: string, next: Overrides) {
+  const changes = diffOverrides(savedOverrides.value, next)
+  if (!changes.length) return
+
+  for (const change of changes) {
+    if (change.content) {
+      const lockVersion = contentLockVersions(contentDoc.value)[change.platformId] ?? 0
+      await productsApi.setPlatformContent(productId, change.platformId, change.content, lockVersion)
+    }
+
+    if (change.pricing) {
+      const o = next[change.platformId] || {}
+      // A platform follows Default until it is told to price separately;
+      // posting a plan to a scope that is not overriding is 422
+      // `scope_not_overridden`.
+      if (!scopeOverridesPricing(pricingDoc.value, change.platformId)) {
+        await productsApi.overridePlatformPrice(productId, change.platformId)
+      }
+      const lines = componentsToLines(
+        editInitialComponents.value
+          .filter(c => c.feeId)
+          .map(c => ({
+            feeItemId: c.feeId,
+            // the override's amount where there is one, the Default's otherwise
+            amount: String(o.componentAmounts?.[c.feeId] ?? c.amount ?? ''),
+            isPublished: !!c.published
+          })),
+        baseFeeId.value,
+        editIsSubscription.value ? (o.priceMonthly ?? editMonthly.value) : ''
+      )
+      await productsApi.createPricePlan(productId, { scope: change.platformId, effectiveAt: null, lines })
+    }
+  }
+
+  // re-read both, so the next diff is against what the API now holds
+  await loadPricing(productId)
+  await loadPlatformContent(productId)
 }
 async function onSaveClick(_event: FormSubmitEvent<ProductSchema>) {
   const d = draft.value
