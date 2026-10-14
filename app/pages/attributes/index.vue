@@ -5,10 +5,6 @@ import type { Attribute } from '~/types'
 useHead({ title: 'Attributes — Vertex' })
 
 // ── state (mirrors the design's DCLogic state) ──
-const attrs = ref<Attribute[]>([])
-const { message: toast, show: showToast } = usePageToast(2800)
-const loading = ref(true)
-const loadError = ref('')
 
 // UTable column defs — per-column padding/width via `meta.class`, matching the
 // design's first/last-column gutters.
@@ -21,18 +17,22 @@ const columns: TableColumn<Attribute>[] = [
 
 const attributesApi = useApiAttributes()
 
+/*
+ * Fetched during SSR, so the table arrives with the page.
+ *
+ * `data` is used as the list itself rather than copied into another ref: it
+ * is a writable `Ref`, and the mutations below already write to it the way
+ * they always did.
+ */
+const { data: attrs, status, error } = await useAsyncData(
+  'attributes', () => attributesApi.list(), { default: (): Attribute[] => [] }
+)
+const { message: toast, show: showToast } = usePageToast(2800)
+const loading = computed(() => status.value === 'pending')
+const loadError = computed(() => error.value ? apiErrorMessage(error.value, 'Could not load attributes.') : '')
+
 // No product fetch: the API reports `usageCount` per attribute, which is the
 // only thing this screen ever loaded products for.
-onMounted(async () => {
-  try {
-    attrs.value = await attributesApi.list()
-  } catch (err) {
-    loadError.value = apiErrorMessage(err, 'Could not load attributes.')
-  } finally {
-    loading.value = false
-  }
-})
-
 // ── create / edit (a dedicated screen, not an inline modal) ──
 function onCreate() {
   return navigateTo('/attributes/create')

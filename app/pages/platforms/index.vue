@@ -5,24 +5,27 @@ import type { VertexPlatform } from '~/types'
 useHead({ title: 'Platforms — Vertex' })
 
 // ── state (mirrors the design's DCLogic state) ──
-const platforms = ref<VertexPlatform[]>([])
-const loading = ref(true)
-const loadError = ref('')
 const { message: toast, show: showToast } = usePageToast(3000)
 
 const platformsApi = useApiPlatforms()
 
+/*
+ * Fetched during SSR, so the table arrives with the page.
+ *
+ * `data` is used as the list itself rather than copied into another ref: it
+ * is a writable `Ref`, and the mutations below already write to it the way
+ * they always did.
+ */
+const { data: platforms, status, error } = await useAsyncData(
+  'platforms', () => platformsApi.list(), { default: (): VertexPlatform[] => [] }
+)
+const loading = computed(() => status.value === 'pending')
+const loadError = computed(() => error.value ? apiErrorMessage(error.value, 'Could not load platforms.') : '')
+
 // No product fetch any more. It was here to block deleting a platform that
 // still had products, and the API has no delete — a platform is switched off
 // instead, which is safe whatever is assigned to it.
-onMounted(async () => {
-  try {
-    platforms.value = await platformsApi.list()
-  } catch (err) {
-    loadError.value = apiErrorMessage(err, 'Could not load platforms.')
-  } finally {
-    loading.value = false
-  }
+onMounted(() => {
   // cross-page success toast set by the Create Platform screen
   try {
     const t = sessionStorage.getItem('vertex_platform_toast')

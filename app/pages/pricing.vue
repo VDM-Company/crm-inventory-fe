@@ -38,26 +38,26 @@ const ICON_CHOICES = [
 ]
 
 // ── state (mirrors the design's DCLogic state) ──
-const fees = ref<FeeItem[]>([])
-const loading = ref(true)
-const loadError = ref('')
 const modal = ref<ModalState | null>(null)
 const { message: toast, show: showToast } = usePageToast()
 
 const feesApi = useApiFeeItems()
 
+/*
+ * Fetched during SSR, so the table arrives with the page.
+ *
+ * `data` is used as the list itself rather than copied into another ref: it
+ * is a writable `Ref`, and the mutations below already write to it the way
+ * they always did.
+ */
+const { data: fees, status, error } = await useAsyncData(
+  'fee-items', () => feesApi.list(), { default: (): FeeItem[] => [] }
+)
+const loading = computed(() => status.value === 'pending')
+const loadError = computed(() => error.value ? apiErrorMessage(error.value, 'Could not load pricing components.') : '')
+
 // No product fetch any more: the API reports `usageCount` per fee item, which
 // is the only thing this screen ever loaded products for.
-onMounted(async () => {
-  try {
-    fees.value = await feesApi.list()
-  } catch (err) {
-    loadError.value = apiErrorMessage(err, 'Could not load pricing components.')
-  } finally {
-    loading.value = false
-  }
-})
-
 const columns: TableColumn<FeeItem>[] = [
   { accessorKey: 'name', header: 'Component Name', meta: { class: { th: 'px-5', td: TABLE_EDGE.td } } },
   { id: 'action', header: 'Action', meta: { class: { th: 'px-5 text-right w-[130px]', td: TABLE_EDGE.td } } }

@@ -11,29 +11,31 @@ const route = useRoute()
 
 const platformId = computed(() => typeof route.query.id === 'string' ? route.query.id : '')
 
-const platforms = ref<VertexPlatform[]>([])
-const loading = ref(true)
-const categories = ref<Category[]>([])
-const storedProducts = ref<StoredProduct[]>([])
 const search = ref('')
-
-const loadError = ref('')
 
 const productsApi = useApiProducts()
 const platformsApi = useApiPlatforms()
 const categoriesApi = useApiCategories()
 
-onMounted(async () => {
-  try {
-    ;[platforms.value, categories.value, storedProducts.value] = await Promise.all([
-      platformsApi.list(), categoriesApi.tree().then(flattenVertexTree), productsApi.page({ limit: 100 }).then(r => toStoredProducts(r.data))
-    ])
-  } catch (err) {
-    loadError.value = apiErrorMessage(err, 'Could not load this platform.')
-  } finally {
-    loading.value = false
-  }
+/*
+ * Fetched during SSR, so the table arrives with the page rather than after
+ * it. Nothing on this screen writes, so the three lists are read straight
+ * off the fetch.
+ */
+const { data, status, error } = await useAsyncData('platform-products', async () => {
+  const [platforms, categories, products] = await Promise.all([
+    platformsApi.list(),
+    categoriesApi.tree().then(flattenVertexTree),
+    productsApi.page({ limit: 100 }).then(r => toStoredProducts(r.data))
+  ])
+  return { platforms, categories, products }
 })
+
+const platforms = computed<VertexPlatform[]>(() => data.value?.platforms ?? [])
+const categories = computed<Category[]>(() => data.value?.categories ?? [])
+const storedProducts = computed<StoredProduct[]>(() => data.value?.products ?? [])
+const loading = computed(() => status.value === 'pending')
+const loadError = computed(() => error.value ? apiErrorMessage(error.value, 'Could not load this platform.') : '')
 
 const platform = computed<VertexPlatform | null>(() => platformById(platforms.value, platformId.value))
 
