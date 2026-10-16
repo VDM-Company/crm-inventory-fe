@@ -37,6 +37,19 @@ const selectedId = ref<string | null>(null)
 const expanded = ref<Record<string, boolean>>({})
 const draftName = ref('')
 const draftEnabled = ref(true)
+/*
+ * Which fields the platform on screen claims as its own.
+ *
+ * `null` on the Default scope. On a platform these drive the Overridden /
+ * Inherited badges AND the save: a field dropped here becomes a `reset` in
+ * the patch, which is the only way to hand it back to Default — a category
+ * name cannot be blanked, the API refuses it.
+ */
+const draftOverride = ref<{ name: boolean, isEnabled: boolean } | null>(null)
+/** The platform's own version of this category, separate from the category's. */
+const platformVersion = ref(0)
+/** What the override was when it was last read, to diff a save against. */
+const savedDraft = ref<CategoryDraft | null>(null)
 const nameError = ref(false)
 const scope = ref('default')
 const scopeOpen = ref(false)
@@ -170,9 +183,29 @@ async function select(id: string, { keepScope = false }: { keepScope?: boolean }
   const ov: Record<string, boolean> = scope.value === 'default' ? {} : { [scope.value]: ownOrder }
 
   const mem = rows.map(r => r.productId)
+  /*
+   * The record for the scope on screen.
+   *
+   * `tree()` without a platform leaves `platform` null on every node, so the
+   * panel showed the Default name under a platform's name and wrote it back
+   * to Default. Asking for the platform's view is what makes the picker mean
+   * anything for these two fields.
+   */
+  const scoped = scope.value === 'default'
+    ? vertexById.value.get(id)
+    : await categoriesApi.get(id, scope.value).catch(() => undefined)
+  if (seq !== selectSeq) return
+
+  const panel = categoryDraftFor(scoped, scope.value !== 'default')
+  platformVersion.value = scoped?.platform?.lockVersion ?? 0
+
   selectedId.value = id
-  draftName.value = cat.name
-  draftEnabled.value = cat.enabled !== false
+  draftName.value = panel.name
+  draftEnabled.value = panel.isEnabled
+  draftOverride.value = scope.value === 'default'
+    ? null
+    : { name: panel.nameOverridden, isEnabled: panel.enabledOverridden }
+  savedDraft.value = panel
   nameError.value = false
   members.value = mem
   savedMembers.value = mem.slice()
@@ -353,6 +386,46 @@ async function saveMembership(id: string) {
   savedMembers.value = now.slice()
 }
 
+/*
+ * Typing under a platform scope CLAIMS that field for the platform.
+ *
+ * Without this an edit would read as "still inherited" and the save would
+ * send nothing — the field would snap back on the next read.
+ */
+function onDraftNameInput(value: string) {
+  draftName.value = value
+  nameError.value = false
+  if (draftOverride.value) draftOverride.value = { ...draftOverride.value, name: true }
+}
+function onDraftEnabledInput(value: boolean) {
+  draftEnabled.value = value
+  if (draftOverride.value) draftOverride.value = { ...draftOverride.value, isEnabled: true }
+}
+
+/** Hand a field back to Default, restoring the inherited value on screen. */
+function resetNameOverride() {
+  if (!draftOverride.value) return
+  draftOverride.value = { ...draftOverride.value, name: false }
+  const id = selectedId.value
+  if (id) draftName.value = localized(vertexById.value.get(id)?.name) || draftName.value
+}
+function resetEnabledOverride() {
+  if (!draftOverride.value) return
+  draftOverride.value = { ...draftOverride.value, isEnabled: false }
+  const id = selectedId.value
+  if (id) draftEnabled.value = vertexById.value.get(id)?.isEnabled !== false
+}
+
+/** The panel as the override helpers read it. */
+function currentDraft(): CategoryDraft {
+  return {
+    name: draftName.value,
+    isEnabled: draftEnabled.value,
+    nameOverridden: draftOverride.value ? draftOverride.value.name : false,
+    enabledOverridden: draftOverride.value ? draftOverride.value.isEnabled : false
+  }
+}
+
 async function save() {
   const name = (draftName.value || '').trim()
   if (!name) {
@@ -364,12 +437,32 @@ async function save() {
 
   saving.value = true
   try {
-    const saved = await categoriesApi.update(
-      id,
-      { name: { en: name }, isEnabled: draftEnabled.value },
-      lockVersionOf(id)
-    )
-    vertexById.value.set(id, saved)
+    /*
+     * One scope, one endpoint.
+     *
+     * This used to call the Default PATCH whatever the picker said, so
+     * renaming under a platform renamed the category for all of them. The
+     * platform write is a different endpoint against a different version —
+     * the platform's own, which also covers its product order, so the value
+     * it returns is kept for the next save.
+     */
+    if (scope.value === 'default') {
+      const patch = categoryDefaultPatch(vertexById.value.get(id), currentDraft())
+      if (patch) {
+        const updated = await categoriesApi.update(id, patch, lockVersionOf(id))
+        vertexById.value.set(id, updated)
+      }
+    } else {
+      const patch = savedDraft.value
+        ? categoryContentPatch(savedDraft.value, currentDraft())
+        : null
+      if (patch) {
+        const updated = await categoriesApi.setPlatformContent(id, scope.value, patch, platformVersion.value)
+        vertexById.value.set(id, updated)
+        platformVersion.value = updated.platform?.lockVersion ?? platformVersion.value + 1
+        savedDraft.value = categoryDraftFor(updated, true)
+      }
+    }
     await saveMembership(id)
   } catch (err) {
     saving.value = false
@@ -379,9 +472,14 @@ async function save() {
     return
   }
   saving.value = false
-  cats.value = cats.value.map(c => c.id === id ? { ...c, name, enabled: draftEnabled.value } : c)
+  // The tree is the DEFAULT one, so only a Default save touches it. Writing
+  // a platform's override into it would show that platform's name to every
+  // scope, including Default.
+  if (scope.value === 'default') {
+    cats.value = cats.value.map(c => c.id === id ? { ...c, name, enabled: draftEnabled.value } : c)
+  }
   nameError.value = false
-  showToast('Category saved')
+  showToast(scope.value === 'default' ? 'Category saved' : 'Saved for this platform')
 }
 
 // ── tree rows (respect collapsed ancestors) ──
@@ -765,23 +863,62 @@ function onReset() {
               :error="nameError ? 'Category name is required.' : ''"
               class="mb-[18px]"
             >
-              <UInput
-                :model-value="draftName"
-                placeholder="e.g. Tourist SIM"
-                @update:model-value="draftName = String($event); nameError = false"
-              />
+              <div class="flex items-center gap-2">
+                <UInput
+                  :model-value="draftName"
+                  placeholder="e.g. Tourist SIM"
+                  class="flex-1 min-w-0"
+                  @update:model-value="onDraftNameInput(String($event))"
+                />
+                <!-- A name cannot be blanked, so dropping an override needs
+                     its own control -->
+                <UButton
+                  v-if="draftOverride?.name"
+                  variant="ghost"
+                  type="button"
+                  title="Follow the Default name again"
+                  :ui="{ base: 'border border-slate-200 bg-white text-slate-600 text-[11px] font-semibold px-2.5 py-1 rounded-full cursor-pointer flex-shrink-0' }"
+                  @click="resetNameOverride"
+                >
+                  Use Default
+                </UButton>
+                <span
+                  v-else-if="draftOverride"
+                  class="text-[11px] font-semibold text-slate-400 px-2.5 py-1 flex-shrink-0"
+                >Inherited</span>
+              </div>
             </VertexField>
 
             <div class="flex items-center justify-between gap-3 pt-4 border-t border-slate-100">
               <div>
-                <div class="text-sm font-semibold text-slate-900">
-                  Enable Category
+                <div class="flex items-center gap-2">
+                  <div class="text-sm font-semibold text-slate-900">
+                    Enable Category
+                  </div>
+                  <UButton
+                    v-if="draftOverride?.isEnabled"
+                    variant="ghost"
+                    type="button"
+                    title="Follow the Default setting again"
+                    :ui="{ base: 'border border-slate-200 bg-white text-slate-600 text-[11px] font-semibold px-2.5 py-1 rounded-full cursor-pointer' }"
+                    @click="resetEnabledOverride"
+                  >
+                    Use Default
+                  </UButton>
+                  <span
+                    v-else-if="draftOverride"
+                    class="text-[11px] font-semibold text-slate-400"
+                  >Inherited</span>
                 </div>
                 <div class="text-[13px] text-slate-500 mt-0.5">
                   {{ draftEnabled ? 'Visible on the storefront' : 'Hidden from the storefront' }}
                 </div>
               </div>
-              <USwitch v-model="draftEnabled" class="shrink-0" />
+              <USwitch
+                :model-value="draftEnabled"
+                class="shrink-0"
+                @update:model-value="onDraftEnabledInput"
+              />
             </div>
           </UCard>
 
