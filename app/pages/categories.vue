@@ -116,7 +116,21 @@ let selectSeq = 0
 /** What the server last reported, so a save can send only what changed. */
 const savedMembers = ref<string[]>([])
 
-async function select(id: string) {
+/**
+ * Load a category into the right-hand panel.
+ *
+ * `keepScope` exists because this is called down two different paths that
+ * want opposite things. Moving to a DIFFERENT category starts from Default —
+ * a platform override belongs to the category you were looking at. But
+ * re-reading the SAME category (switching scope, restoring the default
+ * order, discarding edits) has to stay where it is.
+ *
+ * It used to reset unconditionally, so picking a platform set the scope and
+ * then immediately threw it away; the same line also bounced you off the
+ * platform right after "restore the default order" and after "Changes
+ * reset", which is why neither looked like it had worked.
+ */
+async function select(id: string, { keepScope = false }: { keepScope?: boolean } = {}) {
   const cat = categoryById(cats.value, id)
   if (!cat) return
   const seq = ++selectSeq
@@ -164,7 +178,7 @@ async function select(id: string) {
   savedMembers.value = mem.slice()
   positions.value = pos
   scopeOverride.value = ov
-  scope.value = 'default'
+  if (!keepScope) scope.value = 'default'
   search.value = ''
   page.value = 1
   expanded.value = { ...expanded.value, ...anc }
@@ -294,7 +308,8 @@ async function onToggleUseDefaultOrder(e: Event) {
       return
     }
     scopeOverride.value = { ...scopeOverride.value, [sc]: false }
-    if (selectedId.value) await select(selectedId.value)
+    // stay on this platform; the point is to SEE it following Default now
+    if (selectedId.value) await select(selectedId.value, { keepScope: true })
     showToast('Following the default order again')
     return
   }
@@ -436,8 +451,9 @@ async function pickScope(id: string) {
   scope.value = id
   scopeOpen.value = false
   page.value = 1
-  // membership and order are per scope, so switching re-reads them
-  if (selectedId.value) await select(selectedId.value)
+  // membership and order are per scope, so switching re-reads them — on the
+  // scope just picked, which is what `keepScope` protects
+  if (selectedId.value) await select(selectedId.value, { keepScope: true })
 }
 const scopeBadgeLabel = computed(() => overridden.value ? 'Overridden' : 'Inherited')
 const scopeBadgeStyle = computed(() =>
@@ -527,7 +543,8 @@ const addTitle = computed(() => addModal.value ? (addModal.value.forceSub || add
 const parentOptions = computed(() => categoryTopLevel(cats.value).map(c => ({ id: c.id, name: c.name })))
 function onReset() {
   if (selectedId.value) {
-    select(selectedId.value)
+    // discards edits to this category in this scope, not the scope itself
+    select(selectedId.value, { keepScope: true })
     showToast('Changes reset')
   }
 }
