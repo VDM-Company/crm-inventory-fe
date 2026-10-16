@@ -49,34 +49,6 @@ const addModal = ref<AddModalState | null>(null)
 const deleteOpen = ref(false)
 const { message: toast, show: showToast } = usePageToast(2600)
 
-onMounted(async () => {
-  let list: Category[] = []
-  try {
-    const [tree, plats, products] = await Promise.all([
-      categoriesApi.tree(),
-      platformsApi.list(),
-      // the catalogue to pick from; one page is enough for the picker, which
-      // searches and pages client-side
-      productsApi.page({ limit: 100 })
-    ])
-    vertexById.value = indexVertexTree(tree)
-    list = flattenVertexTree(tree)
-    platforms.value = plats
-    catalog.value = products.data
-  } catch (err) {
-    showToast(apiErrorMessage(err, 'Could not load categories.'))
-    return
-  }
-  cats.value = list
-  const exp: Record<string, boolean> = {}
-  list.forEach((c) => {
-    if (!c.parentId) exp[c.id] = true
-  })
-  expanded.value = exp
-  const first = list.find(c => !c.parentId) || list[0] || null
-  if (first) await select(first.id)
-})
-
 // ── style helpers (ported) ──
 
 // ── the catalogue to pick from ──
@@ -84,7 +56,52 @@ onMounted(async () => {
 // Delete button could never be reached: every category looked fully stocked.
 // These are the real products now.
 const catalog = ref<VertexProductRow[]>([])
+
 const productsApi = useApiProducts()
+
+/*
+ * The tree, the platforms and the product picker's catalogue, fetched during
+ * SSR so the tree arrives with the page.
+ *
+ * The right-hand panel is NOT part of this. Its contents depend on which
+ * category is selected, and `select()` is also what runs on every click and
+ * every scope change — so it stays where the interaction is, in the browser.
+ */
+const { data: initial, error: initialError } = await useAsyncData('categories', async () => {
+  const [tree, plats, products] = await Promise.all([
+    categoriesApi.tree(),
+    platformsApi.list(),
+    // one page is enough for the picker, which searches and pages client-side
+    productsApi.page({ limit: 100 })
+  ])
+  return { tree, platforms: plats, catalog: products.data }
+})
+
+/*
+ * Seeded here rather than in `onMounted` so the server renders the tree.
+ * These stay writable refs because creating and deleting a category writes
+ * them back.
+ */
+if (initial.value) {
+  vertexById.value = indexVertexTree(initial.value.tree)
+  cats.value = flattenVertexTree(initial.value.tree)
+  platforms.value = initial.value.platforms
+  catalog.value = initial.value.catalog
+  const exp: Record<string, boolean> = {}
+  cats.value.forEach((c) => {
+    if (!c.parentId) exp[c.id] = true
+  })
+  expanded.value = exp
+}
+
+onMounted(async () => {
+  if (initialError.value) {
+    showToast(apiErrorMessage(initialError.value, 'Could not load categories.'))
+    return
+  }
+  const first = cats.value.find(c => !c.parentId) || cats.value[0] || null
+  if (first) await select(first.id)
+})
 
 /** Direct assignments, as the API counts them. Zero for a node it has not sent. */
 function productCount(catId: string): number {

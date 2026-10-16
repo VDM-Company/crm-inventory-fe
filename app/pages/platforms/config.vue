@@ -11,8 +11,22 @@ const router = useRouter()
 // ── platform + identity ──
 const platformsApi = useApiPlatforms()
 
-const platforms = ref<VertexPlatform[]>([])
-const loading = ref(true)
+/*
+ * Both documents fetched during SSR, so the form arrives filled rather than
+ * blank-then-populated. The identity fields come off the list, the rest off
+ * the platform's own settings — two reads, one await, because the second
+ * needs the first.
+ */
+const { data, status, error } = await useAsyncData('platform-config', async () => {
+  const list = await platformsApi.list()
+  const id = typeof route.query.id === 'string' ? route.query.id : ''
+  const chosen = (id ? platformById(list, id) : null) || list[0] || null
+  const settings = chosen ? await platformsApi.settings(chosen.id) : null
+  return { platforms: list, settings }
+})
+
+const platforms = computed<VertexPlatform[]>(() => data.value?.platforms ?? [])
+const loading = computed(() => status.value === 'pending')
 
 const platform = computed<VertexPlatform | null>(() => {
   const id = typeof route.query.id === 'string' ? route.query.id : ''
@@ -20,7 +34,7 @@ const platform = computed<VertexPlatform | null>(() => {
 })
 
 const identity = reactive({ name: '', code: '', url: '' })
-const cfg = ref<ConfigValues>({})
+const cfg = ref<ConfigValues>({ ...EMPTY_CONFIG })
 // The two records version separately upstream: the platform carries one
 // `lockVersion`, its settings another. Sending the wrong one is a 409 that
 // reads like a race but is not.
@@ -46,27 +60,17 @@ function hydrateIdentity() {
   platformVersion.value = p ? p.lockVersion : 0
 }
 
+/*
+ * Seeded here rather than in `onMounted` so it runs on the server too and
+ * the HTML carries the values. Deterministic from the same two documents, so
+ * the client render agrees.
+ */
 hydrateIdentity()
-
-onMounted(async () => {
-  try {
-    platforms.value = await platformsApi.list()
-    hydrateIdentity()
-    const p = platform.value
-    if (p) {
-      const settings = await platformsApi.settings(p.id)
-      settingsVersion.value = settings.lockVersion
-      cfg.value = settingsToConfigValues(settings)
-    } else {
-      cfg.value = { ...EMPTY_CONFIG }
-    }
-  } catch (err) {
-    saveError.value = apiErrorMessage(err, 'Could not load this platform.')
-  } finally {
-    loading.value = false
-  }
-  dirty.value = false
-})
+if (data.value?.settings) {
+  settingsVersion.value = data.value.settings.lockVersion
+  cfg.value = settingsToConfigValues(data.value.settings)
+}
+if (error.value) saveError.value = apiErrorMessage(error.value, 'Could not load this platform.')
 
 // keeps the dirty flag the inline setCfg used to set
 function onCfgUpdate(next: ConfigValues) {

@@ -15,14 +15,23 @@ const routeEditId = computed(() => {
   const raw = route.query.id
   return (Array.isArray(raw) ? raw[0] : raw) || null
 })
-// true from the first render when editing, so the server does not ship a
-// blank Create form that the fetch then overwrites
-const loading = ref(!!routeEditId.value)
+const loading = computed(() => status.value === 'pending')
 const form = reactive({ name: '', code: '', url: '' })
 const codeTouched = ref(false)
 const dirty = ref(false)
 const saveError = ref('')
-const allPlatforms = ref<VertexPlatform[]>([])
+/*
+ * Fetched during SSR, so an edit form arrives with its fields already filled
+ * rather than blank-then-populated.
+ *
+ * The list is wanted whether creating or editing: the duplicate-code rule
+ * checks against it.
+ */
+const { data: allPlatforms, status } = await useAsyncData(
+  'platforms-for-form',
+  () => platformsApi.list().catch(() => [] as VertexPlatform[]),
+  { default: (): VertexPlatform[] => [] }
+)
 // The platform's own version, needed on an edit. Settings are created with
 // the platform here, so they have no version of their own yet.
 const platformVersion = ref(0)
@@ -33,29 +42,21 @@ const cfg = ref<ConfigValues>({ ...EMPTY_CONFIG })
 
 // SSR-safe: resolve the edit target from localStorage only after mount, so
 // server + first client paint both render the empty "Create" form.
-onMounted(async () => {
-  try {
-    allPlatforms.value = await platformsApi.list()
-  } catch {
-    // leave the list empty; the duplicate-code check simply cannot run
-  } finally {
-    loading.value = false
-  }
-  const rawId = route.query.id
-  const id = Array.isArray(rawId) ? rawId[0] : rawId
-  if (id) {
-    const existing = platformById(allPlatforms.value, id)
-    if (existing) {
-      editId.value = id
-      form.name = existing.name
-      form.code = existing.code
-      // the form's URL field is the platform's `domain` upstream
-      form.url = existing.domain
-      platformVersion.value = existing.lockVersion
-      codeTouched.value = true
-    }
-  }
-})
+/*
+ * Seeded right here rather than in `onMounted`, so it happens on the server
+ * too and the HTML carries the values. It is deterministic — the same list
+ * and the same route id give the same fields — so the client render agrees.
+ */
+const editing = routeEditId.value ? platformById(allPlatforms.value, routeEditId.value) : null
+if (editing) {
+  editId.value = routeEditId.value
+  form.name = editing.name
+  form.code = editing.code
+  // the form's URL field is the platform's `domain` upstream
+  form.url = editing.domain
+  platformVersion.value = editing.lockVersion
+  codeTouched.value = true
+}
 
 const pageTitle = computed(() => routeEditId.value ? 'Edit Platform' : 'Create Platform')
 useHead({ title: () => pageTitle.value + ' — Vertex' })
