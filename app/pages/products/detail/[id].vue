@@ -1107,6 +1107,7 @@ const historyGroups = computed(() => {
 // ── mode transitions ──
 function isDirty(): boolean {
   if (JSON.stringify(product.value) !== JSON.stringify(draft.value)) return true
+  if (mediaChanged(savedMedia.value, editMedia.value)) return true
   return editSnapshot !== JSON.stringify({ a: editAttributes.value, v: editVariants.value })
 }
 function onEditClick() {
@@ -1124,6 +1125,9 @@ function onEditClick() {
   // what the API says each platform overrides, not `product.overrides`,
   // which `toDetailView` always leaves empty
   draftOverrides.value = JSON.parse(JSON.stringify(savedOverrides.value))
+  editMedia.value = savedMedia.value.map(m => ({ ...m }))
+  imageError.value = ''
+  mediaLossAccepted.value = false
   seedPricingEdit(product.value)
   scope.value = 'default'
   mode.value = 'edit'
@@ -1144,6 +1148,9 @@ function onConfirmDiscard() {
   editAttributes.value = seed.attrs
   editVariants.value = seed.variants
   editAppliedKey.value = attrKey(seed.attrs)
+  editMedia.value = savedMedia.value.map(m => ({ ...m }))
+  imageError.value = ''
+  mediaLossAccepted.value = false
   cancelConfirmOpen.value = false
   scope.value = 'default'
   mode.value = 'view'
@@ -1184,8 +1191,10 @@ async function persist(merged: DetailProduct) {
 
   if (hasChanges(patch)) {
     record.value = await productsApi.update(rec.id, patch, rec.lockVersion)
-    savedMedia.value = toMediaEditor(record.value?.media)
-    editMedia.value = toMediaEditor(record.value?.media)
+    if (record.value?.media) {
+      savedMedia.value = toMediaEditor(record.value.media)
+      editMedia.value = toMediaEditor(record.value.media)
+    }
   }
 
   if (canPrice.value && isSinglePricing.value) {
@@ -1318,11 +1327,14 @@ async function onSaveClick(_event: FormSubmitEvent<ProductSchema>) {
     saveError.value = apiErrorCode(err) === 'stale_version'
       ? 'Someone else changed this product. Reload the page before saving again.'
       : apiErrorMessage(err, 'Could not save the product.')
+    // the agreement to lose images was for the save that failed
+    mediaLossAccepted.value = false
     return
   }
   // The API writes the audit entry; re-reading it beats inventing one, which
   // is what this used to do — attributing every save to a hard-coded name.
   void loadHistory()
+  merged.image = baseImageUrl(record.value?.media)
   product.value = merged
   draft.value = { ...merged }
   mode.value = 'view'
@@ -1617,13 +1629,19 @@ async function onConfirmDelete() {
 
               <!--
                 Default scope only. A platform's images are an override written
-                through `platform-content`, and writing them here would rename
+                through `platform-content`, and writing them here would change
                 the pictures for every platform — the bug this screen has
                 already shipped twice with names and prices.
+
+                The note says nothing about WHICH images this platform shows,
+                because this app does not know: `toScopeOverrides` reads the
+                name and the prices out of the content document and ignores
+                `media`, so a platform that overrides its pictures looks
+                exactly like one that does not.
               -->
               <div v-else-if="isPlatformScope" class="text-[13px] text-slate-500 leading-snug">
-                Images are edited on the Default scope. This platform shows the
-                Default pictures until per-platform images are added here.
+                Images are edited on the Default scope. Per-platform images are
+                not editable here yet.
               </div>
 
               <template v-else>

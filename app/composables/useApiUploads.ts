@@ -53,13 +53,7 @@ export function useApiUploads() {
       }
     })
 
-    const res = await fetch(slot.url, {
-      method: slot.method || 'PUT',
-      headers: slot.headers || {},
-      body: file,
-      credentials: 'omit',
-      mode: 'cors'
-    })
+    const res = await fetch(slot.url, storagePutInit(slot, file))
     if (!res.ok) {
       // the bucket answers XML, not our error envelope, so there is nothing
       // to unwrap — the status is the whole story a reader can act on
