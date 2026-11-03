@@ -19,7 +19,6 @@ const editId = computed(() => {
 // ── state ──
 const attributesApi = useApiAttributes()
 
-const attrs = ref<Attribute[]>([])
 /** The record being edited, kept whole for its option ids and lockVersion. */
 const editing = ref<Attribute | null>(null)
 // UForm drives validation off a single reactive state object; `name`/`type`
@@ -43,24 +42,33 @@ const optionsError = ref('')
 const saveError = ref('')
 // true from the first render when editing, so the server does not ship a
 // blank Create form that the fetch then overwrites
-const loading = ref(!!editId.value)
+const loading = computed(() => status.value === 'pending')
 
 const pageTitle = computed(() => editId.value ? 'Edit Attribute' : 'Create Attribute')
 useHead({ title: () => pageTitle.value + ' — Vertex' })
 
 // The list is fetched on mount, then the edited attribute seeds the form.
-onMounted(async () => {
-  try {
-    attrs.value = await attributesApi.list()
-  } catch (err) {
-    saveError.value = apiErrorMessage(err, 'Could not load attributes.')
-    return
-  } finally {
-    loading.value = false
-  }
-  if (!editId.value) return
-  const existing = attrs.value.find(a => a.id === editId.value)
-  if (!existing) return
+/*
+ * Fetched during SSR, so an edit form arrives with its fields filled.
+ *
+ * The list is wanted whether creating or editing: the duplicate-code rule
+ * checks against it.
+ */
+const { data: attrs, status, error: loadError } = await useAsyncData(
+  'attributes-for-form',
+  () => attributesApi.list(),
+  { default: (): Attribute[] => [] }
+)
+
+if (loadError.value) saveError.value = apiErrorMessage(loadError.value, 'Could not load attributes.')
+
+/*
+ * Seeded during setup rather than in `onMounted`, so it happens on the server
+ * too. Deterministic — the same list and the same route id give the same
+ * fields — so the client render agrees.
+ */
+const existing = editId.value ? attrs.value.find(a => a.id === editId.value) : undefined
+if (existing) {
   editing.value = existing
   name.value = localized(existing.label)
   type.value = inputTypeLabel(existing.inputType)
@@ -68,7 +76,7 @@ onMounted(async () => {
   codeTouched.value = true
   required.value = true
   options.value = (existing.options || []).map(o => ({ id: o.id, label: localized(o.label) }))
-})
+}
 
 // Schema is a computed so the duplicate-name refinement sees the current
 // store and the row being edited.
