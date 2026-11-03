@@ -67,7 +67,6 @@ const scope = ref('default')
 const draftOverrides = ref<Overrides>({})
 
 // ── pricing (re-added in Master v3 for non-variant products) ──
-const fees = ref<FeeItem[]>([])
 const editIsSubscription = ref(true)
 const editMonthly = ref<string | number>('')
 const editInitialComponents = ref<PricingComponent[]>([])
@@ -78,17 +77,10 @@ const cancelConfirmOpen = ref(false)
 const deleteConfirmOpen = ref(false)
 const { message: toastMessage, show: showToast } = usePageToast()
 const saveError = ref('')
-const loading = ref(true)
 const historyOpen = ref(false)
 const historyExpanded = ref<Record<string, boolean>>({})
 const historyEntries = ref<HistoryEntry[]>([])
 
-const categories = ref<Category[]>([])
-const platforms = ref<VertexPlatform[]>([])
-const attributeDefs = ref<AttributeDef[]>([])
-// The flat defs render the value pickers; the records keep the attribute and
-// option ids, which is what a variant axis is made of.
-const attributeRecords = ref<Attribute[]>([])
 /**
  * Products a bundle can offer. Fetched only for a bundle, and only the ones
  * the API would accept: a selection has to be an active, sellable product
@@ -193,44 +185,18 @@ async function loadPlatformContent(id: string) {
   savedOverrides.value = toScopeOverrides(contentDoc.value, pricingDoc.value)
 }
 
-/** `rawId` is the route param, which Vue Router hands over as string | string[]. */
-async function loadRecordById(rawId: unknown): Promise<DetailProduct | null> {
-  const id = Array.isArray(rawId) ? rawId[0] : rawId
-  if (!id) return null
-  try {
-    const rec = await productsApi.get(id, { include: 'children' })
-    record.value = rec
-    await loadPricing(rec.id)
-    await loadPlatformContent(rec.id)
-    if (rec.type === 'bundle') {
-      try {
-        bundleOpts.value = await productsApi.bundleOptions(rec.id)
-      } catch {
-        bundleOpts.value = []
-      }
-      bundleSnapshot.value = toBundleEditor(bundleOpts.value)
-      editBundle.value = toBundleEditor(bundleOpts.value)
-      try {
-        const page = await productsApi.page({ limit: 100, status: 'active', sellable: true })
-        catalogProducts.value = page.data
-      } catch {
-        catalogProducts.value = []
-      }
-    }
-    return toDetailView(rec, pricingDoc.value) as unknown as DetailProduct
-  } catch (err) {
-    if ((err as { statusCode?: number })?.statusCode === 404) return null
-    saveError.value = apiErrorMessage(err, 'Could not load this product.')
-    throw err
-  }
-}
-
 const productsApi = useApiProducts()
 const categoriesApi = useApiCategories()
 const platformsApi = useApiPlatforms()
 const attributesApi = useApiAttributes()
 const feesApi = useApiFeeItems()
 const auditApi = useApiAuditLogs()
+
+/** The route param, which Vue Router hands over as string | string[]. */
+function routeId(): string {
+  const raw = route.params.id
+  return (Array.isArray(raw) ? raw[0] : raw) || ''
+}
 
 /**
  * The Version History drawer's entries.
@@ -267,37 +233,57 @@ async function loadHistory() {
   }
 }
 
-onMounted(async () => {
-  try {
-    ;[categories.value, platforms.value, attributeDefs.value, fees.value] = await Promise.all([
+/*
+ * Everything the screen needs, fetched during SSR.
+ *
+ * The handler RETURNS its documents rather than writing the refs itself.
+ * That is not style: Nuxt serialises `data` and does not re-run the handler
+ * on hydration, so a handler with side effects would seed the refs on the
+ * server and leave the client holding empty ones.
+ *
+ * Masters fan out; the record's own documents are a chain behind it. Pricing
+ * and platform content are swallowed on failure — a configurable parent
+ * answers 422 `not_sellable` for pricing, which is not an error the reader
+ * can act on, and the overrides are one corner of the page.
+ */
+const { data: loaded, status, error: recordError } = await useAsyncData(
+  `product:${routeId()}`,
+  async () => {
+    const [categories, platforms, attributeRecords, fees] = await Promise.all([
       categoriesApi.tree().then(flattenVertexTree),
       platformsApi.list(),
-      attributesApi.list().then((records) => {
-        attributeRecords.value = records
-        return toAttributeDefs(records)
-      }),
+      attributesApi.list(),
       feesApi.list()
     ])
-  } catch (err) {
-    saveError.value = apiErrorMessage(err, 'Could not load the form data.')
+
+    const id = routeId()
+    const masters = { categories, platforms, attributeRecords, fees }
+    if (!id) return { ...masters, record: null, pricing: null, content: null, bundle: [], catalogue: [], logs: [] }
+
+    const record = await productsApi.get(id, { include: 'children' })
+    const pricing = await productsApi.pricing(record.id).catch(() => null)
+    const content = await productsApi.platformContent(record.id).catch(() => null)
+    const bundle = record.type === 'bundle'
+      ? await productsApi.bundleOptions(record.id).catch(() => [])
+      : []
+    const catalogue = record.type === 'bundle'
+      ? await productsApi.page({ limit: 100, status: 'active', sellable: true })
+          .then(r => r.data).catch(() => [])
+      : []
+    const logs = await auditApi.forSubject('product', record.id).catch(() => [])
+
+    return { ...masters, record, pricing, content, bundle, catalogue, logs }
   }
-  try {
-    const rec = await loadRecordById(route.params.id)
-    if (!rec) {
-      notFound.value = true
-    } else {
-      const norm = normalizeProduct(rec)
-      product.value = norm
-      draft.value = { ...norm }
-      // after the record, so it has an id to ask about
-      await loadHistory()
-    }
-  } catch {
-    // the error is already on screen; don't present the demo record
-  } finally {
-    loading.value = false
-  }
-})
+)
+
+const categories = computed<Category[]>(() => loaded.value?.categories ?? [])
+const platforms = computed<VertexPlatform[]>(() => loaded.value?.platforms ?? [])
+// The flat defs render the value pickers; the records keep the attribute and
+// option ids, which is what a variant axis is made of.
+const attributeRecords = computed<Attribute[]>(() => loaded.value?.attributeRecords ?? [])
+const attributeDefs = computed<AttributeDef[]>(() => toAttributeDefs(attributeRecords.value))
+const fees = computed<FeeItem[]>(() => loaded.value?.fees ?? [])
+const loading = computed(() => status.value === 'pending')
 
 onBeforeUnmount(() => {
   // the toast owns its own timer; this one drives the post-delete redirect
@@ -527,6 +513,36 @@ const bundleComponentRows = computed(() => bundleSummary(bundleOpts.value))
 // ── bundle editing ──
 const editBundle = ref<BundleOptionRow[]>([])
 const bundleSnapshot = ref<BundleOptionRow[]>([])
+
+/*
+ * Seeded from the payload, synchronously, so it happens on both sides.
+ * These stay writable because every save writes the fresh documents back.
+ */
+record.value = loaded.value?.record ?? null
+pricingDoc.value = loaded.value?.pricing ?? null
+contentDoc.value = loaded.value?.content ?? null
+savedOverrides.value = toScopeOverrides(contentDoc.value, pricingDoc.value)
+bundleOpts.value = loaded.value?.bundle ?? []
+bundleSnapshot.value = toBundleEditor(bundleOpts.value)
+editBundle.value = toBundleEditor(bundleOpts.value)
+catalogProducts.value = loaded.value?.catalogue ?? []
+// mapped here rather than in the handler, because the labels read the
+// platform and category lists seeded just above
+historyEntries.value = toHistoryEntries(loaded.value?.logs ?? [], historyLabel)
+
+if (record.value) {
+  const norm = normalizeProduct(toDetailView(record.value, pricingDoc.value) as unknown as DetailProduct)
+  product.value = norm
+  draft.value = { ...norm }
+} else if (recordError.value) {
+  if ((recordError.value as { statusCode?: number })?.statusCode === 404) {
+    notFound.value = true
+  } else {
+    saveError.value = apiErrorMessage(recordError.value, 'Could not load this product.')
+  }
+} else {
+  notFound.value = true
+}
 const bundleConfirmOpen = ref(false)
 const savingBundle = ref(false)
 

@@ -69,15 +69,6 @@ const appliedKey = ref('')
 
 // masters — all fetched on mount. They start empty rather than seeded: a
 // seeded list renders names the real API may not agree with.
-const categories = ref<Category[]>([])
-const platforms = ref<VertexPlatform[]>([])
-const attributeDefs = ref<AttributeDef[]>([])
-// The flat defs above render the value pickers; the records below keep the
-// attribute and option ids, which is what a variant axis is made of.
-const attributeRecords = ref<Attribute[]>([])
-const fees = ref<FeeItem[]>([])
-const existingSkus = ref<string[]>([])
-const catalogProducts = ref<VertexProductRow[]>([])
 const saveError = ref('')
 const saving = ref(false)
 // Set the moment the product exists. Everything after that step is a change
@@ -97,30 +88,42 @@ const platformsApi = useApiPlatforms()
 const attributesApi = useApiAttributes()
 const feesApi = useApiFeeItems()
 
-onMounted(async () => {
-  try {
-    ;[categories.value, platforms.value, attributeRecords.value, fees.value] = await Promise.all([
-      categoriesApi.tree().then(flattenVertexTree),
-      platformsApi.list(),
-      attributesApi.list(),
-      feesApi.list(),
-      // A bundle selection has to be an active, sellable product, so the
-      // picker is only offered those — anything else is 422
-      // `selection_not_sellable` at save time. The duplicate-SKU rule runs
-      // inside a zod refine, which cannot await, so the list it checks is
-      // fetched once here. It is one page: a SKU further down the catalogue
-      // is caught upstream instead, when the product leaves Draft.
-      productsApi.page({ limit: 100, status: 'active', sellable: true }).then((r) => {
-        catalogProducts.value = r.data
-      })
-    ])
-    attributeDefs.value = toAttributeDefs(attributeRecords.value)
-    existingSkus.value = catalogProducts.value.map(p => (p.sku || '').toLowerCase()).filter(Boolean)
-    seedInitialComponents()
-  } catch (err) {
-    saveError.value = apiErrorMessage(err, 'Could not load the form data.')
-  }
+/*
+ * The five lists this form needs, fetched during SSR so the pickers arrive
+ * populated rather than empty-then-filled.
+ *
+ * A bundle selection has to be an active, sellable product, so the picker is
+ * only offered those — anything else is 422 `selection_not_sellable` at save
+ * time. The duplicate-SKU rule runs inside a zod refine, which cannot await,
+ * so the list it checks is fetched here. It is one page: a SKU further down
+ * the catalogue is caught upstream instead, when the product leaves Draft.
+ */
+const { data: masters, error: mastersError } = await useAsyncData('product-form-masters', async () => {
+  const [categories, platforms, attributeRecords, fees, catalogue] = await Promise.all([
+    categoriesApi.tree().then(flattenVertexTree),
+    platformsApi.list(),
+    attributesApi.list(),
+    feesApi.list(),
+    productsApi.page({ limit: 100, status: 'active', sellable: true })
+  ])
+  return { categories, platforms, attributeRecords, fees, catalogProducts: catalogue.data }
 })
+
+const categories = computed<Category[]>(() => masters.value?.categories ?? [])
+const platforms = computed<VertexPlatform[]>(() => masters.value?.platforms ?? [])
+// The flat defs render the value pickers; the records keep the attribute and
+// option ids, which is what a variant axis is made of.
+const attributeRecords = computed<Attribute[]>(() => masters.value?.attributeRecords ?? [])
+const attributeDefs = computed<AttributeDef[]>(() => toAttributeDefs(attributeRecords.value))
+const fees = computed<FeeItem[]>(() => masters.value?.fees ?? [])
+const catalogProducts = computed<VertexProductRow[]>(() => masters.value?.catalogProducts ?? [])
+const existingSkus = computed(() =>
+  catalogProducts.value.map(p => (p.sku || '').toLowerCase()).filter(Boolean)
+)
+
+if (mastersError.value) {
+  saveError.value = apiErrorMessage(mastersError.value, 'Could not load the form data.')
+}
 
 /**
  * The Initial Fee rows the form opens with: Base Price, Tax and Shipping, as
@@ -137,6 +140,15 @@ function seedInitialComponents() {
     .filter((id): id is string => !!id)
     .map(feeId => ({ feeId, published: true, amount: '' }))
 }
+
+/*
+ * Seeded during setup, BEFORE the dirty watcher below is registered.
+ *
+ * It used to run in `onMounted`, which is after — so writing the rows marked
+ * the form dirty the moment it loaded, and Cancel asked to discard changes
+ * nobody had made.
+ */
+seedInitialComponents()
 
 onBeforeUnmount(() => {
   if (toastTimer !== null) clearTimeout(toastTimer)

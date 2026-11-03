@@ -45,10 +45,7 @@ const scopeOpen = ref(false)
 const draft = ref<VariantRow | null>(null)
 const { message: toast, show: showToast } = usePageToast()
 const saveError = ref('')
-const loading = ref(true)
 
-const platforms = ref<VertexPlatform[]>([])
-const fees = ref<FeeItem[]>([])
 const imageInput = ref<HTMLInputElement | null>(null)
 
 const productsApi = useApiProducts()
@@ -92,37 +89,53 @@ async function loadPricing(variantId: string) {
   }
 }
 
-onMounted(async () => {
-  try {
-    ;[platforms.value, fees.value] = await Promise.all([platformsApi.list(), feesApi.list()])
-  } catch (err) {
-    saveError.value = apiErrorMessage(err, 'Could not load this variant.')
-  }
+/*
+ * Everything this screen folds together, fetched during SSR.
+ *
+ * It is a chain, not a fan-out: the parent is found through the variant's
+ * `parentId`, so it cannot be asked for in parallel. The masters can, and are.
+ *
+ * Pricing is swallowed on 422 — a configurable parent answers that because
+ * the prices belong to its variants, and it is not an error the reader can
+ * act on.
+ */
+const { data: loaded, status, error: loadError } = await useAsyncData(
+  `variant:${variantId}`,
+  async () => {
+    const [platforms, fees] = await Promise.all([platformsApi.list(), feesApi.list()])
+    if (!variantId) return { platforms, fees, variant: null, parent: null, pricing: null }
 
-  if (!variantId) {
-    // nothing to look up; `found` stays false and the not-found card renders
-    loading.value = false
-    return
-  }
-
-  try {
     const variant = await productsApi.get(variantId)
-    variantRecord.value = variant
-    // the parent supplies the platforms, the category and the breadcrumb
-    if (variant.parentId) {
-      parentRecord.value = await productsApi.get(variant.parentId, { include: 'children' })
-    }
-    await loadPricing(variant.id)
-  } catch (err) {
-    if ((err as { statusCode?: number })?.statusCode === 404) {
-      notFoundHere.value = true
-    } else {
-      saveError.value = apiErrorMessage(err, 'Could not load this variant.')
-    }
-  } finally {
-    loading.value = false
+    const parent = variant.parentId
+      ? await productsApi.get(variant.parentId, { include: 'children' })
+      : null
+    const pricing = await productsApi.pricing(variant.id).catch(() => null)
+    return { platforms, fees, variant, parent, pricing }
   }
-})
+)
+
+const platforms = computed<VertexPlatform[]>(() => loaded.value?.platforms ?? [])
+const fees = computed<FeeItem[]>(() => loaded.value?.fees ?? [])
+const loading = computed(() => status.value === 'pending')
+
+/*
+ * Seeded rather than computed: a save writes the fresh record and plan back
+ * into these, so they have to stay writable.
+ */
+variantRecord.value = loaded.value?.variant ?? null
+parentRecord.value = loaded.value?.parent ?? null
+pricingDoc.value = loaded.value?.pricing ?? null
+
+if (loadError.value) {
+  if ((loadError.value as { statusCode?: number })?.statusCode === 404) {
+    // `found` stays false and the not-found card renders
+    notFoundHere.value = true
+  } else {
+    saveError.value = apiErrorMessage(loadError.value, 'Could not load this variant.')
+  }
+} else if (!variantId) {
+  notFoundHere.value = true
+}
 
 /** The row the screen renders, built from the three documents above. */
 const view = computed(() =>
