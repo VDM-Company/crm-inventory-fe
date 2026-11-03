@@ -1,3 +1,5 @@
+import { mediaDraft } from './product-media'
+import type { MediaItem } from './product-media'
 import type {
   Attribute,
   BundleOptionsDraft,
@@ -73,6 +75,14 @@ export interface CreateFormInput {
   isSubscription: boolean
   /** The form's "Not for sale" switch, which the API calls `isGift`. */
   notForSale: boolean
+  /**
+   * Images already uploaded, waiting for a product to belong to.
+   *
+   * They are uploaded as they are picked, before anything is created, which
+   * is safe because an upload nothing references expires after 24 hours —
+   * so a form abandoned here leaves nothing behind.
+   */
+  media?: MediaItem[]
 }
 
 /**
@@ -103,6 +113,9 @@ export function toProductDraft(
     isGift: !!input.notForSale
   }
   if (sku) draft.sku = sku
+  // create has no ids to keep, so only fresh uploads can be attached
+  const media = mediaDraft(input.media || [])
+  if (media) draft.media = media
   const description = text(input.description)
   if (description) draft.description = description
   const notes = input.notes.trim()

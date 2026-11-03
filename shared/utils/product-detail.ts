@@ -1,5 +1,6 @@
 import type { BundleOption, LocalizedText, ProductPricing, VertexProduct, VertexProductPatch } from '#shared/types'
 import { localized } from './localized'
+import { baseImageUrl } from './product-media'
 import { toProductVariants } from './product-row'
 import { monthlyFromLines } from './variant-pricing'
 
@@ -111,6 +112,10 @@ export function toDetailView(
     id: p.id,
     name: e.name,
     sku: e.sku,
+    // the product's face: the `base` image, else the first one it has. Left
+    // unfilled until now, so the screen showed a placeholder for every
+    // product whether or not it had pictures
+    image: baseImageUrl(p.media),
     notes: e.notes,
     description: e.description,
     notForSale: e.notForSale,

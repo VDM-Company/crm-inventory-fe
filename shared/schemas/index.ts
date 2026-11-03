@@ -274,6 +274,33 @@ const productMedia = z.object({
   alt: localizedText.optional()
 }).loose()
 
+/**
+ * One entry of a `media` list on an UPDATE.
+ *
+ * `media` REPLACES the whole set, so an image kept across a save has to be
+ * named again — by its `id`, which create has no notion of because nothing
+ * exists yet. Sharing create's schema here made `uploadId` required, so an
+ * entry meaning "keep this image" was rejected by this app before the API
+ * ever saw it, and the only writes that could pass were ones that deleted
+ * every existing image.
+ *
+ * Exactly one of the two: an entry carrying both leaves it to the API to
+ * guess which was meant, and one carrying neither names no image at all.
+ */
+const productMediaRef = z.object({
+  id: z.string().trim().min(1).optional(),
+  uploadId: z.string().trim().min(1).optional(),
+  role: z.string().trim().optional(),
+  alt: localizedText.optional()
+}).loose().superRefine((val, ctx) => {
+  if (!val.id === !val.uploadId) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'An image is named by `id` to keep it, or by `uploadId` to add it — exactly one.'
+    })
+  }
+})
+
 const variantAxisSchema = z.object({
   attributeId: z.string().trim().min(1),
   optionIds: z.array(z.string().trim().min(1)).min(1, 'Choose at least one option on each axis.')
@@ -323,6 +350,8 @@ export const vertexProductCreateSchema = productBody.extend({
  */
 export const vertexProductUpdateSchema = productBody.partial().extend({
   lockVersion: z.number({ error: 'lockVersion is required on an update.' }).int().min(0),
+  /** `id` keeps an image, `uploadId` adds one — create knows only the latter. */
+  media: z.array(productMediaRef).optional(),
   type: z.never({ error: 'A product type changes through variant generation, not here.' }).optional(),
   status: z.never({ error: 'Status changes through POST /status, not here.' }).optional()
 })
@@ -477,12 +506,7 @@ export const vertexProductPlatformContentSchema = z.object({
   lockVersion: z.number({ error: 'lockVersion is required on an update.' }).int().min(0),
   name: localizedText.optional(),
   notes: z.string().nullish(),
-  media: z.array(z.object({
-    id: z.string().trim().min(1).optional(),
-    uploadId: z.string().trim().min(1).optional(),
-    role: z.string().trim().optional(),
-    alt: localizedText.optional()
-  }).loose()).optional(),
+  media: z.array(productMediaRef).optional(),
   categoryIds: z.array(z.string().trim().min(1)).optional(),
   reset: z.array(overridableContentField).optional()
 }).loose().superRefine((val, ctx) => {
@@ -501,3 +525,22 @@ export const vertexProductPlatformContentSchema = z.object({
   ...v,
   ...(v.reset ? { reset: v.reset.map(camelToSnake) } : {})
 }))
+
+/**
+ * `POST /admin/uploads`.
+ *
+ * The limits are the API's own — jpeg, png or webp, at most 10 MB — checked
+ * here so a file that cannot be stored is refused before it is read, rather
+ * than after the browser has sent it somewhere.
+ *
+ * `purpose` and the content types are VALUES, so the case mapper leaves them
+ * as written; they go to the API in exactly this spelling.
+ */
+export const vertexUploadSchema = z.object({
+  filename: z.string().trim().min(1, 'A file needs a name.'),
+  contentType: z.enum(['image/jpeg', 'image/png', 'image/webp'], {
+    error: 'Images must be JPEG, PNG or WebP.'
+  }),
+  size: z.number().int().positive().max(10 * 1024 * 1024, 'Images must be 10 MB or smaller.'),
+  purpose: z.string().trim().min(1)
+}).loose()

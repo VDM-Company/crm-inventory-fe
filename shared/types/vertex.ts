@@ -681,7 +681,56 @@ export interface VertexProductDraft {
  * status moves through `POST :id/status`. Per-platform name, notes, images
  * and categories go through `platform-content`.
  */
-export type VertexProductPatch = Partial<Omit<VertexProductDraft, 'type' | 'status'>>
+export type VertexProductPatch
+  = Partial<Omit<VertexProductDraft, 'type' | 'status' | 'media'>>
+    & { media?: ProductMediaRef[] }
+
+/**
+ * What `POST /admin/uploads` answers.
+ *
+ * The file itself never passes through this app: the API hands back a
+ * pre-signed URL on object storage and the BROWSER sends the bytes there
+ * directly, then the product references the returned `uploadId`.
+ *
+ * `method` and `headers` are followed verbatim rather than assumed — the
+ * signature covers the method and the signed header names
+ * (`SignedHeaders=content-type;host`), so sending a header the signature did
+ * not cover, or omitting one it did, is rejected by the bucket.
+ *
+ * An upload nothing references expires on its own after 24 hours, which is
+ * what makes it safe to upload before the product exists.
+ */
+export interface VertexUpload {
+  uploadId: string
+  url: string
+  /** `PUT` in every example; read rather than hard-coded. */
+  method: string
+  /** HTTP header names — hyphenated, so the case mapper leaves them alone. */
+  headers: Record<string, string>
+  expiresAt: string
+}
+
+/** What this app asks for when it wants somewhere to put a file. */
+export interface VertexUploadRequest {
+  filename: string
+  contentType: string
+  size: number
+  purpose: string
+}
+
+/**
+ * One entry of a `media` list on an update.
+ *
+ * The list REPLACES the whole set, so every image that survives a save is
+ * named again: `id` keeps one the product already has, `uploadId` adds one
+ * from a pre-signed upload. Exactly one of the two.
+ */
+export interface ProductMediaRef {
+  id?: string
+  uploadId?: string
+  role?: string
+  alt?: LocalizedText
+}
 
 export interface VertexProductQuery extends CursorQuery {
   q?: string
@@ -940,7 +989,7 @@ export interface ProductContent {
 export interface ProductPlatformContentPatch {
   name?: LocalizedText
   notes?: string | null
-  media?: { id?: string, uploadId?: string, role?: string, alt?: LocalizedText }[]
+  media?: ProductMediaRef[]
   categoryIds?: string[]
   reset?: ('name' | 'notes' | 'media' | 'categoryIds')[]
 }

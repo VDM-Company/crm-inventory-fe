@@ -192,6 +192,75 @@ const attributesApi = useApiAttributes()
 const feesApi = useApiFeeItems()
 const auditApi = useApiAuditLogs()
 const pricePlansApi = useApiPricePlans()
+const uploadsApi = useApiUploads()
+
+/*
+ * Product images.
+ *
+ * `media` on a save REPLACES the whole set, so the editor holds EVERY image
+ * the product has — ids included — and writes the whole list back. An image
+ * left out of that list is deleted, silently, with a 200.
+ *
+ * The file never passes through this app: `useApiUploads()` asks the API for
+ * a pre-signed URL and the browser sends the bytes to object storage, which
+ * is why a pick is uploaded at once rather than held until Save. An upload
+ * nothing references expires in 24 hours, so abandoning the edit costs
+ * nothing.
+ */
+const savedMedia = ref<MediaItem[]>([])
+const editMedia = ref<MediaItem[]>([])
+const uploadingImage = ref(false)
+const imageError = ref('')
+/** Object URLs made for previews, revoked when the page goes away. */
+const previewUrls: string[] = []
+
+const mediaBlocked = computed(() => mediaBlockedReason(editMedia.value))
+const mediaLosing = computed(() => mediaRemovals(savedMedia.value, editMedia.value))
+const mediaConfirmOpen = ref(false)
+/** Set once the reader has agreed to lose them; cleared after the save. */
+const mediaLossAccepted = ref(false)
+
+async function onPickImage(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  // clear at once, or picking the same file twice fires no change event
+  input.value = ''
+  if (!file) return
+
+  imageError.value = ''
+  const rejection = uploadsApi.fileRejection(file)
+  if (rejection) {
+    imageError.value = rejection
+    return
+  }
+
+  uploadingImage.value = true
+  const preview = URL.createObjectURL(file)
+  previewUrls.push(preview)
+  try {
+    const slot = await uploadsApi.upload(file)
+    editMedia.value = [
+      // the first image is the product's face; a later one joins the gallery
+      ...editMedia.value,
+      { uploadId: slot.uploadId, role: editMedia.value.length ? 'gallery' : 'base', url: preview, alt: '' }
+    ]
+  } catch (err) {
+    URL.revokeObjectURL(preview)
+    imageError.value = apiErrorMessage(err, 'Could not upload that image.')
+  } finally {
+    uploadingImage.value = false
+  }
+}
+
+function removeImage(index: number) {
+  const next = editMedia.value.filter((_, i) => i !== index)
+  // the set must still name a face; promote the first survivor
+  if (next.length && !next.some(m => m.role === 'base')) next[0]!.role = 'base'
+  editMedia.value = next
+  imageError.value = ''
+}
+
+onBeforeUnmount(() => previewUrls.forEach(URL.revokeObjectURL))
 
 /*
  * Price changes waiting to take effect.
@@ -566,6 +635,8 @@ record.value = loaded.value?.record ?? null
 pricingDoc.value = loaded.value?.pricing ?? null
 contentDoc.value = loaded.value?.content ?? null
 savedOverrides.value = toScopeOverrides(contentDoc.value, pricingDoc.value)
+savedMedia.value = toMediaEditor(record.value?.media)
+editMedia.value = toMediaEditor(record.value?.media)
 bundleOpts.value = loaded.value?.bundle ?? []
 bundleSnapshot.value = toBundleEditor(bundleOpts.value)
 editBundle.value = toBundleEditor(bundleOpts.value)
@@ -1106,8 +1177,15 @@ async function persist(merged: DetailProduct) {
     platformIds: merged.platformIds || [],
     notForSale: !!merged.notForSale
   })
+  // the whole list, or the key is left out entirely: `[]` means "delete every
+  // image", so a save that did not touch the pictures must not send one
+  const media = mediaPatch(savedMedia.value, editMedia.value)
+  if (media) patch.media = media
+
   if (hasChanges(patch)) {
     record.value = await productsApi.update(rec.id, patch, rec.lockVersion)
+    savedMedia.value = toMediaEditor(record.value?.media)
+    editMedia.value = toMediaEditor(record.value?.media)
   }
 
   if (canPrice.value && isSinglePricing.value) {
@@ -1185,6 +1263,12 @@ async function persistOverrides(productId: string, next: Overrides) {
   await loadPlatformContent(productId)
 }
 async function onSaveClick(_event: FormSubmitEvent<ProductSchema>) {
+  // deleting a stored image is a 200 with no word said, so it is asked about
+  // first — the same guard the bundle editor has
+  if (mediaLosing.value.length && !mediaLossAccepted.value) {
+    mediaConfirmOpen.value = true
+    return
+  }
   const d = draft.value
   const merged: DetailProduct = { ...d }
   if (isSinglePricing.value) {
@@ -1242,7 +1326,14 @@ async function onSaveClick(_event: FormSubmitEvent<ProductSchema>) {
   product.value = merged
   draft.value = { ...merged }
   mode.value = 'view'
+  mediaLossAccepted.value = false
   showToast('Product updated successfully')
+}
+
+function confirmMediaLoss() {
+  mediaConfirmOpen.value = false
+  mediaLossAccepted.value = true
+  void onSaveClick(undefined as never)
 }
 
 // ── delete ──
@@ -1357,10 +1448,10 @@ async function onConfirmDelete() {
             type="submit"
             form="product-detail"
             variant="ghost"
-
-            :ui="{ base: 'border-none bg-green-500 text-white text-sm font-bold px-5 py-[9px] rounded-lg cursor-pointer shadow-sm hover:bg-green-600 transition-colors' }"
+            :disabled="uploadingImage || !!mediaBlocked"
+            :ui="{ base: 'border-none bg-green-500 text-white text-sm font-bold px-5 py-[9px] rounded-lg cursor-pointer shadow-sm hover:bg-green-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed' }"
           >
-            Save Changes
+            {{ uploadingImage ? 'Uploading…' : 'Save Changes' }}
           </UButton>
         </div>
       </div>
@@ -1509,17 +1600,84 @@ async function onConfirmDelete() {
             <!-- image -->
             <div>
               <span class="static-label">Product Image</span>
-              <img
-                v-if="product.image"
-                :src="product.image"
-                class="w-[120px] h-[120px] rounded-[10px] object-cover border border-slate-200 block"
-              >
-              <div
-                v-else
-                class="w-24 h-24 rounded-[10px] bg-slate-100 flex items-center justify-center text-slate-300 border border-slate-100"
-              >
-                <UIcon name="i-lucide-image" class="w-[26px] h-[26px]" />
+
+              <template v-if="isViewMode">
+                <img
+                  v-if="product.image"
+                  :src="product.image"
+                  class="w-[120px] h-[120px] rounded-[10px] object-cover border border-slate-200 block"
+                >
+                <div
+                  v-else
+                  class="w-24 h-24 rounded-[10px] bg-slate-100 flex items-center justify-center text-slate-300 border border-slate-100"
+                >
+                  <UIcon name="i-lucide-image" class="w-[26px] h-[26px]" />
+                </div>
+              </template>
+
+              <!--
+                Default scope only. A platform's images are an override written
+                through `platform-content`, and writing them here would rename
+                the pictures for every platform — the bug this screen has
+                already shipped twice with names and prices.
+              -->
+              <div v-else-if="isPlatformScope" class="text-[13px] text-slate-500 leading-snug">
+                Images are edited on the Default scope. This platform shows the
+                Default pictures until per-platform images are added here.
               </div>
+
+              <template v-else>
+                <div class="flex flex-wrap gap-2.5">
+                  <div
+                    v-for="(m, i) in editMedia"
+                    :key="m.id || m.uploadId || i"
+                    class="relative w-[92px] h-[92px] rounded-[10px] overflow-hidden border border-slate-200"
+                  >
+                    <img :src="m.url" class="w-full h-full object-cover block">
+                    <span
+                      v-if="m.role === 'base'"
+                      class="absolute left-1 top-1 rounded bg-slate-900/70 text-white text-[10px] font-semibold px-1.5 py-0.5"
+                    >Main</span>
+                    <button
+                      type="button"
+                      class="absolute right-1 top-1 w-5 h-5 rounded-full bg-slate-900/70 text-white flex items-center justify-center cursor-pointer"
+                      aria-label="Remove image"
+                      @click="removeImage(i)"
+                    >
+                      <UIcon name="i-lucide-x" class="w-3 h-3" />
+                    </button>
+                  </div>
+
+                  <label
+                    class="w-[92px] h-[92px] rounded-[10px] border border-dashed border-slate-300 flex flex-col items-center justify-center gap-1 text-slate-400 cursor-pointer hover:border-slate-400 hover:text-slate-500 transition-colors"
+                    :class="uploadingImage ? 'pointer-events-none opacity-60' : ''"
+                  >
+                    <UIcon
+                      :name="uploadingImage ? 'i-lucide-loader-circle' : 'i-lucide-plus'"
+                      class="w-5 h-5"
+                      :class="uploadingImage ? 'animate-spin' : ''"
+                    />
+                    <span class="text-[11px]">{{ uploadingImage ? 'Uploading…' : 'Add image' }}</span>
+                    <input
+                      type="file"
+                      class="hidden"
+                      accept="image/jpeg,image/png,image/webp"
+                      :disabled="uploadingImage"
+                      @change="onPickImage"
+                    >
+                  </label>
+                </div>
+
+                <p v-if="imageError" class="text-[13px] text-red-600 mt-2 mb-0">
+                  {{ imageError }}
+                </p>
+                <p v-else-if="mediaBlocked" class="text-[13px] text-red-600 mt-2 mb-0">
+                  {{ mediaBlocked }}
+                </p>
+                <p v-else class="text-[13px] text-slate-400 mt-2 mb-0">
+                  JPEG, PNG or WebP, up to 10 MB. The first image is the main one.
+                </p>
+              </template>
             </div>
           </UCard>
 
@@ -2311,6 +2469,20 @@ async function onConfirmDelete() {
           />
         </div>
       </UForm>
+
+      <!-- a save that deletes stored images -->
+      <VertexConfirmModal
+        :open="mediaConfirmOpen"
+        compact
+        icon="triangle-alert"
+        :title="mediaLosing.length === 1 ? 'Delete this image?' : `Delete ${mediaLosing.length} images?`"
+        message="Removing them here deletes them from the product when you save. This cannot be undone."
+        cancel-label="Keep them"
+        confirm-label="Save anyway"
+        width-class="w-[440px]"
+        @cancel="mediaConfirmOpen = false"
+        @confirm="confirmMediaLoss"
+      />
 
       <!-- cancelling a scheduled price change -->
       <VertexConfirmModal

@@ -87,6 +87,61 @@ const categoriesApi = useApiCategories()
 const platformsApi = useApiPlatforms()
 const attributesApi = useApiAttributes()
 const feesApi = useApiFeeItems()
+const uploadsApi = useApiUploads()
+
+/*
+ * Images, uploaded as they are picked.
+ *
+ * The file goes straight from the browser to object storage and the product
+ * then references the returned id, so there is nothing to hold until Save.
+ * An upload nothing ends up referencing expires after 24 hours, which is
+ * what makes it safe to do this before the product exists: abandoning the
+ * form leaves no orphan to clean up.
+ */
+const pickedMedia = ref<MediaItem[]>([])
+const uploadingImage = ref(false)
+const imageError = ref('')
+const previewUrls: string[] = []
+
+async function onPickImage(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  // cleared at once, or picking the same file twice fires no change event
+  input.value = ''
+  if (!file) return
+
+  imageError.value = ''
+  const rejection = uploadsApi.fileRejection(file)
+  if (rejection) {
+    imageError.value = rejection
+    return
+  }
+
+  uploadingImage.value = true
+  const preview = URL.createObjectURL(file)
+  previewUrls.push(preview)
+  try {
+    const slot = await uploadsApi.upload(file)
+    pickedMedia.value = [
+      ...pickedMedia.value,
+      { uploadId: slot.uploadId, role: pickedMedia.value.length ? 'gallery' : 'base', url: preview, alt: '' }
+    ]
+  } catch (err) {
+    URL.revokeObjectURL(preview)
+    imageError.value = apiErrorMessage(err, 'Could not upload that image.')
+  } finally {
+    uploadingImage.value = false
+  }
+}
+
+function removeImage(index: number) {
+  const next = pickedMedia.value.filter((_, i) => i !== index)
+  if (next.length && !next.some(m => m.role === 'base')) next[0]!.role = 'base'
+  pickedMedia.value = next
+  imageError.value = ''
+}
+
+onBeforeUnmount(() => previewUrls.forEach(URL.revokeObjectURL))
 
 /*
  * The five lists this form needs, fetched during SSR so the pickers arrive
@@ -601,7 +656,8 @@ const pricingIssue = computed(() => {
 })
 const saveConfirmName = computed(() => form.name.trim() || 'this product')
 // Matches the design: the button stays disabled until the product is valid.
-const saveDisabled = computed(() => !validationResult.value.success)
+// an image still uploading has no id yet, so a save now would drop it silently
+const saveDisabled = computed(() => !validationResult.value.success || uploadingImage.value)
 
 // the variant rules have no field of their own, so render them beside the table
 const variantIssue = computed(() => {
@@ -667,7 +723,8 @@ async function commitSave() {
     productType: type,
     stock: form.stock,
     isSubscription: isSubscription.value,
-    notForSale: notForSale.value
+    notForSale: notForSale.value,
+    media: pickedMedia.value
   }
 
   let created: VertexProduct
@@ -826,7 +883,7 @@ function onConfirmDiscard() {
           :disabled="saveDisabled"
           :ui="{ base: ['border-none text-sm font-semibold px-5 py-[9px] rounded-lg transition-colors', saveDisabled ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-green-500 text-white cursor-pointer shadow-sm hover:bg-green-600'] }"
         >
-          Save Product
+          {{ uploadingImage ? 'Uploading…' : 'Save Product' }}
         </UButton>
       </div>
     </div>
@@ -912,14 +969,51 @@ function onConfirmDiscard() {
 
           <div>
             <label class="field-label">Product Image</label>
-            <div class="border-[1.5px] border-dashed border-slate-200 rounded-[10px] p-6 flex flex-col items-center gap-2 text-slate-400 bg-slate-50">
-              <UIcon name="i-lucide-image-off" class="w-[22px] h-[22px] text-slate-300" />
-              <span class="text-[13px] text-center">Images are added after the product is saved</span>
+            <div class="flex flex-wrap gap-2.5">
+              <div
+                v-for="(m, i) in pickedMedia"
+                :key="m.uploadId || i"
+                class="relative w-[92px] h-[92px] rounded-[10px] overflow-hidden border border-slate-200"
+              >
+                <img :src="m.url" class="w-full h-full object-cover block">
+                <span
+                  v-if="m.role === 'base'"
+                  class="absolute left-1 top-1 rounded bg-slate-900/70 text-white text-[10px] font-semibold px-1.5 py-0.5"
+                >Main</span>
+                <button
+                  type="button"
+                  class="absolute right-1 top-1 w-5 h-5 rounded-full bg-slate-900/70 text-white flex items-center justify-center cursor-pointer"
+                  aria-label="Remove image"
+                  @click="removeImage(i)"
+                >
+                  <UIcon name="i-lucide-x" class="w-3 h-3" />
+                </button>
+              </div>
+
+              <label
+                class="w-[92px] h-[92px] rounded-[10px] border-[1.5px] border-dashed border-slate-300 flex flex-col items-center justify-center gap-1 text-slate-400 cursor-pointer hover:border-slate-400 hover:text-slate-500 transition-colors"
+                :class="uploadingImage ? 'pointer-events-none opacity-60' : ''"
+              >
+                <UIcon
+                  :name="uploadingImage ? 'i-lucide-loader-circle' : 'i-lucide-plus'"
+                  class="w-5 h-5"
+                  :class="uploadingImage ? 'animate-spin' : ''"
+                />
+                <span class="text-[11px]">{{ uploadingImage ? 'Uploading…' : 'Add image' }}</span>
+                <input
+                  type="file"
+                  class="hidden"
+                  accept="image/jpeg,image/png,image/webp"
+                  :disabled="uploadingImage"
+                  @change="onPickImage"
+                >
+              </label>
             </div>
-            <p class="text-xs text-slate-400 mt-1.5">
-              The API attaches an image by its upload id, which comes from a pre-signed upload
-              (<code class="font-mono">POST /admin/uploads</code>) that this app does not do yet.
-              The picker used to accept a file and drop it on save.
+            <p v-if="imageError" class="text-[13px] text-red-600 mt-2 mb-0">
+              {{ imageError }}
+            </p>
+            <p v-else class="text-xs text-slate-400 mt-1.5">
+              JPEG, PNG or WebP, up to 10 MB. The first image is the main one.
             </p>
           </div>
         </UCard>
