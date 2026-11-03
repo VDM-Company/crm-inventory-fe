@@ -215,27 +215,25 @@ async function confirmCancelPlan() {
   cancellingPlan.value = true
   try {
     await pricePlansApi.cancel(target.id)
+    // close and report BEFORE the re-reads. Awaiting them first left the
+    // dialog on screen for as long as the two fetches took — measured at
+    // ~3s — which reads as a frozen confirm rather than a slow refresh.
     cancelPlanTarget.value = null
+    showToast('Scheduled change cancelled')
+    await nextTick()
     // re-read rather than splice it out: cancelling is recorded upstream and
     // the document is where the remaining schedule lives
     await loadPricing(id)
-    showToast('Scheduled change cancelled')
     await loadHistory()
   } catch (err) {
     cancelPlanTarget.value = null
     saveError.value = apiErrorMessage(err, 'Could not cancel the scheduled change.')
+    // 409 `invalid_transition` means it took effect or was cancelled
+    // elsewhere; the row on screen is stale either way
+    await loadPricing(id)
   } finally {
     cancellingPlan.value = false
   }
-}
-
-/** `30 Nov 2026, 11:00 PM` — the moment the price switches over. */
-function planDateLabel(iso: string | null) {
-  if (!iso) return 'No date set'
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime())
-    ? 'No date set'
-    : d.toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
 }
 
 /** The route param, which Vue Router hands over as string | string[]. */

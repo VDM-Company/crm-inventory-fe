@@ -59,14 +59,6 @@ function toRow(plan: PricePlan): ScheduledPlanRow {
 }
 
 /**
- * Whether this plan can still be cancelled.
- *
- * Only `scheduled` — the API answers 409 `invalid_transition` for anything
- * else, because a price already in force is history rather than a plan.
- */
-export const isCancellable = (plan: PricePlan | null | undefined) => plan?.status === 'scheduled'
-
-/**
  * What cancelling this one costs, said plainly.
  *
  * A plan whose notice has gone out is the case worth pausing on: subscribers
@@ -78,4 +70,25 @@ export function cancelWarning(row: ScheduledPlanRow | null | undefined): string 
   return row.noticeSent
     ? 'Subscribers have already been told about this change. Cancelling it means they were told something that will not happen.'
     : null
+}
+
+/**
+ * The moment a plan switches over, in the catalogue's own zone.
+ *
+ * `Asia/Tokyo` is named rather than left to the runtime for two reasons. The
+ * page server-renders, so an unnamed zone formats in the SERVER's zone and
+ * then again in the browser's — the two disagree and hydration tears. And a
+ * JPY catalogue reads these dates in Tokyo: a switchover at 15:00Z is
+ * midnight on the 1st there, which an unnamed zone can show as the 30th.
+ */
+export function planDateLabel(iso: string | null | undefined): string {
+  if (!iso) return 'No date set'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return 'No date set'
+  // en-GB prints 24-hour time, so 00:00 rather than 12:00 AM
+  return d.toLocaleString('en-GB', {
+    day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+    timeZone: 'Asia/Tokyo'
+  })
 }

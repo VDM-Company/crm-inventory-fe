@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cancelWarning, isCancellable, scheduledRows } from '../../shared/utils/scheduled-plans'
+import { cancelWarning, planDateLabel, scheduledRows } from '../../shared/utils/scheduled-plans'
 import type { PricePlan, PricingScope } from '../../shared/types/vertex'
 
 const BASE = 'fee_base'
@@ -102,17 +102,6 @@ describe('scheduledRows', () => {
   })
 })
 
-describe('isCancellable', () => {
-  it('is true only for a scheduled plan', () => {
-    // 409 `invalid_transition` for anything else
-    expect(isCancellable(plan())).toBe(true)
-    expect(isCancellable(plan({ status: 'active' }))).toBe(false)
-    expect(isCancellable(plan({ status: 'superseded' }))).toBe(false)
-    expect(isCancellable(plan({ status: 'cancelled' }))).toBe(false)
-    expect(isCancellable(null)).toBe(false)
-  })
-})
-
 describe('cancelWarning', () => {
   it('warns when the change has already been announced', () => {
     const [row] = scheduledRows(scope([plan({ noticeSentAt: '2026-11-01T00:00:00.000Z' })]))
@@ -123,5 +112,24 @@ describe('cancelWarning', () => {
     const [row] = scheduledRows(scope([plan()]))
     expect(cancelWarning(row)).toBeNull()
     expect(cancelWarning(null)).toBeNull()
+  })
+})
+
+describe('planDateLabel', () => {
+  it('reads the switchover in Tokyo, not in the runtime’s zone', () => {
+    // 15:00Z is midnight on the 1st in Tokyo. An unnamed zone shows this as
+    // the 30th in Europe and tears on hydration besides, because the page
+    // server-renders.
+    expect(planDateLabel('2026-11-30T15:00:00.000Z')).toBe('1 Dec 2026, 00:00')
+  })
+
+  it('formats an afternoon in 24-hour time', () => {
+    expect(planDateLabel('2026-12-01T05:30:00.000Z')).toBe('1 Dec 2026, 14:30')
+  })
+
+  it('says so when there is no date rather than printing a fake one', () => {
+    expect(planDateLabel(null)).toBe('No date set')
+    expect(planDateLabel('')).toBe('No date set')
+    expect(planDateLabel('not a date')).toBe('No date set')
   })
 })
