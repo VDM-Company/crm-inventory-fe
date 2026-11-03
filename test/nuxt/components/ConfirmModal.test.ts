@@ -63,3 +63,21 @@ describe('VertexConfirmModal', () => {
     c.unmount()
   })
 })
+
+describe('VertexConfirmModal closing', () => {
+  it('leaves the document when the host sets open back to false', async () => {
+    // every confirm on every screen closes this way: the handler clears the
+    // ref that feeds `:open`. Mounting closed is not the same test — this is
+    // the transition, and it is the one the screens actually perform.
+    const c = await mountSuspended(VertexConfirmModal, {
+      props: { open: true, title: 'Delete Widget?', cancelLabel: 'Cancel' }
+    })
+    expect(body()).toContain('Delete Widget?')
+
+    await c.setProps({ open: false })
+    await new Promise(r => setTimeout(r, 0))
+
+    expect(body()).not.toContain('Delete Widget?')
+    c.unmount()
+  })
+})

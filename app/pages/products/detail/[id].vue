@@ -191,6 +191,52 @@ const platformsApi = useApiPlatforms()
 const attributesApi = useApiAttributes()
 const feesApi = useApiFeeItems()
 const auditApi = useApiAuditLogs()
+const pricePlansApi = useApiPricePlans()
+
+/*
+ * Price changes waiting to take effect.
+ *
+ * `pricing()` has reported these all along and nothing read them, so a price
+ * could be due to switch over on a date this screen never showed. Creating
+ * one is still not possible here — every save sends `effectiveAt: null`,
+ * which means now — so this shows and cancels what something else scheduled.
+ */
+const scheduledPlanRows = computed(() =>
+  scheduledRows(scopePricing(pricingDoc.value, scope.value))
+)
+const cancelPlanTarget = ref<ScheduledPlanRow | null>(null)
+const cancellingPlan = ref(false)
+const cancelPlanWarning = computed(() => cancelWarning(cancelPlanTarget.value))
+
+async function confirmCancelPlan() {
+  const target = cancelPlanTarget.value
+  const id = record.value?.id
+  if (!target || !id || cancellingPlan.value) return
+  cancellingPlan.value = true
+  try {
+    await pricePlansApi.cancel(target.id)
+    cancelPlanTarget.value = null
+    // re-read rather than splice it out: cancelling is recorded upstream and
+    // the document is where the remaining schedule lives
+    await loadPricing(id)
+    showToast('Scheduled change cancelled')
+    await loadHistory()
+  } catch (err) {
+    cancelPlanTarget.value = null
+    saveError.value = apiErrorMessage(err, 'Could not cancel the scheduled change.')
+  } finally {
+    cancellingPlan.value = false
+  }
+}
+
+/** `30 Nov 2026, 11:00 PM` — the moment the price switches over. */
+function planDateLabel(iso: string | null) {
+  if (!iso) return 'No date set'
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime())
+    ? 'No date set'
+    : d.toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
 
 /** The route param, which Vue Router hands over as string | string[]. */
 function routeId(): string {
@@ -2224,6 +2270,40 @@ async function onConfirmDelete() {
                   </div>
                 </div>
               </template>
+
+              <!-- price changes waiting to take effect -->
+              <div v-if="scheduledPlanRows.length" class="mt-6 pt-5 border-t border-slate-100">
+                <div class="flex items-center gap-2 mb-3">
+                  <UIcon name="i-lucide-clock" class="w-4 h-4 text-amber-600" />
+                  <span class="text-sm font-bold text-slate-900">Scheduled changes</span>
+                </div>
+                <div class="flex flex-col gap-2">
+                  <div
+                    v-for="row in scheduledPlanRows"
+                    :key="row.id"
+                    class="flex items-center gap-3 border border-amber-200 bg-amber-50 rounded-lg px-3.5 py-2.5"
+                  >
+                    <div class="min-w-0 flex-1">
+                      <div class="text-[13px] font-semibold text-amber-900">
+                        {{ planDateLabel(row.effectiveAt) }}
+                      </div>
+                      <div class="text-xs text-amber-700 mt-0.5">
+                        <span v-if="row.monthly">{{ yen(Number(row.monthly)) }} / month · </span>
+                        {{ yen(row.initialTotal) }} initial
+                        <span v-if="row.noticeSent"> · subscribers notified</span>
+                      </div>
+                    </div>
+                    <UButton
+                      variant="ghost"
+                      type="button"
+                      :ui="{ base: 'border border-amber-300 bg-white text-amber-800 text-[13px] font-semibold px-3 py-1.5 rounded-lg cursor-pointer flex-shrink-0' }"
+                      @click="cancelPlanTarget = row"
+                    >
+                      Cancel
+                    </UButton>
+                  </div>
+                </div>
+              </div>
             </UCard>
           </div>
           <div
@@ -2233,6 +2313,20 @@ async function onConfirmDelete() {
           />
         </div>
       </UForm>
+
+      <!-- cancelling a scheduled price change -->
+      <VertexConfirmModal
+        :open="!!cancelPlanTarget"
+        compact
+        icon="triangle-alert"
+        title="Cancel this scheduled change?"
+        :message="cancelPlanWarning || 'The price will stay as it is. This cannot be undone.'"
+        cancel-label="Keep it"
+        :confirm-label="cancellingPlan ? 'Cancelling…' : 'Cancel the change'"
+        width-class="w-[440px]"
+        @cancel="cancelPlanTarget = null"
+        @confirm="confirmCancelPlan"
+      />
 
       <!-- cancel confirm -->
       <VertexConfirmModal
